@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" role="img" aria-label="Đang ngoại tuyến">
+  <rect width="240" height="120" rx="10" fill="#f6f0e4"/>
+  <rect x="2" y="2" width="236" height="116" rx="8" fill="none" stroke="#e3d9c4" stroke-width="2"/>
+  <path d="M60 70 q30 -34 60 0 M78 82 q21 -22 42 0" fill="none" stroke="#92610c" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="120" cy="94" r="5" fill="#92610c"/>
+  <line x1="70" y1="40" x2="170" y2="96" stroke="#2b2620" stroke-width="5" stroke-linecap="round"/>
+  <text x="120" y="24" font-family="system-ui, sans-serif" font-size="14" text-anchor="middle" fill="#2b2620">Đang ngoại tuyến</text>
+</svg>

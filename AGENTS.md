@@ -38,9 +38,24 @@ Every non-trivial behavior needs the smallest runnable check. Compare diagnosis 
 surface-skill, fixed-path, and no-graph baselines. The response simulator must use different
 rules/parameters from inference, and another owner controls held-out labels.
 
-Until implementation commands exist, the only valid state is “contract complete; product not
-built.” Add actual install/dev/typecheck/test/eval/build commands here immediately after the
-minimal scaffold is chosen.
+## Commands
+
+Run with Node 24.18.0 LTS (`.nvmrc` / `.node-version`); do not generate the lockfile with any
+other runtime. These commands exist and pass on the scaffold:
+
+```powershell
+npm ci
+npm run dev
+npm run format:check
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+`npm run eval` and `npm run test:e2e` do not exist yet; add them only when `tests/eval/**`
+(Codex lane) and the Playwright harness are real. Never add a placeholder script that always
+succeeds.
 
 ## Concurrent ownership during initial build
 

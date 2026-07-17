@@ -1,0 +1,215 @@
+/*
+ * NekoPath — "Sổ can thiệp lớp học" visual direction.
+ * Warm paper, dark ink, teal = evidence sufficient, amber = needs checking,
+ * red = real errors only. System fonts only (offline Vietnamese rendering).
+ */
+
+:root {
+  --paper: #f6f0e4;
+  --paper-raised: #fffdf7;
+  --paper-edge: #e3d9c4;
+  --ink: #2b2620;
+  --ink-soft: #5c5344;
+  --evidence-teal: #0f766e;
+  --evidence-teal-soft: #d5eae7;
+  --check-amber: #92610c;
+  --check-amber-soft: #f4e5c6;
+  --error-red: #b3261e;
+  --error-red-soft: #f7dcda;
+  --focus-ring: #1d4ed8;
+
+  --font-body: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius: 8px;
+  --touch-target: 44px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  /* Contract minimum: 16px body text. */
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 var(--space-3);
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+
+a {
+  color: var(--evidence-teal);
+}
+
+button {
+  font: inherit;
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--ink-soft);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--evidence-teal-soft);
+}
+
+/* Keyboard accessibility: focus must always be visible. */
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.app-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--paper-edge);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.app-nav {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.app-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+.app-nav a:hover {
+  background: var(--evidence-teal-soft);
+}
+
+.app-nav a[aria-current='page'] {
+  border-color: var(--evidence-teal);
+  background: var(--evidence-teal-soft);
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  border: 1px solid;
+}
+
+.badge--sim {
+  color: var(--check-amber);
+  background: var(--check-amber-soft);
+  border-color: var(--check-amber);
+}
+
+.badge--online {
+  color: var(--evidence-teal);
+  background: var(--evidence-teal-soft);
+  border-color: var(--evidence-teal);
+}
+
+.badge--offline {
+  color: var(--check-amber);
+  background: var(--check-amber-soft);
+  border-color: var(--check-amber);
+}
+
+.card {
+  background: var(--paper-raised);
+  border: 1px solid var(--paper-edge);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.role-switch {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-left: auto;
+}
+
+.role-switch button[aria-pressed='true'] {
+  border-color: var(--evidence-teal);
+  background: var(--evidence-teal-soft);
+  font-weight: 600;
+}
+
+.placeholder-note {
+  color: var(--ink-soft);
+  border-left: 3px solid var(--check-amber);
+  padding-left: var(--space-3);
+}
+
+.danger {
+  color: var(--error-red);
+  border-color: var(--error-red);
+}
+
+.danger:hover {
+  background: var(--error-red-soft);
+}
+
+main {
+  padding-top: var(--space-6);
+}

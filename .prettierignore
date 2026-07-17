@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+package-lock.json
+docs/
+AI_COLLABORATION_LOG.csv
+AGENTS.md
+README.md
