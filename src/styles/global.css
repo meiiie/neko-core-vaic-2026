@@ -1765,3 +1765,25 @@ details li {
   border-radius: 10px;
   min-height: 44px;
 }
+
+/* ---------- Sync + login role groups ---------- */
+
+.sync-badge {
+  cursor: pointer;
+  border: 1px solid;
+  min-height: 32px;
+  padding: 4px 12px;
+}
+
+.login-role-group {
+  margin-bottom: 16px;
+}
+
+.login-role-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted, #667085);
+  margin: 0 0 8px;
+}

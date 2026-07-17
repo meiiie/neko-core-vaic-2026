@@ -102,28 +102,42 @@ export function LoginPage() {
             </p>
           ) : null}
 
-          <div className="demo-account-list">
-            {directory.map((entry) => (
-              <button
-                className="demo-account"
-                key={entry.username}
-                type="button"
-                disabled={pending !== null}
-                onClick={() => void enter(entry.username)}
-              >
-                <span className="account-avatar" aria-hidden="true">
-                  {entry.initials}
-                </span>
-                <span className="account-copy">
-                  <strong>{entry.name}</strong>
-                  <span>{entry.subtitle}</span>
-                </span>
-                <span className="account-action">
-                  {pending === entry.username ? 'Đang vào…' : 'Đăng nhập'}
-                </span>
-              </button>
-            ))}
-          </div>
+          {(
+            [
+              ['TEACHER', 'Giáo viên'],
+              ['STUDENT', 'Học sinh lớp 7A'],
+            ] as const
+          ).map(([role, label]) => {
+            const entries = directory.filter((entry) => entry.role === role);
+            if (entries.length === 0) return null;
+            return (
+              <section key={role} className="login-role-group" aria-label={label}>
+                <p className="login-role-label">{label}</p>
+                <div className="demo-account-list">
+                  {entries.map((entry) => (
+                    <button
+                      className="demo-account"
+                      key={entry.username}
+                      type="button"
+                      disabled={pending !== null}
+                      onClick={() => void enter(entry.username)}
+                    >
+                      <span className="account-avatar" aria-hidden="true">
+                        {entry.initials}
+                      </span>
+                      <span className="account-copy">
+                        <strong>{entry.name}</strong>
+                        <span>{entry.subtitle}</span>
+                      </span>
+                      <span className="account-action">
+                        {pending === entry.username ? 'Đang vào…' : 'Đăng nhập'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
 
           <form
             className="login-form"

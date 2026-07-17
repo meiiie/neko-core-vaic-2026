@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { flushOutbox, useSyncStatus } from '../../services/sync';
 import { DB_SCHEMA_VERSION } from '../../storage/db';
 import { countEvents, resetDemoData } from '../../storage/event-repository';
 
@@ -18,6 +19,7 @@ export function SystemPage() {
   const [eventCount, setEventCount] = useState<number | null>(null);
   const [estimate, setEstimate] = useState<StorageEstimateState>({});
   const [resetState, setResetState] = useState<'idle' | 'confirm' | 'done' | 'error'>('idle');
+  const sync = useSyncStatus();
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +98,34 @@ export function SystemPage() {
               Schema dữ liệu cục bộ: <code>v{DB_SCHEMA_VERSION}</code>
             </p>
           </details>
+        </article>
+
+        <article className="summary-panel">
+          <p className="eyebrow">Đồng bộ với máy chủ lớp học</p>
+          <h2>
+            {sync === undefined
+              ? 'Đang đọc trạng thái…'
+              : sync.pendingCount > 0
+                ? `${sync.pendingCount} sự kiện đang chờ đồng bộ`
+                : 'Không có sự kiện chờ'}
+          </h2>
+          <ul className="status-list">
+            <li>
+              <span>Lần đồng bộ gần nhất</span>
+              <strong>
+                {sync?.lastSyncedAt
+                  ? new Date(sync.lastSyncedAt).toLocaleTimeString('vi-VN')
+                  : 'Chưa đồng bộ trên thiết bị này'}
+              </strong>
+            </li>
+            <li>
+              <span>Cơ chế</span>
+              <strong>Tự động khi có mạng; ID sự kiện chống trùng lặp</strong>
+            </li>
+          </ul>
+          <button className="button-secondary" type="button" onClick={() => void flushOutbox()}>
+            Đồng bộ ngay
+          </button>
         </article>
 
         <article className="summary-panel danger-zone">

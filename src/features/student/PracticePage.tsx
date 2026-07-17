@@ -10,6 +10,7 @@ import {
 import { useDemoSession } from '../../app/demo-session';
 import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
+import { queueEventForSync } from '../../services/sync';
 import type { LearnerEventRecord } from '../../storage/db';
 import { appendEvent, listEventsByLearner } from '../../storage/event-repository';
 
@@ -106,15 +107,15 @@ export function PracticePage() {
     setSaveError(false);
     const correct = selectedChoiceId === target.correctChoiceId;
     try {
-      await appendEvent(
-        buildLocalAnswerRecord(
-          learnerId,
-          target.itemId,
-          selectedChoiceId,
-          correct,
-          localRecords.length,
-        ),
+      const record = buildLocalAnswerRecord(
+        learnerId,
+        target.itemId,
+        selectedChoiceId,
+        correct,
+        localRecords.length,
       );
+      await appendEvent(record);
+      void queueEventForSync(record);
       setFeedback({ correct, choiceId: selectedChoiceId, question: answered });
       setPhase('feedback');
       if (!correct) {

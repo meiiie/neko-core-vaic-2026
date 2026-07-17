@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useDemoSession, type DemoRole } from '../app/demo-session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
+import { registerSyncTriggers } from '../services/sync';
 import { OnlineStatusBadge } from './OnlineStatusBadge';
+import { SyncBadge } from './SyncBadge';
 
 interface NavItem {
   readonly to: string;
@@ -31,6 +33,10 @@ export function AppLayout() {
   const { account, signOut } = useDemoSession();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    registerSyncTriggers();
+  }, []);
 
   if (!account) return null;
   const home = account.role === 'STUDENT' ? '/student' : '/teacher';
@@ -119,6 +125,7 @@ export function AppLayout() {
       <div className="product-workspace">
         <header className="workspace-status">
           <span className="environment-label">Dữ liệu mẫu</span>
+          <SyncBadge />
           <OnlineStatusBadge />
         </header>
         <UpdatePrompt />
