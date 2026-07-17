@@ -1,6 +1,6 @@
 # Báo cáo triển khai & chuẩn hóa tên miền — gửi Codex
 
-Ngày: 2026-07-17 · Soạn: Fable 5, xác minh: Codex · Trạng thái: **domain chuẩn đã live; hai việc bàn giao đã hoàn tất trong phạm vi quyền truy cập hiện có**
+Ngày: 2026-07-17 · Soạn: Fable 5, xác minh: Codex · Trạng thái: **VPS full-stack đã sẵn sàng; chờ cắt một DNS record từ Pages sang VPS**
 
 ## 1. Kết luận nhanh
 
@@ -68,8 +68,37 @@ tài liệu vận hành với vai trò origin/recovery hoặc preview nội bộ
 - HTTP 200 + so khớp hash bundle trên cả 3 URL (bảng trên).
 - Ảnh chụp headless bản live xác nhận chế độ cục bộ hiển thị đúng khi không có API.
 
-## 6. Nhắc lại blocker full-stack
+## 6. VPS full-stack đã triển khai
 
-Chưa có thông tin VPS (host/SSH) trong repo lẫn máy Fable. Khi captain cấp, quy trình:
-clone → `docker compose -f ops/compose.yml up -d --build` → chuyển DNS record
-`nekopath.holilihu.online` → smoke `/api/healthz` + login + giao bài → ghi AI log.
+| Hạng mục | Giá trị |
+|---|---|
+| GCP project | `the-wiii-lab-500306` |
+| VM | `nekopath-production` · `asia-southeast1-c` · `e2-medium` · Debian 12 |
+| IP tĩnh | `34.142.197.144` (`nekopath-production-ip`) |
+| Disk | 20 GB persistent disk; dữ liệu SQLite và chứng thư Caddy dùng Docker named volume |
+| Quyền máy | Không gắn service account, không OAuth scope; Shielded VM bật Secure Boot, vTPM và integrity monitoring |
+| Network | Tag `nekopath-web`; public ingress chỉ dành cho TCP 80/443 và UDP 443 qua rule riêng |
+| Release | `main` tại commit `3a83c50b706ad868d5bb7158d8e0c0968c006af7` |
+| Runtime | Docker Engine 29.6.2 · Docker Compose 5.3.1 · `app` + `caddy` |
+
+Các gate đã đạt trước cutover:
+
+- local: format, lint, typecheck, 66 test, 23 deterministic eval, production build;
+- container build: typecheck, 43 test, PWA production build;
+- runtime: cả `app` và `caddy` đều `healthy`, `/api/healthz` trả 200;
+- functional smoke: frontend + manifest, directory 5 tài khoản mẫu, từ chối sai mật khẩu,
+  cookie `HttpOnly`/`Secure`/`SameSite=Lax`, phiên giáo viên, roster 40 học sinh, bank 12 câu,
+  phiên học sinh, RBAC 403 và danh sách bài được giao.
+
+## 7. Cutover còn lại
+
+Wrangler OAuth không có quyền `DNS Write`, còn bridge Chrome lỗi trước khi mở Dashboard. Captain cần sửa
+duy nhất record `nekopath` trong Cloudflare DNS:
+
+1. thay `CNAME nekopath → nekopath-vaic.pages.dev` bằng `A nekopath → 34.142.197.144`;
+2. đặt **DNS only** và TTL Auto trong lúc Caddy lấy chứng thư;
+3. sau khi HTTPS origin được xác minh, có thể bật proxy và đặt SSL/TLS thành **Full (strict)**.
+
+Rollback tức thời nếu origin gặp sự cố: trả record về
+`CNAME nekopath → nekopath-vaic.pages.dev`; Pages vẫn giữ nguyên recovery artifact local-first.
+Các lệnh deploy, kiểm tra, backup và rollback chi tiết nằm ở `ops/RUNBOOK.md`.
