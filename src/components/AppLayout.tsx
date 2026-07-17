@@ -23,7 +23,7 @@ const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
   ],
   TEACHER: [
     { to: '/teacher', label: 'Tổng quan lớp', index: '01', end: true },
-    { to: '/teacher/class', label: 'Nhóm can thiệp', index: '02' },
+    { to: '/teacher/class', label: 'Nhóm cần hỗ trợ', index: '02' },
     { to: '/teacher/questions', label: 'Ngân hàng câu hỏi', index: '03' },
     { to: '/teacher/assignments', label: 'Giao bài', index: '04' },
   ],

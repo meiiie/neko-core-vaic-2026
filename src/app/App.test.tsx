@@ -68,6 +68,11 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
     expect(await screen.findByRole('link', { name: /Ngân hàng câu hỏi/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Giao bài/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Bài kiểm tra/ })).toBeNull();
+    expect(screen.getByText('Đã đánh giá')).toBeTruthy();
+    expect(screen.getByText('Cần đánh giá thêm')).toBeTruthy();
+    expect(screen.getByText('Việc cần làm hôm nay')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Giải thích chỉ số Đã đánh giá' })).toBeTruthy();
+    expect(screen.queryByText('Đủ bằng chứng')).toBeNull();
   });
 
   it('redirects protected routes to login when the server has no session', async () => {
@@ -132,8 +137,8 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
     expect(sidebar?.hasAttribute('inert')).toBe(true);
 
     await user.click(menu);
-    await user.click(await screen.findByRole('link', { name: /Nhóm can thiệp/ }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Nhóm can thiệp' })).toBeTruthy();
+    await user.click(await screen.findByRole('link', { name: /Nhóm cần hỗ trợ/ }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Nhóm cần hỗ trợ' })).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.id).toBe('main-content'));
     expect(sidebar?.hasAttribute('inert')).toBe(true);
   });

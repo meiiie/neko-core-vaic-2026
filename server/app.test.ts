@@ -59,6 +59,7 @@ describe('NekoPath API', () => {
       cookies: teacher,
       payload: {
         kcId: 'K08',
+        difficulty: 'HARD',
         prompt: 'Hoàn thành tỉ số bằng nhau: 2 : 7 = 6 : ?',
         choices: [
           { id: 'a', label: '21' },
@@ -72,16 +73,47 @@ describe('NekoPath API', () => {
     expect(created.statusCode).toBe(201);
     const questionId = (created.json() as { id: string }).id;
 
+    const edited = await app.inject({
+      method: 'PATCH',
+      url: `/api/questions/${questionId}`,
+      cookies: teacher,
+      payload: {
+        kcId: 'K08',
+        difficulty: 'MEDIUM',
+        prompt: 'Hoàn thành tỉ số bằng nhau: 2 : 7 = 8 : ?',
+        choices: [
+          { id: 'a', label: '28' },
+          { id: 'b', label: '13', noteVi: 'Cộng 5 là so sánh cộng, không phải nhân.' },
+        ],
+        correctChoiceId: 'a',
+        hints: ['2 nhân mấy được 8?'],
+        explanation: '2→8 là nhân 4 nên 7×4 = 28.',
+      },
+    });
+    expect(edited.statusCode).toBe(200);
+
     const assigned = await app.inject({
       method: 'POST',
       url: '/api/assignments',
       cookies: teacher,
-      payload: { title: 'Bài kiểm tra tỉ số', questionIds: [questionId] },
+      payload: {
+        title: 'Bài kiểm tra tỉ số',
+        questionIds: [questionId],
+        dueAt: '2099-07-20T10:00:00.000Z',
+        allowRetake: true,
+        shuffleAnswers: true,
+      },
     });
     expect(assigned.statusCode).toBe(201);
     const assignmentId = (assigned.json() as { id: string }).id;
 
     const student = await loginCookie(app, 'an.tn');
+    const opened = await app.inject({
+      method: 'POST',
+      url: `/api/assignments/${assignmentId}/open`,
+      cookies: student,
+    });
+    expect(opened.statusCode).toBe(200);
     const list = await app.inject({ method: 'GET', url: '/api/assignments', cookies: student });
     const titles = (list.json() as { assignments: { title: string }[] }).assignments.map(
       (a) => a.title,
@@ -112,9 +144,26 @@ describe('NekoPath API', () => {
     // The teacher's assignment list now shows one submitted learner.
     const progress = await app.inject({ method: 'GET', url: '/api/assignments', cookies: teacher });
     const row = (
-      progress.json() as { assignments: { id: string; submittedLearnerCount: number }[] }
+      progress.json() as {
+        assignments: {
+          id: string;
+          submittedLearnerCount: number;
+          openedLearnerCount: number;
+          completedLearnerCount: number;
+          inProgressLearnerCount: number;
+          allowRetake: boolean;
+          shuffleAnswers: boolean;
+        }[];
+      }
     ).assignments.find((a) => a.id === assignmentId);
-    expect(row?.submittedLearnerCount).toBe(1);
+    expect(row).toMatchObject({
+      submittedLearnerCount: 1,
+      openedLearnerCount: 1,
+      completedLearnerCount: 1,
+      inProgressLearnerCount: 0,
+      allowRetake: true,
+      shuffleAnswers: true,
+    });
     await app.close();
   });
 
