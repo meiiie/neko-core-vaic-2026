@@ -22,7 +22,9 @@ export function OnlineStatusBadge() {
 
   return (
     <span
-      className={online ? 'badge badge--online' : 'badge badge--offline'}
+      className={
+        online ? 'status-label status-label--evidence' : 'status-label status-label--review'
+      }
       role="status"
       aria-live="polite"
     >

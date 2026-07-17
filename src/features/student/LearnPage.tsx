@@ -4,17 +4,26 @@ import { Link, useParams } from 'react-router-dom';
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
+  HERO_LEARNERS,
   isHeroLearnerId,
+  kcName,
   questionForItem,
   STATUS_LABELS,
   UNREVIEWED_LABEL,
 } from '../../app/adapters/hero-tutor';
 import { appendEvent, listEventsByLearner } from '../../storage/event-repository';
 
+const STATUS_TONE: Record<string, string> = {
+  DIAGNOSED: 'status-label--evidence',
+  NEEDS_MORE_EVIDENCE: 'status-label--review',
+  OUT_OF_SCOPE: 'status-label--neutral',
+  FAST_PATH: 'status-label--evidence',
+};
+
 /**
- * Student surface: shows the shared target task, then whichever probe the
- * domain core requests next. All pedagogy comes from diagnose(); this
- * component only renders results and records answers locally.
+ * Student surface as one learning interaction: orientation strip, dominant
+ * question, evidence state and local-save feedback close together. All
+ * pedagogy comes from diagnose(); this component only renders and records.
  */
 export function LearnPage() {
   const { learnerId } = useParams<{ learnerId: string }>();
@@ -27,10 +36,10 @@ export function LearnPage() {
 
   if (!isHeroLearnerId(learnerId)) {
     return (
-      <section className="card">
-        <h2>Ngoài phạm vi demo</h2>
-        <p className="placeholder-note">
-          Bản demo này chỉ có bốn hồ sơ mô phỏng: an, binh, chi, minh.
+      <section className="section">
+        <h1>Ngoài phạm vi demo</h1>
+        <p className="evidence-note">
+          Bản demo này chỉ có bốn hồ sơ mô phỏng: An, Bình, Chi, Minh.
         </p>
         <p>
           <Link to="/">Về trang chính</Link>
@@ -41,15 +50,17 @@ export function LearnPage() {
 
   if (localRecords === undefined) {
     return (
-      <section className="card" aria-busy="true">
+      <section className="section" aria-busy="true">
         <p>Đang đọc dữ liệu cục bộ…</p>
       </section>
     );
   }
 
+  const profile = HERO_LEARNERS.find((hero) => hero.id === learnerId);
   const result = diagnoseHero(learnerId, localRecords);
   const targetQuestion = questionForItem('K10-CHECK-1');
   const probeQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
+  const currentStep = probeQuestion ? 2 : 3;
 
   async function answer(itemId: string, choiceId: string, correct: boolean) {
     if (!isHeroLearnerId(learnerId) || localRecords === undefined) return;
@@ -66,64 +77,83 @@ export function LearnPage() {
 
   return (
     <>
-      <section className="card">
-        <h2>Bài toán chung của lớp — {learnerId}</h2>
-        {targetQuestion ? (
-          <>
-            <p>{targetQuestion.promptVi}</p>
-            <p className="placeholder-note">{UNREVIEWED_LABEL}</p>
-          </>
-        ) : null}
+      <section className="section">
+        <h1>
+          Học sinh {profile?.label ?? learnerId}{' '}
+          <span className="muted" style={{ fontSize: 'var(--text-base)', fontWeight: 400 }}>
+            (hồ sơ mô phỏng: {learnerId})
+          </span>
+        </h1>
+        <ol className="step-strip" aria-label="Tiến trình chẩn đoán">
+          <li aria-current={undefined}>1. Bài toán mục tiêu</li>
+          <li aria-current={currentStep === 2 ? 'step' : undefined}>2. Câu hỏi kiểm chứng</li>
+          <li aria-current={currentStep === 3 ? 'step' : undefined}>3. Bù kiến thức / tiến tiếp</li>
+        </ol>
         <p>
-          Trạng thái chẩn đoán hiện tại: <strong>{STATUS_LABELS[result.status]}</strong>
-        </p>
-        <p>
-          <Link to={`/path/${learnerId}`}>Xem bằng chứng và lộ trình chi tiết</Link>
+          <span className={`status-label ${STATUS_TONE[result.status] ?? 'status-label--neutral'}`}>
+            {STATUS_LABELS[result.status]}
+          </span>{' '}
+          <Link to={`/path/${learnerId}`}>Xem bằng chứng và lộ trình</Link>
         </p>
       </section>
 
       {probeQuestion ? (
-        <section className="card">
-          <h2>Câu hỏi tiếp theo do hệ thống chọn</h2>
-          <p>{probeQuestion.promptVi}</p>
-          <p className="placeholder-note">{probeQuestion.hypothesisLabel}</p>
-          <div role="group" aria-label="Các lựa chọn trả lời">
+        <section className="action-panel action-panel--review" aria-labelledby="probe-heading">
+          <h2 id="probe-heading">Câu hỏi kiểm chứng tiếp theo</h2>
+          <p className="prompt">{probeQuestion.promptVi}</p>
+          <div className="choice-list" role="group" aria-label="Các lựa chọn trả lời">
             {probeQuestion.choices.map((choice) => (
-              <p key={choice.id}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void answer(
-                      probeQuestion.itemId,
-                      choice.id,
-                      choice.id === probeQuestion.correctChoiceId,
-                    )
-                  }
-                >
-                  {choice.label}
-                </button>
-              </p>
+              <button
+                key={choice.id}
+                type="button"
+                onClick={() =>
+                  void answer(
+                    probeQuestion.itemId,
+                    choice.id,
+                    choice.id === probeQuestion.correctChoiceId,
+                  )
+                }
+              >
+                {choice.label}
+              </button>
             ))}
           </div>
+          <p className="evidence-note">
+            Vì sao hỏi câu này? Hệ thống đang phân biệt các giả thuyết gốc còn cạnh tranh
+            {result.competingKcIds.length > 0
+              ? `: ${result.competingKcIds.map((id) => kcName(id)).join(' và ')}`
+              : ''}
+            . {probeQuestion.hypothesisLabel}.
+          </p>
+          {saveState === 'saved' && (
+            <p role="status">Đã lưu câu trả lời trên thiết bị này (không gửi lên máy chủ).</p>
+          )}
+          {saveState === 'error' && (
+            <p role="alert" className="danger">
+              Không lưu được câu trả lời — bộ nhớ trình duyệt có thể không khả dụng.
+            </p>
+          )}
         </section>
       ) : (
-        <section className="card">
-          <h2>Không cần thêm câu hỏi chẩn đoán</h2>
-          <p className="placeholder-note">
-            Hệ thống đã đủ bằng chứng để kết luận hoặc đề xuất bước tiếp theo — xem chi tiết ở trang
-            lộ trình.
+        <section className="action-panel" aria-labelledby="next-heading">
+          <h2 id="next-heading">Không cần thêm câu hỏi kiểm chứng</h2>
+          <p>
+            Hệ thống đã đủ bằng chứng để kết luận hoặc đề xuất bước tiếp theo cho{' '}
+            {profile?.label ?? learnerId}.
+          </p>
+          <p>
+            <Link className="button-primary" to={`/path/${learnerId}`}>
+              Xem lộ trình đề xuất
+            </Link>
           </p>
         </section>
       )}
 
-      {saveState === 'saved' && (
-        <p role="status">Đã lưu câu trả lời trên thiết bị này (không gửi lên máy chủ).</p>
-      )}
-      {saveState === 'error' && (
-        <p role="alert" className="danger">
-          Không lưu được câu trả lời — bộ nhớ trình duyệt có thể không khả dụng.
-        </p>
-      )}
+      <section className="section">
+        <h2>Bài toán mục tiêu của lớp</h2>
+        {targetQuestion ? <p className="prompt">{targetQuestion.promptVi}</p> : null}
+        <p className="evidence-note">{UNREVIEWED_LABEL}.</p>
+      </section>
     </>
   );
 }

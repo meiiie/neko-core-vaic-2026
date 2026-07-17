@@ -15,8 +15,8 @@ function formatBytes(bytes?: number): string {
 }
 
 /**
- * /system — honest build/storage state for reliable judging and recovery
- * (docs/IMPLEMENTATION_MASTER_PLAN.md §11).
+ * Quiet utility surface (§4): human-readable status first, technical
+ * versions in expandable detail, reset explicit but never visually primary.
  */
 export function SystemPage() {
   const [eventCount, setEventCount] = useState<number | null>(null);
@@ -60,15 +60,14 @@ export function SystemPage() {
 
   return (
     <>
-      <section className="card">
-        <h2>Hệ thống</h2>
+      <section className="section">
+        <h1>Hệ thống</h1>
         <ul>
-          <li>Phiên bản schema cơ sở dữ liệu cục bộ: v{DB_SCHEMA_VERSION}</li>
-          <li>Chế độ dữ liệu: mô phỏng, lưu trên thiết bị này</li>
-          <li>Số sự kiện học tập đã ghi cục bộ: {eventCount ?? 'không đọc được'}</li>
+          <li>Chế độ dữ liệu: mô phỏng, lưu trên thiết bị này — không gửi lên máy chủ.</li>
+          <li>Số sự kiện học tập đã ghi cục bộ: {eventCount ?? 'không đọc được'}.</li>
           <li>
-            Dung lượng lưu trữ (ước tính trình duyệt): {formatBytes(estimate.usage)} /{' '}
-            {formatBytes(estimate.quota)}
+            Dung lượng lưu trữ (ước tính của trình duyệt): {formatBytes(estimate.usage)} /{' '}
+            {formatBytes(estimate.quota)}.
           </li>
           <li>
             Lưu trữ bền vững:{' '}
@@ -77,23 +76,33 @@ export function SystemPage() {
               : estimate.persisted
                 ? 'đã được cấp'
                 : 'chưa được cấp'}
+            .
           </li>
         </ul>
+        <details className="tech-details">
+          <summary>Chi tiết kỹ thuật</summary>
+          <ul>
+            <li>
+              Phiên bản schema cơ sở dữ liệu cục bộ: <code>v{DB_SCHEMA_VERSION}</code>
+            </li>
+          </ul>
+        </details>
       </section>
-      <section className="card">
+
+      <section className="section">
         <h2>Đặt lại dữ liệu mô phỏng</h2>
         <p>
           Xóa toàn bộ sự kiện học tập, ghi đè của giáo viên và hàng đợi đồng bộ trên thiết bị này.
           Chỉ ảnh hưởng dữ liệu mô phỏng của NekoPath.
         </p>
         {resetState === 'idle' && (
-          <button type="button" className="danger" onClick={() => setResetState('confirm')}>
+          <button type="button" onClick={() => setResetState('confirm')}>
             Đặt lại dữ liệu demo…
           </button>
         )}
         {resetState === 'confirm' && (
           <>
-            <p className="placeholder-note">Bạn chắc chắn muốn xóa dữ liệu demo cục bộ?</p>
+            <p className="evidence-note">Bạn chắc chắn muốn xóa dữ liệu demo cục bộ?</p>
             <button type="button" className="danger" onClick={() => void handleReset()}>
               Xác nhận xóa
             </button>{' '}

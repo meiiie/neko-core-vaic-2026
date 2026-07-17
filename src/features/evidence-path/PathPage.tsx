@@ -2,6 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Link, useParams } from 'react-router-dom';
 import {
   diagnoseHero,
+  HERO_LEARNERS,
+  HERO_TARGET_KC_ID,
   isHeroLearnerId,
   kcName,
   REASON_LABELS,
@@ -11,8 +13,8 @@ import {
 import { listEventsByLearner } from '../../storage/event-repository';
 
 /**
- * Evidence & path surface: renders the DiagnosisResult contract verbatim —
- * why (evidence, reason codes), what next (path or probe), what is skipped.
+ * Evidence & path surface in three levels (§4): decision → action trail →
+ * expandable audit detail. Renders the DiagnosisResult contract verbatim.
  */
 export function PathPage() {
   const { learnerId } = useParams<{ learnerId: string }>();
@@ -24,10 +26,10 @@ export function PathPage() {
 
   if (!isHeroLearnerId(learnerId)) {
     return (
-      <section className="card">
-        <h2>Ngoài phạm vi demo</h2>
-        <p className="placeholder-note">
-          Bản demo này chỉ có bốn hồ sơ mô phỏng: an, binh, chi, minh.
+      <section className="section">
+        <h1>Ngoài phạm vi demo</h1>
+        <p className="evidence-note">
+          Bản demo này chỉ có bốn hồ sơ mô phỏng: An, Bình, Chi, Minh.
         </p>
       </section>
     );
@@ -35,81 +37,128 @@ export function PathPage() {
 
   if (localRecords === undefined) {
     return (
-      <section className="card" aria-busy="true">
+      <section className="section" aria-busy="true">
         <p>Đang đọc dữ liệu cục bộ…</p>
       </section>
     );
   }
 
+  const profile = HERO_LEARNERS.find((hero) => hero.id === learnerId);
   const result = diagnoseHero(learnerId, localRecords);
+
+  const decisionTone =
+    result.status === 'DIAGNOSED' || result.status === 'FAST_PATH'
+      ? 'status-label--evidence'
+      : result.status === 'NEEDS_MORE_EVIDENCE'
+        ? 'status-label--review'
+        : 'status-label--neutral';
 
   return (
     <>
-      <section className="card">
-        <h2>Kết luận chẩn đoán — {learnerId}</h2>
+      <section className="section">
+        <h1>
+          Bằng chứng &amp; lộ trình — {profile?.label ?? learnerId}{' '}
+          <span className="muted" style={{ fontSize: 'var(--text-base)', fontWeight: 400 }}>
+            (hồ sơ mô phỏng: {learnerId})
+          </span>
+        </h1>
         <p>
-          <strong>{STATUS_LABELS[result.status]}</strong>
+          <span className={`status-label ${decisionTone}`}>{STATUS_LABELS[result.status]}</span>
         </p>
         {result.rootKcId ? (
-          <p>
-            Giả thuyết gốc: <strong>{kcName(result.rootKcId)}</strong> ({result.rootKcId})
+          <p style={{ fontSize: 'var(--text-lg)' }}>
+            Lỗ hổng gốc theo bằng chứng: <strong>{kcName(result.rootKcId)}</strong>
           </p>
         ) : null}
-        {result.competingKcIds.length > 0 ? (
-          <p>
-            Giả thuyết cạnh tranh:{' '}
-            {result.competingKcIds.map((id) => `${kcName(id)} (${id})`).join('; ')}
-          </p>
-        ) : null}
-        <ul>
-          {result.reasonCodes.map((code) => (
-            <li key={code}>{REASON_LABELS[code]}</li>
-          ))}
-        </ul>
-        <p className="placeholder-note">{UNREVIEWED_LABEL}</p>
+        <p className="evidence-note">{UNREVIEWED_LABEL}.</p>
       </section>
 
-      <section className="card">
-        <h2>Lộ trình đề xuất</h2>
-        {result.pathKcIds.length > 0 ? (
-          <ol>
-            {result.pathKcIds.map((kcId) => (
+      {result.status === 'NEEDS_MORE_EVIDENCE' ? (
+        <section className="action-panel action-panel--review">
+          <h2>Chưa kết luận — hai giả thuyết còn cạnh tranh</h2>
+          {result.competingKcIds.length > 0 ? (
+            <ul>
+              {result.competingKcIds.map((id) => (
+                <li key={id}>
+                  <strong>{kcName(id)}</strong> — chưa đủ bằng chứng trực tiếp để khẳng định hay
+                  loại trừ
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p>Hệ thống không gán nhãn ép buộc. Bước tiếp theo là một câu hỏi phân biệt duy nhất:</p>
+          <p>
+            <Link className="button-primary" to={`/learn/${learnerId}`}>
+              Trả lời câu hỏi kiểm chứng tiếp theo
+            </Link>
+          </p>
+        </section>
+      ) : null}
+
+      {result.pathKcIds.length > 0 ? (
+        <section className="section">
+          <h2>Đường bù kiến thức</h2>
+          <ol className="path-steps">
+            {result.pathKcIds.map((kcId, index) => (
               <li key={kcId}>
-                {kcName(kcId)} ({kcId})
+                <span className="step-role">
+                  {index === 0
+                    ? 'Bắt đầu từ lỗ hổng gốc'
+                    : kcId === HERO_TARGET_KC_ID
+                      ? 'Mục tiêu của lớp'
+                      : `Bước ${index + 1}`}
+                </span>
+                <span className="step-name">{kcName(kcId)}</span>
               </li>
             ))}
           </ol>
-        ) : (
-          <p className="placeholder-note">
-            Chưa có lộ trình — hệ thống đang chờ thêm bằng chứng hoặc học sinh đã sẵn sàng tiến
-            tiếp.
+          <p className="evidence-note">
+            Các kiến thức đã vững không xuất hiện trong đường bù — học sinh không phải học lại thứ
+            đã nắm chắc.
           </p>
-        )}
-        {result.nextItemId ? (
+        </section>
+      ) : result.status === 'FAST_PATH' ? (
+        <section className="action-panel">
+          <h2>Sẵn sàng tiến tiếp</h2>
           <p>
-            Bước tiếp theo: trả lời câu hỏi <strong>{result.nextItemId}</strong> tại{' '}
-            <Link to={`/learn/${learnerId}`}>trang luyện tập</Link>.
+            Bằng chứng cho thấy {profile?.label ?? learnerId} đã vững mục tiêu và các kiến thức nền.
+            Không cần học lại — bước tiếp theo là một bài thử thách chuyển giao.
           </p>
-        ) : null}
-      </section>
+          <p>
+            <Link className="button-primary" to={`/learn/${learnerId}`}>
+              Nhận bài thử thách
+            </Link>
+          </p>
+        </section>
+      ) : null}
 
-      <section className="card">
-        <h2>Bằng chứng sử dụng</h2>
-        <p>
-          {result.evidenceEventIds.length} sự kiện học tập (mô phỏng + trả lời cục bộ trên thiết bị
-          này):
-        </p>
-        <ul>
-          {result.evidenceEventIds.map((id) => (
-            <li key={id}>
-              <code>{id}</code>
-            </li>
-          ))}
-        </ul>
-        <p className="placeholder-note">
-          Phiên bản nội dung: <code>{result.contentVersion}</code> — thuật toán:{' '}
-          <code>{result.algorithmVersion}</code>
-        </p>
+      <section className="section">
+        <h2>Chi tiết kiểm chứng</h2>
+        <details className="tech-details">
+          <summary>Căn cứ quyết định ({result.reasonCodes.length})</summary>
+          <ul>
+            {result.reasonCodes.map((code) => (
+              <li key={code}>{REASON_LABELS[code]}</li>
+            ))}
+          </ul>
+        </details>
+        <details className="tech-details">
+          <summary>Sự kiện bằng chứng ({result.evidenceEventIds.length})</summary>
+          <ul>
+            {result.evidenceEventIds.map((id) => (
+              <li key={id}>
+                <code>{id}</code>
+              </li>
+            ))}
+          </ul>
+        </details>
+        <details className="tech-details">
+          <summary>Phiên bản nội dung và thuật toán</summary>
+          <p>
+            Nội dung: <code>{result.contentVersion}</code> — thuật toán:{' '}
+            <code>{result.algorithmVersion}</code>
+          </p>
+        </details>
       </section>
     </>
   );
