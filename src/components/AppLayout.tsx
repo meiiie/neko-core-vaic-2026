@@ -89,14 +89,36 @@ export function AppLayout() {
   useEffect(() => {
     if (!isMobile || !mobileOpen) return;
 
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeMobileNavigation(true);
+    const handleDrawerKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMobileNavigation(true);
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const drawer = sidebarRef.current;
+      if (!drawer) return;
+
+      const tabbable = [...drawer.querySelectorAll<HTMLElement>('a[href], button')].filter(
+        (element) => element.tabIndex >= 0 && !element.hasAttribute('disabled'),
+      );
+      const first = tabbable[0];
+      const last = tabbable.at(-1);
+      if (!first || !last) return;
+
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !drawer.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !drawer.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
+    document.addEventListener('keydown', handleDrawerKeydown);
+    return () => document.removeEventListener('keydown', handleDrawerKeydown);
   }, [closeMobileNavigation, isMobile, mobileOpen]);
 
   useEffect(() => {

@@ -106,6 +106,21 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
     await waitFor(() => expect(document.activeElement).toBe(currentRoute));
     expect(sidebar?.hasAttribute('inert')).toBe(false);
 
+    const firstDrawerControl = sidebar?.querySelector<HTMLElement>('a[href]');
+    const lastDrawerControl = sidebar?.querySelector<HTMLElement>('.sidebar-account button');
+    expect(firstDrawerControl).not.toBeNull();
+    expect(lastDrawerControl).not.toBeNull();
+
+    lastDrawerControl?.focus();
+    await user.tab();
+    expect(document.activeElement).toBe(firstDrawerControl);
+    expect(sidebar?.contains(document.activeElement)).toBe(true);
+
+    firstDrawerControl?.focus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(lastDrawerControl);
+    expect(sidebar?.contains(document.activeElement)).toBe(true);
+
     await user.keyboard('{Escape}');
     await waitFor(() => expect(document.activeElement).toBe(menu));
     expect(sidebar?.hasAttribute('inert')).toBe(true);
