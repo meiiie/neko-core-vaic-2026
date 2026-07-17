@@ -2,6 +2,8 @@
 
 **Adaptive learning paths for mixed-ability classrooms — by Neko Core.**
 
+Live demo: [nekopath-vaic.pages.dev](https://nekopath-vaic.pages.dev/)
+
 NekoPath diagnoses the earliest actionable prerequisite gap behind a learner's current
 mistake, asks for more evidence when the cause is ambiguous, and gives the teacher a
 correctable intervention path. Learners who have already mastered the target take a fast
@@ -25,9 +27,9 @@ statement.
 
 The local-first PWA scaffold, deterministic root-gap core, guarded hero content and reproducible
 40-learner synthetic classroom now exist with runnable checks. The selected visual direction is
-“Sổ can thiệp lớp học”. UI/domain wiring, named curriculum review, the 30-profile frozen evaluation
-the six independently owned held-out labels and deployment remain explicit next gates; no
-real-learning or whole-curriculum result is claimed.
+“Sổ can thiệp lớp học”. The student, evidence-path and teacher surfaces are wired to the real domain
+runtime and deployed to Cloudflare Pages. Named curriculum review and six independently owned
+held-out labels remain explicit next gates; no real-learning or whole-curriculum result is claimed.
 
 ## Non-negotiables
 
