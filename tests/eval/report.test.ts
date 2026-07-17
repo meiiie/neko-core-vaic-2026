@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './fixtures';
+import { HERO_DEMO_CONFIG, HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from '../../src/content/hero-demo';
 import { evaluateFrozenCases, type FrozenEvaluationCase } from './report';
 
 const caseDefinitions = [
@@ -17,6 +17,7 @@ const cases: FrozenEvaluationCase[] = caseDefinitions.map((testCase) => ({
     graph: HERO_GRAPH,
     items: HERO_ITEMS,
     events: HERO_EVENTS[testCase.id as keyof typeof HERO_EVENTS],
+    config: HERO_DEMO_CONFIG,
   },
 }));
 

@@ -333,7 +333,8 @@ function selectProbe(
     .filter(
       (item) =>
         item.role === 'DIAGNOSTIC' &&
-        item.reviewState === 'ACCEPTED' &&
+        (item.reviewState === 'ACCEPTED' ||
+          (config.allowUnreviewedContent && item.reviewState === 'UNREVIEWED')) &&
         item.kcIds.length === 1 &&
         candidateKcIds.includes(item.kcIds[0]!) &&
         !usedItemIds.has(item.id),
@@ -414,7 +415,8 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
       .filter(
         (item) =>
           item.role === 'TRANSFER' &&
-          item.reviewState === 'ACCEPTED' &&
+          (item.reviewState === 'ACCEPTED' ||
+            (config.allowUnreviewedContent && item.reviewState === 'UNREVIEWED')) &&
           item.kcIds.includes(input.targetKcId) &&
           !usedItemIds.has(item.id),
       )

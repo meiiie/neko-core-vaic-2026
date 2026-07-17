@@ -9,7 +9,13 @@ import {
   topologicalOrder,
   type CurriculumGraph,
 } from '../../src/domain';
-import { eventsFor, HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './fixtures';
+import {
+  eventsFor,
+  HERO_DEMO_CONFIG,
+  HERO_EVENTS,
+  HERO_GRAPH,
+  HERO_ITEMS,
+} from '../../src/content/hero-demo';
 
 function heroDiagnosis(learnerId: keyof typeof HERO_EVENTS) {
   return diagnose({
@@ -18,6 +24,7 @@ function heroDiagnosis(learnerId: keyof typeof HERO_EVENTS) {
     graph: HERO_GRAPH,
     items: HERO_ITEMS,
     events: HERO_EVENTS[learnerId],
+    config: HERO_DEMO_CONFIG,
   });
 }
 
@@ -101,12 +108,34 @@ describe('hero diagnosis contract', () => {
     });
   });
 
-  it('abstains and asks a reviewed discriminating question for Chi', () => {
+  it('abstains and asks a clearly flagged demo question for Chi', () => {
     const chi = heroDiagnosis('chi');
 
     expect(chi.status).toBe('NEEDS_MORE_EVIDENCE');
     expect(chi.competingKcIds).toEqual(expect.arrayContaining(['K02', 'K07']));
     expect(['K02-DIAGNOSTIC', 'K07-DIAGNOSTIC']).toContain(chi.nextItemId);
+  });
+
+  it('does not select unreviewed content unless demo mode is explicit', () => {
+    const chi = diagnose({
+      learnerId: 'chi',
+      targetKcId: 'K10',
+      graph: HERO_GRAPH,
+      items: HERO_ITEMS,
+      events: HERO_EVENTS.chi,
+    });
+    const minh = diagnose({
+      learnerId: 'minh',
+      targetKcId: 'K10',
+      graph: HERO_GRAPH,
+      items: HERO_ITEMS,
+      events: HERO_EVENTS.minh,
+    });
+
+    expect(chi).toMatchObject({ status: 'NEEDS_MORE_EVIDENCE' });
+    expect(chi.nextItemId).toBeUndefined();
+    expect(minh).toMatchObject({ status: 'FAST_PATH' });
+    expect(minh.nextItemId).toBeUndefined();
   });
 
   it('gives Minh a fast path rather than remediation', () => {
@@ -141,6 +170,7 @@ describe('hero diagnosis contract', () => {
         graph: HERO_GRAPH,
         items: HERO_ITEMS,
         events: HERO_EVENTS.an,
+        config: HERO_DEMO_CONFIG,
       }),
     ).toMatchObject({ status: 'OUT_OF_SCOPE', reasonCodes: ['TARGET_OUTSIDE_GRAPH'] });
   });

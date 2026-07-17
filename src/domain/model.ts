@@ -53,6 +53,7 @@ export interface DomainConfig {
   readonly minDirectEvidence: number;
   readonly maxDiagnosticItems: number;
   readonly ambiguityMargin: number;
+  readonly allowUnreviewedContent: boolean;
 }
 
 export const DEFAULT_DOMAIN_CONFIG: DomainConfig = {
@@ -65,6 +66,7 @@ export const DEFAULT_DOMAIN_CONFIG: DomainConfig = {
   minDirectEvidence: 2,
   maxDiagnosticItems: 6,
   ambiguityMargin: 0.08,
+  allowUnreviewedContent: false,
 };
 
 export type DiagnosisStatus = 'DIAGNOSED' | 'NEEDS_MORE_EVIDENCE' | 'OUT_OF_SCOPE' | 'FAST_PATH';

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { topologicalOrder } from '../domain';
 import graphDraftJson from './graph.v1.json';
-import { contentGraphDraft, contentGraphSchema, curriculumGraphDraft } from './index';
+import {
+  contentGraphDraft,
+  contentGraphSchema,
+  curriculumGraphDraft,
+  HERO_ITEMS,
+  HERO_QUESTIONS,
+} from './index';
 
 describe('curriculum draft gate', () => {
   it('parses the versioned 12-KC, 13-edge DAG', () => {
@@ -20,6 +26,16 @@ describe('curriculum draft gate', () => {
     expect(reviews.every((review) => review.reviewer === null && review.reviewedAt === null)).toBe(
       true,
     );
+  });
+
+  it('keeps every hero item unreviewed and labels every visible question', () => {
+    expect(HERO_ITEMS.every((item) => item.reviewState === 'UNREVIEWED')).toBe(true);
+    expect(HERO_QUESTIONS).not.toHaveLength(0);
+    expect(
+      HERO_QUESTIONS.every((question) =>
+        question.hypothesisLabel.toLocaleLowerCase('vi').includes('chưa được giáo viên duyệt'),
+      ),
+    ).toBe(true);
   });
 
   it('rejects duplicate IDs, unknown sources and cyclic edges', () => {

@@ -5,7 +5,7 @@ import {
   lowestMasteryBaseline,
   surfaceSkillBaseline,
 } from './baselines';
-import { HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './fixtures';
+import { HERO_DEMO_CONFIG, HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from '../../src/content/hero-demo';
 
 type HeroId = keyof typeof HERO_EVENTS;
 
@@ -23,6 +23,7 @@ function inputFor(learnerId: HeroId): DiagnosisInput {
     graph: HERO_GRAPH,
     items: HERO_ITEMS,
     events: HERO_EVENTS[learnerId],
+    config: HERO_DEMO_CONFIG,
   };
 }
 

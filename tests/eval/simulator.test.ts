@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HERO_GRAPH, HERO_ITEMS } from './fixtures';
+import { HERO_GRAPH, HERO_ITEMS } from '../../src/content/hero-demo';
 import { simulateResponses } from './simulator';
 
 describe('independent noisy response simulator', () => {
