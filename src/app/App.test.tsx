@@ -33,7 +33,7 @@ describe('App shell', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'Cùng một lỗi bề mặt — khác lỗ hổng gốc' }),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: /So sánh An ↔ Bình/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Bắt đầu so sánh: xem An trước/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Mở bảng lớp 40 học sinh/ })).toBeTruthy();
   });
 

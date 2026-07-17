@@ -96,27 +96,41 @@ export function PathPage() {
       ) : null}
 
       {result.pathKcIds.length > 0 ? (
-        <section className="section">
-          <h2>Đường bù kiến thức</h2>
-          <ol className="path-steps">
-            {result.pathKcIds.map((kcId, index) => (
-              <li key={kcId}>
-                <span className="step-role">
-                  {index === 0
-                    ? 'Bắt đầu từ lỗ hổng gốc'
-                    : kcId === HERO_TARGET_KC_ID
-                      ? 'Mục tiêu của lớp'
-                      : `Bước ${index + 1}`}
-                </span>
-                <span className="step-name">{kcName(kcId)}</span>
-              </li>
-            ))}
-          </ol>
-          <p className="evidence-note">
-            Các kiến thức đã vững không xuất hiện trong đường bù — học sinh không phải học lại thứ
-            đã nắm chắc.
-          </p>
-        </section>
+        <>
+          <section className="section">
+            <h2>Đường bù kiến thức</h2>
+            <ol className="path-steps">
+              {result.pathKcIds.map((kcId, index) => (
+                <li key={kcId}>
+                  <span className="step-role">
+                    {index === 0
+                      ? 'Bắt đầu từ lỗ hổng gốc'
+                      : kcId === HERO_TARGET_KC_ID
+                        ? 'Mục tiêu của lớp'
+                        : `Bước ${index + 1}`}
+                  </span>
+                  <span className="step-name">{kcName(kcId)}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="evidence-note">
+              Các kiến thức đã vững không xuất hiện trong đường bù — học sinh không phải học lại thứ
+              đã nắm chắc.
+            </p>
+          </section>
+          {learnerId === 'an' ? (
+            <section className="action-panel" aria-labelledby="compare-next-heading">
+              <h2 id="compare-next-heading">Cùng bài toán, lỗ hổng gốc khác</h2>
+              <p>
+                An cần bù phân số bằng nhau. Tiếp tục với Bình để xem cùng lỗi bề mặt nhưng bằng
+                chứng dẫn tới một gốc khác.
+              </p>
+              <Link className="button-primary" to="/path/binh">
+                Tiếp: đối chiếu với Bình
+              </Link>
+            </section>
+          ) : null}
+        </>
       ) : result.status === 'FAST_PATH' ? (
         <section className="action-panel">
           <h2>Sẵn sàng tiến tiếp</h2>

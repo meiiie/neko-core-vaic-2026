@@ -12,12 +12,12 @@ export function HomePage() {
       <section className="section">
         <h1>Cùng một lỗi bề mặt — khác lỗ hổng gốc</h1>
         <p style={{ fontSize: 'var(--text-lg)' }}>
-          NekoPath lần theo bằng chứng để tìm đúng kiến thức nền bị thiếu của từng học sinh, và cho
-          giáo viên biết nên giúp nhóm nào trước, vì sao, bằng hành động gì.
+          NekoPath lần theo bằng chứng để đề xuất kiến thức nền cần kiểm tra của từng học sinh, và
+          cho giáo viên biết nên giúp nhóm nào trước, vì sao, bằng hành động gì.
         </p>
         <div className="cta-row">
           <Link className="button-primary" to="/path/an">
-            So sánh An ↔ Bình: cùng sai một bài
+            Bắt đầu so sánh: xem An trước
           </Link>
           <Link className="button-secondary" to="/teacher">
             Mở bảng lớp 40 học sinh

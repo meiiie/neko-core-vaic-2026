@@ -42,7 +42,7 @@ export function TeacherPage() {
             <strong>
               {gap.learnerCount}/{gap.classSize}
             </strong>{' '}
-            học sinh có đủ bằng chứng ({Math.round(gap.rate * 100)}%) — vượt ngưỡng chính sách{' '}
+            học sinh có đủ bằng chứng ({Math.round(gap.rate * 100)}%) — đạt điều kiện chính sách{' '}
             {Math.round(gap.thresholdRate * 100)}% và tối thiểu {gap.thresholdCount} học sinh.
           </p>
           <div

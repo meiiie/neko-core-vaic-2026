@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   buildLocalAnswerRecord,
@@ -28,6 +28,7 @@ const STATUS_TONE: Record<string, string> = {
 export function LearnPage() {
   const { learnerId } = useParams<{ learnerId: string }>();
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const savingRef = useRef(false);
 
   const localRecords = useLiveQuery(
     () => (learnerId ? listEventsByLearner(learnerId) : Promise.resolve([])),
@@ -63,7 +64,8 @@ export function LearnPage() {
   const currentStep = probeQuestion ? 2 : 3;
 
   async function answer(itemId: string, choiceId: string, correct: boolean) {
-    if (!isHeroLearnerId(learnerId) || localRecords === undefined) return;
+    if (!isHeroLearnerId(learnerId) || localRecords === undefined || savingRef.current) return;
+    savingRef.current = true;
     setSaveState('saving');
     try {
       await appendEvent(
@@ -72,6 +74,8 @@ export function LearnPage() {
       setSaveState('saved');
     } catch {
       setSaveState('error');
+    } finally {
+      savingRef.current = false;
     }
   }
 
@@ -106,6 +110,7 @@ export function LearnPage() {
               <button
                 key={choice.id}
                 type="button"
+                disabled={saveState === 'saving'}
                 onClick={() =>
                   void answer(
                     probeQuestion.itemId,
@@ -118,6 +123,7 @@ export function LearnPage() {
               </button>
             ))}
           </div>
+          {saveState === 'saving' && <p role="status">Đang lưu câu trả lời trên thiết bị…</p>}
           <p className="evidence-note">
             Vì sao hỏi câu này? Hệ thống đang phân biệt các giả thuyết gốc còn cạnh tranh
             {result.competingKcIds.length > 0

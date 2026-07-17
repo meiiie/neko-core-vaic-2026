@@ -116,6 +116,11 @@ button:hover {
   background: var(--evidence-soft);
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
@@ -150,6 +155,9 @@ button:hover {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
   font-size: var(--text-lg);
   font-weight: 700;
   letter-spacing: 0.01em;
