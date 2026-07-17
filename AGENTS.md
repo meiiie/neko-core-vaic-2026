@@ -65,3 +65,16 @@ placeholder script that always succeeds.
 - Only the Fable/integrator lane changes shared package/build/CI configuration. Other lanes submit
   a dependency or config request instead of racing on shared files.
 - Human curriculum review owns acceptance of edges, items, hints and intervention wording.
+
+## Current UX/UI refinement pass (2026-07-17)
+
+`docs/UX_UI_AUDIT_AND_EXECUTION_PLAN.md` overrides the initial-build ownership only for this
+bounded pass.
+
+- Fable 5 owns the presentation files listed in section 6 of that plan and their colocated UI tests.
+- Codex freezes `src/domain/**`, `src/content/**`, `tests/eval/**` and
+  `src/app/adapters/hero-tutor*`; it owns black-box QA, integration, docs/log and deployment.
+- Fable does not edit README, AI log, deploy/config files or add dependencies, and it does not
+  deploy. Codex does not implement a competing visual redesign while Fable is active.
+- Handoff is one reviewed commit SHA plus route/viewport screenshots and check results. Preserve
+  all synthetic, unreviewed, uncertainty and offline truth labels.
