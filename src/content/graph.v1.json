@@ -1,0 +1,419 @@
+{
+  "version": "fractions-to-proportion-draft-v1",
+  "title": "Mạch phân số đến tỉ lệ thức lớp 5–7",
+  "status": "DRAFT",
+  "sources": [
+    {
+      "id": "MOET-MATH-2018",
+      "title": "Chương trình giáo dục phổ thông môn Toán 2018",
+      "url": "https://thleductho.hcm.edu.vn/van-ban/chuong-trinh-giao-duc-pho-thong-mon-toan-ban-hanh-kem-theo-thong-tu-322018tt-bg/vbctmb/72434/406283",
+      "note": "Nguồn neo chương trình; thứ tự chương trình không tự động chứng minh quan hệ nhân quả tiên quyết."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "K01",
+      "nameVi": "Ý nghĩa và biểu diễn phân số",
+      "observableBehaviorVi": "Biểu diễn phần–toàn thể và xác định đúng tử số, mẫu số trong ngữ cảnh đơn giản.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 5,
+          "summaryVi": "Củng cố nhận biết, đọc, viết và biểu diễn phân số."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần giáo viên Toán xác nhận cách diễn đạt và độ khó."
+      }
+    },
+    {
+      "id": "K02",
+      "nameVi": "Phân số bằng nhau",
+      "observableBehaviorVi": "Nhân hoặc chia cả tử và mẫu cho cùng một số khác 0 mà không đổi giá trị phân số.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 5,
+          "summaryVi": "Củng cố tính chất cơ bản và nhận biết các phân số bằng nhau."
+        },
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 6,
+          "summaryVi": "Sử dụng tính chất cơ bản của phân số và quan hệ bằng nhau."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần giáo viên Toán xác nhận các pattern sai có tính chẩn đoán."
+      }
+    },
+    {
+      "id": "K03",
+      "nameVi": "Rút gọn phân số",
+      "observableBehaviorVi": "Đưa phân số về dạng tối giản mà vẫn giữ nguyên giá trị.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 5,
+          "summaryVi": "Thực hiện rút gọn phân số trong các bài toán phù hợp."
+        },
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 6,
+          "summaryVi": "Vận dụng tính chất cơ bản để rút gọn phân số."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Chưa được xác nhận là root cần thiết cho bộ item của NekoPath."
+      }
+    },
+    {
+      "id": "K04",
+      "nameVi": "Quy đồng mẫu số",
+      "observableBehaviorVi": "Tạo các phân số bằng nhau có cùng mẫu số để phục vụ so sánh hoặc tính toán.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 5,
+          "summaryVi": "Quy đồng mẫu số các phân số trong phạm vi chương trình."
+        },
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 6,
+          "summaryVi": "Sử dụng phân số bằng nhau khi so sánh và thực hiện phép tính."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần phân biệt prerequisite chung với trình tự dạy cho item cụ thể."
+      }
+    },
+    {
+      "id": "K05",
+      "nameVi": "So sánh phân số",
+      "observableBehaviorVi": "Sắp xếp hoặc so sánh phân số và nêu được căn cứ phù hợp.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 5,
+          "summaryVi": "So sánh và sắp xếp các phân số."
+        },
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 6,
+          "summaryVi": "So sánh phân số trong các dạng bài phù hợp."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Chưa có item chẩn đoán được giáo viên duyệt."
+      }
+    },
+    {
+      "id": "K06",
+      "nameVi": "Phép tính với phân số",
+      "observableBehaviorVi": "Chọn và thực hiện đúng phép cộng, trừ, nhân hoặc chia phân số trong bài toán nhỏ.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 5,
+          "summaryVi": "Thực hiện các phép tính cơ bản với phân số."
+        },
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 6,
+          "summaryVi": "Tính toán với phân số và vận dụng trong bài toán."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần item tách lỗi số học khỏi lỗi hiểu tỉ lệ thức."
+      }
+    },
+    {
+      "id": "K07",
+      "nameVi": "Ý nghĩa và thứ tự của tỉ số",
+      "observableBehaviorVi": "Diễn giải đúng a:b theo ngữ cảnh và giữ đúng thứ tự hai đại lượng.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 5,
+          "summaryVi": "Nhận biết và vận dụng tỉ số trong tình huống đơn giản."
+        },
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 6,
+          "summaryVi": "Làm việc với tỉ số và tỉ số phần trăm."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Root giả thuyết của hồ sơ Bình; cần giáo viên xác nhận."
+      }
+    },
+    {
+      "id": "K08",
+      "nameVi": "Các tỉ số bằng nhau",
+      "observableBehaviorVi": "Tạo hoặc hoàn thành các tỉ số giữ nguyên quan hệ nhân giữa hai đại lượng.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 7,
+          "summaryVi": "Nhận biết dãy tỉ số bằng nhau và vận dụng tính chất liên quan."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần xác nhận K02 có phải prerequisite cứng cho item được chọn hay không."
+      }
+    },
+    {
+      "id": "K09",
+      "nameVi": "Định nghĩa và tính chất tỉ lệ thức",
+      "observableBehaviorVi": "Nhận biết một tỉ lệ thức đúng và giải thích quan hệ bằng nhau giữa hai tỉ số.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 7,
+          "summaryVi": "Nhận biết tỉ lệ thức và sử dụng các tính chất cơ bản."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần kiểm tra khả năng cô lập khái niệm khỏi thao tác số học."
+      }
+    },
+    {
+      "id": "K10",
+      "nameVi": "Tìm giá trị chưa biết trong tỉ lệ thức",
+      "observableBehaviorVi": "Tìm một giá trị chưa biết và nêu được quan hệ nhân hoặc tính chất đã dùng.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 7,
+          "summaryVi": "Vận dụng tính chất tỉ lệ thức và dãy tỉ số bằng nhau trong bài toán."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "KC mục tiêu của hero flow; wording và rubric chưa được duyệt."
+      }
+    },
+    {
+      "id": "K11",
+      "nameVi": "Đại lượng tỉ lệ thuận",
+      "observableBehaviorVi": "Nhận biết, mô hình hóa và giải bài toán tỉ lệ thuận đơn giản.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 7,
+          "summaryVi": "Giải quyết các bài toán đơn giản về đại lượng tỉ lệ thuận."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Ứng viên fast-path; chưa được xác nhận độ khó."
+      }
+    },
+    {
+      "id": "K12",
+      "nameVi": "Đại lượng tỉ lệ nghịch",
+      "observableBehaviorVi": "Phân biệt, mô hình hóa và giải bài toán tỉ lệ nghịch đơn giản.",
+      "curriculumAnchors": [
+        {
+          "sourceId": "MOET-MATH-2018",
+          "grade": 7,
+          "summaryVi": "Giải quyết các bài toán đơn giản về đại lượng tỉ lệ nghịch."
+        }
+      ],
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Ứng viên chuyển giao; chưa được giáo viên duyệt."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "K01",
+      "to": "K02",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Hiểu giá trị phân số hỗ trợ giải thích vì sao phép biến đổi tạo phân số bằng nhau.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần xác nhận trên item cụ thể."
+      }
+    },
+    {
+      "from": "K02",
+      "to": "K03",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Rút gọn sử dụng phép biến đổi giữ nguyên giá trị phân số.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Chưa phải quan hệ nhân quả đã xác nhận."
+      }
+    },
+    {
+      "from": "K02",
+      "to": "K04",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Quy đồng tạo các phân số bằng nhau có mẫu chung.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần giáo viên xác nhận phạm vi."
+      }
+    },
+    {
+      "from": "K04",
+      "to": "K05",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Mẫu số chung hỗ trợ so sánh trong bộ item dự kiến.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Không khẳng định bắt buộc cho mọi cách so sánh."
+      }
+    },
+    {
+      "from": "K04",
+      "to": "K06",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Mẫu số chung được dùng trong các item cộng và trừ phân số dự kiến.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần tách theo loại phép tính."
+      }
+    },
+    {
+      "from": "K01",
+      "to": "K07",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Biểu diễn phân số hỗ trợ liên hệ tỉ số với quan hệ giữa hai lượng.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần xác nhận có phải prerequisite cứng."
+      }
+    },
+    {
+      "from": "K02",
+      "to": "K08",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Các item dự kiến dùng cùng một phép nhân để tạo tỉ số bằng nhau.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Root giả thuyết của hồ sơ An."
+      }
+    },
+    {
+      "from": "K07",
+      "to": "K08",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Giữ đúng thứ tự đại lượng trước khi tạo tỉ số tương đương.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Root giả thuyết của hồ sơ Bình."
+      }
+    },
+    {
+      "from": "K08",
+      "to": "K09",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Tỉ lệ thức biểu diễn sự bằng nhau của hai tỉ số.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần giáo viên xác nhận."
+      }
+    },
+    {
+      "from": "K06",
+      "to": "K10",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Bộ item tìm giá trị chưa biết yêu cầu thao tác số học với phân số.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần item cô lập lỗi số học."
+      }
+    },
+    {
+      "from": "K09",
+      "to": "K10",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Hiểu tỉ lệ thức hỗ trợ giải thích phép tìm giá trị chưa biết.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần giáo viên xác nhận trên target item."
+      }
+    },
+    {
+      "from": "K10",
+      "to": "K11",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Bài toán tỉ lệ thuận dự kiến dùng bước tìm giá trị chưa biết.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Ứng viên fast-path, chưa xác nhận."
+      }
+    },
+    {
+      "from": "K10",
+      "to": "K12",
+      "scope": "AUTHORED_ITEMS",
+      "rationaleVi": "Bài toán tỉ lệ nghịch dự kiến dùng bước tìm giá trị chưa biết.",
+      "review": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "reviewedAt": null,
+        "note": "Cần xem nhận dạng loại quan hệ có nên đi trước."
+      }
+    }
+  ]
+}
