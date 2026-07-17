@@ -247,7 +247,7 @@ export function AppLayout() {
             tabIndex={closedMobileTabIndex}
             onClick={exitWorkspace}
           >
-            Đổi hồ sơ
+            Đổi<span className="sidebar-account-action-detail"> hồ sơ</span>
           </button>
         </div>
       </aside>

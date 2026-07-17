@@ -573,6 +573,12 @@ button:disabled,
   white-space: nowrap;
 }
 
+@media (max-width: 21rem) {
+  .sidebar-account-action-detail {
+    display: none;
+  }
+}
+
 .product-workspace {
   min-height: 100dvh;
   margin-left: var(--sidebar-width);
