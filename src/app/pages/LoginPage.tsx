@@ -23,6 +23,8 @@ function destination(role: 'STUDENT' | 'TEACHER'): string {
   return role === 'STUDENT' ? '/student' : '/teacher';
 }
 
+const LAST_ACCOUNT_KEY = 'nekopath.last-username.v1';
+
 export function LoginPage() {
   const { account, ready, signIn, enterLocalMode } = useSession();
   const navigate = useNavigate();
@@ -30,8 +32,11 @@ export function LoginPage() {
   const [directoryError, setDirectoryError] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [showPassword, setShowPassword] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const lastUsername = window.localStorage.getItem(LAST_ACCOUNT_KEY);
+  const lastAccount = directory.find((entry) => entry.username === lastUsername) ?? null;
 
   useEffect(() => {
     if (ready && account) navigate(destination(account.role), { replace: true });
@@ -59,6 +64,13 @@ export function LoginPage() {
     const failure = await signIn(user, password);
     setPending(null);
     if (failure) setError(failure);
+    else {
+      try {
+        window.localStorage.setItem(LAST_ACCOUNT_KEY, user);
+      } catch {
+        // Remembering the account is a convenience only.
+      }
+    }
     // Successful sign-in redirects via the effect above.
   }
 
@@ -96,6 +108,29 @@ export function LoginPage() {
           <p className="login-intro">
             Tài khoản thật trên máy chủ demo — mật khẩu chung: <code>{DEMO_PASSWORD}</code>
           </p>
+
+          {lastAccount ? (
+            <section className="login-role-group" aria-label="Tiếp tục">
+              <p className="login-role-label">Lần trước bạn dùng</p>
+              <button
+                className="demo-account demo-account--continue"
+                type="button"
+                disabled={pending !== null}
+                onClick={() => void enter(lastAccount.username)}
+              >
+                <span className="account-avatar" aria-hidden="true">
+                  {lastAccount.initials}
+                </span>
+                <span className="account-copy">
+                  <strong>Tiếp tục với {lastAccount.name}</strong>
+                  <span>{lastAccount.subtitle}</span>
+                </span>
+                <span className="account-action">
+                  {pending === lastAccount.username ? 'Đang vào…' : 'Vào ngay'}
+                </span>
+              </button>
+            </section>
+          ) : null}
 
           {directoryError ? (
             <section className="login-role-group" aria-label="Chế độ cục bộ">
@@ -163,37 +198,54 @@ export function LoginPage() {
             );
           })}
 
-          <form
-            className="login-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (username) void enter(username);
-            }}
-          >
-            <label>
-              Tên đăng nhập
-              <input
-                name="username"
-                autoComplete="username"
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="vd: hs05.7a"
-              />
-            </label>
-            <label>
-              Mật khẩu
-              <input
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            <button className="button-secondary" type="submit" disabled={pending !== null}>
-              Đăng nhập bằng tài khoản khác
-            </button>
-          </form>
+          <details className="login-other">
+            <summary>Đăng nhập bằng tài khoản khác (36 học sinh còn lại)</summary>
+            <form
+              className="login-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (username) void enter(username);
+              }}
+            >
+              <label>
+                Tên đăng nhập
+                <input
+                  name="username"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="vd: hs05.7a"
+                />
+              </label>
+              <label>
+                Mật khẩu
+                <span className="password-field">
+                  <input
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    {showPassword ? 'Ẩn' : 'Hiện'}
+                  </button>
+                </span>
+              </label>
+              <button
+                className="button-secondary"
+                type="submit"
+                disabled={pending !== null || !username.trim()}
+              >
+                Đăng nhập
+              </button>
+            </form>
+          </details>
 
           {error ? (
             <p role="alert" className="error-message">
