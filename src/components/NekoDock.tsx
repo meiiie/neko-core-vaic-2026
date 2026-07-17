@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { runAgent, type AgentProvider, type AgentTraceEvent } from '../services/agent/loop';
 import { AGENT_PROVIDERS } from '../services/agent/providers';
 import { AGENT_TOOLS, toolByName } from '../services/agent/tools';
+import { setWebLlmProgressListener } from '../services/agent/webllm-provider';
 
 /**
  * Neko — the classroom agent as a right-hand dock (Cursor/Copilot pattern):
@@ -27,7 +28,7 @@ const HELP_TEXT = [
   '/hocsinh <id>   — chẩn đoán an | binh | chi | minh',
   '/kc <mã>        — vị trí kiến thức trong đồ thị, vd /kc K02',
   '/baigiao        — bài đã giao và tiến độ nộp (cần mạng)',
-  '/model <id>     — đổi bộ não: rule | local (Ollama/Gemma)',
+  '/model <id>     — đổi bộ não: rule | local (Ollama) | web (Gemma trong trình duyệt)',
   '/clear          — xóa màn hình',
   'Câu hỏi tự nhiên chạy vòng lặp agent: gọi công cụ → quan sát → trả lời.',
 ];
@@ -52,6 +53,19 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [lines, streamText]);
+
+  useEffect(() => {
+    let lastDecile = -1;
+    setWebLlmProgressListener(({ progress, text }) => {
+      const decile = Math.floor(progress * 10);
+      if (decile === lastDecile) return;
+      lastDecile = decile;
+      append(
+        line('info', `Gemma (trình duyệt): ${Math.round(progress * 100)}% — ${text.slice(0, 80)}`),
+      );
+    });
+    return () => setWebLlmProgressListener(null);
+  }, []);
 
   useEffect(() => {
     if (!open) return;

@@ -31,14 +31,35 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        // The 6MB WebLLM engine chunk is teacher-only: keep it OUT of the
+        // precache every student pays for, but cache it on first use so the
+        // in-browser Gemma brain works offline afterwards (with its weights,
+        // which WebLLM itself caches). Still no /api response caching.
+        globIgnores: ['**/webllm-*.js'],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',
         // The SPA fallback must never swallow future API routes.
         navigateFallbackDenylist: [/^\/api\//, /^\/healthz/],
-        runtimeCaching: [],
+        runtimeCaching: [
+          {
+            urlPattern: /\/assets\/webllm-[^/]+\.js$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'webllm-engine' },
+          },
+        ],
         cleanupOutdatedCaches: true,
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('@mlc-ai/web-llm')) return 'webllm';
+        },
+      },
+    },
+  },
   server: {
     proxy: { '/api': 'http://127.0.0.1:3001' },
   },

@@ -350,6 +350,8 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
 }
 
 /** Provider profiles — data, not code. */
+import { WebLlmAgentProvider } from './webllm-provider';
+
 export const AGENT_PROVIDERS: readonly AgentProvider[] = [
   new RuleBasedProvider(),
   new OpenAiCompatAgentProvider(
@@ -358,4 +360,5 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     'http://localhost:11434/v1',
     'gemma3:4b',
   ),
+  new WebLlmAgentProvider(),
 ];
