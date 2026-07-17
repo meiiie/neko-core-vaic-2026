@@ -217,5 +217,11 @@ describe('paths and teacher decisions', () => {
       'K02',
       'K07',
     ]);
+    expect(() => groupForTeacher(HERO_GRAPH, [heroDiagnosis('an'), heroDiagnosis('an')])).toThrow(
+      'Duplicate diagnosis',
+    );
+    expect(() => detectClassWideGaps(groups, 3)).toThrow(
+      'smaller than represented learners',
+    );
   });
 });

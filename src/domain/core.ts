@@ -545,8 +545,16 @@ export function groupForTeacher(
 ): TeacherGroup[] {
   topologicalOrder(graph);
   const buckets = new Map<string, DiagnosisResult[]>();
+  const seenLearners = new Set<string>();
 
   for (const diagnosis of diagnoses) {
+    if (seenLearners.has(diagnosis.learnerId)) {
+      throw new Error(`Duplicate diagnosis for learner ${diagnosis.learnerId}`);
+    }
+    seenLearners.add(diagnosis.learnerId);
+    if (diagnosis.status === 'DIAGNOSED' && !diagnosis.rootKcId) {
+      throw new Error(`Diagnosed learner ${diagnosis.learnerId} needs a rootKcId`);
+    }
     const key =
       diagnosis.status === 'DIAGNOSED'
         ? `root:${diagnosis.rootKcId}`
@@ -605,6 +613,10 @@ export function detectClassWideGaps(
   assertProbability('thresholdRate', thresholdRate);
   if (!Number.isInteger(thresholdCount) || thresholdCount < 1) {
     throw new Error('thresholdCount must be a positive integer');
+  }
+  const representedLearners = new Set(groups.flatMap((group) => group.learnerIds));
+  if (representedLearners.size > classSize) {
+    throw new Error('classSize cannot be smaller than represented learners');
   }
 
   return groups
