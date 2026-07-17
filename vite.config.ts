@@ -13,16 +13,16 @@ export default defineConfig({
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'offline.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'NekoPath — Sổ can thiệp lớp học',
+        name: 'NekoPath — Trợ giảng thích ứng',
         short_name: 'NekoPath',
         description:
-          'Chẩn đoán khoảng trống kiến thức gốc và gợi ý lộ trình luyện tập. Toàn bộ dữ liệu là mô phỏng.',
+          'Chẩn đoán khoảng trống kiến thức gốc và gợi ý lộ trình luyện tập từ dữ liệu đánh giá mẫu.',
         lang: 'vi',
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        background_color: '#f6f0e4',
-        theme_color: '#f6f0e4',
+        background_color: '#f4f7fb',
+        theme_color: '#0b234d',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
