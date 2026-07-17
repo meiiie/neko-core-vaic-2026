@@ -1,0 +1,4 @@
+# Raw visual drafts are local research material. Promote only reviewed, purpose-bound assets.
+generated/*
+!generated/.gitkeep
+
