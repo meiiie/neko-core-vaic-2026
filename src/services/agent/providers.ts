@@ -78,7 +78,7 @@ export class RuleBasedProvider implements AgentProvider {
   }
 }
 
-function composeAnswer(toolName: string, payload: string): string {
+export function composeAnswer(toolName: string, payload: string): string {
   try {
     const result = JSON.parse(payload) as { ok: boolean; data?: unknown; error?: string };
     if (!result.ok) return `Không lấy được dữ kiện: ${result.error}`;
@@ -135,6 +135,60 @@ interface OpenAiToolCallShape {
   function?: { name?: string; arguments?: string };
 }
 
+/**
+ * Fallback for models WITHOUT native tool-calling (e.g. Gemma builds on
+ * Ollama): the system prompt asks for a bare JSON envelope; if the reply
+ * content parses as {"tool": ..., "args": {...}}, treat it as a tool call.
+ */
+export function parseJsonToolEnvelope(content: string | null): AgentToolCall | null {
+  if (!content) return null;
+  const match = content.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]) as { tool?: unknown; args?: unknown };
+    if (typeof parsed.tool !== 'string') return null;
+    const args =
+      typeof parsed.args === 'object' && parsed.args !== null
+        ? Object.fromEntries(
+            Object.entries(parsed.args as Record<string, unknown>).map(([key, value]) => [
+              key,
+              String(value),
+            ]),
+          )
+        : {};
+    return { name: parsed.tool, args };
+  } catch {
+    return null;
+  }
+}
+
+const JSON_TOOL_INSTRUCTION =
+  'Khi cần dữ kiện, trả lời DUY NHẤT một JSON theo mẫu {"tool":"<tên>","args":{...}} với một trong các tool sau. ' +
+  'Khi đã đủ dữ kiện từ kết quả tool, trả lời người dùng bằng văn bản thường (không JSON).';
+
+/** NekoCore-style SSE reader: yields each `data:` payload until [DONE]. */
+async function* sseData(response: Response): AsyncGenerator<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline = buffer.indexOf('\n');
+    while (newline >= 0) {
+      const rawLine = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      newline = buffer.indexOf('\n');
+      if (!rawLine.startsWith('data:')) continue;
+      const data = rawLine.slice(5).trim();
+      if (data === '[DONE]') return;
+      yield data;
+    }
+  }
+}
+
 export class OpenAiCompatAgentProvider implements AgentProvider {
   constructor(
     readonly id: string,
@@ -148,54 +202,150 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     messages: readonly AgentChatMessage[],
     tools: readonly AgentTool[],
     signal?: AbortSignal,
+    onDelta?: (text: string) => void,
   ): Promise<AgentCompletion> {
-    const response = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      signal,
-      body: JSON.stringify({
-        model: this.model,
-        temperature: 0,
-        messages: messages.map((message) =>
+    const stream = Boolean(onDelta);
+    const toolMenu = tools
+      .map((tool) => `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.parameters)}`)
+      .join('\n');
+    const executedTools = new Set(
+      messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
+    );
+    const payload: Record<string, unknown> = {
+      model: this.model,
+      temperature: 0,
+      stream,
+      messages: [
+        // JSON envelope instruction covers models without native tools.
+        { role: 'system', content: `${JSON_TOOL_INSTRUCTION}\n${toolMenu}` },
+        ...messages.map((message) =>
           message.role === 'tool'
-            ? { role: 'tool', content: message.content, name: message.toolName }
+            ? { role: 'tool' as const, content: message.content, name: message.toolName }
             : { role: message.role, content: message.content },
         ),
-        tools: tools.map((tool) => ({
-          type: 'function',
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: {
-              type: 'object',
-              properties: Object.fromEntries(
-                Object.entries(tool.parameters).map(([key, description]) => [
-                  key,
-                  { type: 'string', description },
-                ]),
-              ),
-            },
+        // Small local models tend to re-emit the envelope after observing a
+        // result; steer them to the synthesis phase explicitly.
+        ...(executedTools.size > 0
+          ? [
+              {
+                role: 'system' as const,
+                content:
+                  'Kết quả công cụ đã có ở trên. KHÔNG xuất JSON nữa — hãy trả lời người dùng bằng văn bản thường, dựa đúng trên các con số trong kết quả.',
+              },
+            ]
+          : []),
+      ],
+      tools: tools.map((tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: {
+            type: 'object',
+            properties: Object.fromEntries(
+              Object.entries(tool.parameters).map(([key, description]) => [
+                key,
+                { type: 'string', description },
+              ]),
+            ),
           },
-        })),
-      }),
-    });
-    if (!response.ok) throw new Error(`Provider trả về ${response.status}`);
-    const body = (await response.json()) as {
-      choices?: { message?: { content?: string | null; tool_calls?: OpenAiToolCallShape[] } }[];
+        },
+      })),
     };
-    const message = body.choices?.[0]?.message;
-    const toolCalls: AgentToolCall[] = (message?.tool_calls ?? []).flatMap((call) => {
+    const request = (body: Record<string, unknown>) =>
+      this.fetchImpl(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        signal,
+        body: JSON.stringify(body),
+      });
+    let response = await request(payload);
+    if (response.status === 400 && payload.tools) {
+      // Model without native tool support (Ollama returns 400 "does not
+      // support tools" for e.g. gemma3). Retry once relying on the JSON
+      // envelope instruction alone.
+      const { tools: _tools, ...withoutTools } = payload;
+      response = await request(withoutTools);
+    }
+    if (!response.ok) throw new Error(`Provider trả về ${response.status}`);
+
+    let content: string | null;
+    let rawCalls: OpenAiToolCallShape[];
+
+    if (stream) {
+      // NekoCore parseStream, miniaturised: accumulate content deltas and
+      // index-keyed tool-call argument fragments.
+      const acc = new Map<number, { name: string; argString: string }>();
+      let text = '';
+      for await (const data of sseData(response)) {
+        let chunk: {
+          choices?: {
+            delta?: {
+              content?: string;
+              tool_calls?: ({ index?: number } & OpenAiToolCallShape)[];
+            };
+          }[];
+        };
+        try {
+          chunk = JSON.parse(data);
+        } catch {
+          continue;
+        }
+        const delta = chunk.choices?.[0]?.delta;
+        if (delta?.content) {
+          text += delta.content;
+          onDelta?.(delta.content);
+        }
+        for (const call of delta?.tool_calls ?? []) {
+          const index = call.index ?? 0;
+          const entry = acc.get(index) ?? { name: '', argString: '' };
+          if (call.function?.name) entry.name = call.function.name;
+          if (call.function?.arguments) entry.argString += call.function.arguments;
+          acc.set(index, entry);
+        }
+      }
+      content = text || null;
+      rawCalls = [...acc.values()].map((entry) => ({
+        function: { name: entry.name, arguments: entry.argString },
+      }));
+    } else {
+      const body = (await response.json()) as {
+        choices?: { message?: { content?: string | null; tool_calls?: OpenAiToolCallShape[] } }[];
+      };
+      const message = body.choices?.[0]?.message;
+      content = message?.content ?? null;
+      rawCalls = message?.tool_calls ?? [];
+    }
+
+    const toolCalls: AgentToolCall[] = rawCalls.flatMap((call) => {
       const name = call.function?.name;
       if (!name) return [];
       try {
         return [
-          { name, args: JSON.parse(call.function?.arguments ?? '{}') as Record<string, string> },
+          { name, args: JSON.parse(call.function?.arguments || '{}') as Record<string, string> },
         ];
       } catch {
         return [{ name, args: {} }];
       }
     });
-    return { content: message?.content ?? null, toolCalls };
+
+    // Gemma-style fallback: no native calls, but the content IS a tool envelope.
+    if (toolCalls.length === 0) {
+      const envelope = parseJsonToolEnvelope(content);
+      if (envelope && !executedTools.has(envelope.name)) {
+        return { content: null, toolCalls: [envelope] };
+      }
+      if (envelope && content) {
+        // Already-executed tool re-emitted: strip the JSON block and keep any
+        // surrounding prose as the answer.
+        const stripped = content
+          .replace(/```json[\s\S]*?```/g, '')
+          .replace(/\{[\s\S]*\}/, '')
+          .trim();
+        return { content: stripped || null, toolCalls: [] };
+      }
+    }
+    return { content, toolCalls };
   }
 }
 

@@ -42,6 +42,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const [lines, setLines] = useState<ConsoleLine[]>(BANNER.map((text) => line('info', text)));
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [streamText, setStreamText] = useState('');
   const [provider, setProvider] = useState<AgentProvider>(AGENT_PROVIDERS[0]);
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -50,7 +51,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [lines]);
+  }, [lines, streamText]);
 
   useEffect(() => {
     if (!open) return;
@@ -131,7 +132,11 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       } else if (command.startsWith('/')) {
         append(line('error', `Lệnh không hợp lệ: ${command}. Gõ /help.`));
       } else {
-        await runAgent(command, provider, AGENT_TOOLS, onTrace);
+        setStreamText('');
+        await runAgent(command, provider, AGENT_TOOLS, onTrace, undefined, (delta) =>
+          setStreamText((current) => current + delta),
+        );
+        setStreamText('');
       }
     } catch (error) {
       append(
@@ -181,7 +186,11 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
             {entry.text}
           </p>
         ))}
-        {busy ? <p className="console-line console-line--info">…</p> : null}
+        {busy && streamText ? (
+          <p className="console-line console-line--answer">{streamText}</p>
+        ) : busy ? (
+          <p className="console-line console-line--info">…</p>
+        ) : null}
       </div>
       <form
         className="console-input-row"

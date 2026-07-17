@@ -95,6 +95,122 @@ describe('agent loop with the rule-based brain', () => {
   });
 });
 
+describe('grounding guard on model answers', () => {
+  it('replaces a fact-drifting answer with the deterministic composition', async () => {
+    let step = 0;
+    const drifting: AgentProvider = {
+      id: 'drift',
+      label: 'drift',
+      complete: async () => {
+        step += 1;
+        if (step === 1) {
+          return {
+            content: null,
+            toolCalls: [{ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: 'an' } }],
+          };
+        }
+        // Hallucinated synthesis: wrong topic, wrong numbers (real Gemma-4B failure mode).
+        return {
+          content: 'Lớp nên dạy lại "Phân tích dữ liệu" vì có 15 em chưa đạt.',
+          toolCalls: [],
+        };
+      },
+    };
+    const { events, onTrace } = collect();
+    const answer = await runAgent('An cần gì?', drifting, AGENT_TOOLS, onTrace);
+    expect(answer).toContain('Phân số bằng nhau');
+    expect(events.some((e) => e.kind === 'note' && e.text.includes('lệch dữ kiện'))).toBe(true);
+  });
+
+  it('keeps a well-grounded model answer untouched', async () => {
+    let step = 0;
+    const grounded: AgentProvider = {
+      id: 'ok',
+      label: 'ok',
+      complete: async () => {
+        step += 1;
+        if (step === 1) {
+          return {
+            content: null,
+            toolCalls: [{ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: 'an' } }],
+          };
+        }
+        return {
+          content: 'An cần củng cố Phân số bằng nhau trước khi quay lại mục tiêu.',
+          toolCalls: [],
+        };
+      },
+    };
+    const { events, onTrace } = collect();
+    const answer = await runAgent('An cần gì?', grounded, AGENT_TOOLS, onTrace);
+    expect(answer).toBe('An cần củng cố Phân số bằng nhau trước khi quay lại mục tiêu.');
+    expect(events.some((e) => e.kind === 'note')).toBe(false);
+  });
+});
+
+describe('JSON tool envelope fallback (models without native tools, e.g. Gemma)', () => {
+  it('parses a bare JSON envelope from content', async () => {
+    const { parseJsonToolEnvelope } = await import('./providers');
+    expect(parseJsonToolEnvelope('{"tool":"chan_doan_hoc_sinh","args":{"hoc_sinh":"an"}}')).toEqual(
+      { name: 'chan_doan_hoc_sinh', args: { hoc_sinh: 'an' } },
+    );
+    expect(
+      parseJsonToolEnvelope('Đây là JSON:\n{"tool":"tong_quan_lop","args":{}}\nxong.'),
+    ).toEqual({ name: 'tong_quan_lop', args: {} });
+    expect(parseJsonToolEnvelope('Câu trả lời thường, không JSON.')).toBeNull();
+  });
+
+  it('provider converts an envelope reply into a tool call', async () => {
+    const body = {
+      choices: [{ message: { content: '{"tool":"tong_quan_lop","args":{}}', tool_calls: [] } }],
+    };
+    const provider = new OpenAiCompatAgentProvider(
+      'test',
+      'test',
+      'http://example.invalid/v1',
+      'gemma-test',
+      async () => new Response(JSON.stringify(body), { status: 200 }),
+    );
+    const completion = await provider.complete(
+      [{ role: 'user', content: 'lớp thế nào?' }],
+      AGENT_TOOLS,
+    );
+    expect(completion.toolCalls).toEqual([{ name: 'tong_quan_lop', args: {} }]);
+  });
+});
+
+describe('SSE streaming (NekoCore parseStream, miniaturised)', () => {
+  it('streams content deltas and accumulates split tool-call arguments', async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"Xin "}}]}',
+      'data: {"choices":[{"delta":{"content":"chào"}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"chan_doan_hoc_sinh","arguments":"{\\"hoc_"}}]}}]}',
+      'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"sinh\\":\\"an\\"}"}}]}}]}',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const provider = new OpenAiCompatAgentProvider(
+      'test',
+      'test',
+      'http://example.invalid/v1',
+      'gemma-test',
+      async () =>
+        new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+    );
+    const deltas: string[] = [];
+    const completion = await provider.complete(
+      [{ role: 'user', content: 'chào' }],
+      AGENT_TOOLS,
+      undefined,
+      (delta) => deltas.push(delta),
+    );
+    expect(deltas.join('')).toBe('Xin chào');
+    expect(completion.toolCalls).toEqual([
+      { name: 'chan_doan_hoc_sinh', args: { hoc_sinh: 'an' } },
+    ]);
+  });
+});
+
 describe('OpenAI-compatible agent provider', () => {
   it('parses tool_calls from a chat/completions reply', async () => {
     const body = {

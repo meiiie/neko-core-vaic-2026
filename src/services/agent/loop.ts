@@ -1,3 +1,4 @@
+import { composeAnswer } from './providers';
 import { toolByName, type AgentTool } from './tools';
 
 /**
@@ -25,6 +26,9 @@ export interface AgentCompletion {
   toolCalls: AgentToolCall[];
 }
 
+/** Live token stream hook (mirror of NekoCore DeltaHook). */
+export type AgentDeltaHook = (text: string) => void;
+
 /** The one port every "brain" implements (mirror of NekoCore Provider). */
 export interface AgentProvider {
   readonly id: string;
@@ -33,6 +37,7 @@ export interface AgentProvider {
     messages: readonly AgentChatMessage[],
     tools: readonly AgentTool[],
     signal?: AbortSignal,
+    onDelta?: AgentDeltaHook,
   ): Promise<AgentCompletion>;
 }
 
@@ -55,19 +60,38 @@ export async function runAgent(
   tools: readonly AgentTool[],
   onTrace: (event: AgentTraceEvent) => void,
   signal?: AbortSignal,
+  onDelta?: AgentDeltaHook,
 ): Promise<string> {
   const messages: AgentChatMessage[] = [
     { role: 'system', content: AGENT_SYSTEM_PROMPT },
     { role: 'user', content: question },
   ];
   const seenCalls = new Set<string>();
+  const toolLog: { name: string; payload: string }[] = [];
 
   for (let step = 1; step <= MAX_STEPS; step++) {
-    const completion = await provider.complete(messages, tools, signal);
+    const completion = await provider.complete(messages, tools, signal, onDelta);
 
     if (completion.toolCalls.length === 0) {
-      const answer =
+      let answer =
         completion.content?.trim() || 'Tôi chưa có đủ dữ kiện từ công cụ để trả lời câu này.';
+      // Grounding guard: fact anchors (KC names) from tool results must
+      // survive into the answer. A small model that drifts gets replaced by
+      // the deterministic composition of the same facts — honestly labeled.
+      const anchors = new Set<string>();
+      for (const entry of toolLog) {
+        for (const match of entry.payload.matchAll(/"kienThuc(?:Goc)?":"([^"]+)"/g)) {
+          anchors.add(match[1]);
+        }
+      }
+      if (anchors.size > 0 && ![...anchors].some((anchor) => answer.includes(anchor))) {
+        const last = toolLog[toolLog.length - 1];
+        onTrace({
+          kind: 'note',
+          text: 'Câu trả lời của model lệch dữ kiện công cụ — thay bằng bản tổng hợp deterministic.',
+        });
+        answer = composeAnswer(last.name, last.payload);
+      }
       onTrace({ kind: 'answer', text: answer });
       return answer;
     }
@@ -110,6 +134,7 @@ export async function runAgent(
         toolName: call.name,
       });
       messages.push({ role: 'tool', content: payload, toolName: call.name });
+      toolLog.push({ name: call.name, payload });
     });
   }
 
