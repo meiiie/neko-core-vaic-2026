@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession, type Role } from '../app/session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { registerSyncTriggers } from '../services/sync';
-import { NekoDock } from './NekoDock';
 import { OnlineStatusBadge } from './OnlineStatusBadge';
 import { SyncBadge } from './SyncBadge';
 import { BrandMark } from './BrandMark';
+
+const NekoDock = lazy(async () => {
+  const module = await import('./NekoDock');
+  return { default: module.NekoDock };
+});
 
 interface NavItem {
   readonly to: string;
@@ -38,6 +42,7 @@ export function AppLayout() {
   const [nekoOpen, setNekoOpen] = useState(
     () => window.localStorage.getItem('nekopath.neko-dock.open') === '1',
   );
+  const [nekoLoaded, setNekoLoaded] = useState(nekoOpen);
 
   useEffect(() => {
     registerSyncTriggers();
@@ -58,6 +63,11 @@ export function AppLayout() {
   function exitWorkspace() {
     signOut();
     navigate('/login', { replace: true });
+  }
+
+  function toggleNeko() {
+    setNekoLoaded(true);
+    setNekoOpen((open) => !open);
   }
 
   return (
@@ -146,7 +156,7 @@ export function AppLayout() {
               type="button"
               className="neko-toggle"
               aria-pressed={nekoOpen}
-              onClick={() => setNekoOpen((open) => !open)}
+              onClick={toggleNeko}
             >
               ✦ Neko
             </button>
@@ -158,7 +168,11 @@ export function AppLayout() {
         </main>
       </div>
 
-      {isTeacher ? <NekoDock open={nekoOpen} onClose={() => setNekoOpen(false)} /> : null}
+      {isTeacher && nekoLoaded ? (
+        <Suspense fallback={null}>
+          <NekoDock open={nekoOpen} onClose={() => setNekoOpen(false)} />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

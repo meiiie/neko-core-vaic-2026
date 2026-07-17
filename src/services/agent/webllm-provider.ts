@@ -1,5 +1,5 @@
 import type { AgentChatMessage, AgentCompletion, AgentProvider } from './loop';
-import { parseJsonToolEnvelope } from './providers';
+import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
 
 /**

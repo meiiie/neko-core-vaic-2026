@@ -26,14 +26,6 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: [
-        'offline.svg',
-        'brand/nekopath-mark-v1-512.png',
-        'icons/nekopath-192.png',
-        'icons/nekopath-512.png',
-        'icons/nekopath-maskable-512.png',
-        'icons/nekopath-apple-touch-180.png',
-      ],
       manifest: {
         name: 'NekoPath — Trợ giảng thích ứng cho lớp học đa trình độ',
         short_name: 'NekoPath',
@@ -62,7 +54,13 @@ export default defineConfig({
         // precache every student pays for, but cache it on first use so the
         // in-browser Gemma brain works offline afterwards (with its weights,
         // which WebLLM itself caches). Still no /api response caching.
-        globIgnores: ['**/webllm-*.js', '**/nekopath-share-v1.png'],
+        globIgnores: [
+          '**/webllm-*.js',
+          '**/nekopath-share-v1.png',
+          '**/nekopath-mark-v1.png',
+          '**/icons/icon-192.png',
+          '**/icons/icon-512.png',
+        ],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',
         // The SPA fallback must never swallow future API routes.

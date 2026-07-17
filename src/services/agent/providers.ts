@@ -1,5 +1,8 @@
 import type { AgentChatMessage, AgentCompletion, AgentProvider, AgentToolCall } from './loop';
+import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
+
+export { parseJsonToolEnvelope } from './protocol';
 
 /**
  * Two brains behind one port:
@@ -133,33 +136,6 @@ export function composeAnswer(toolName: string, payload: string): string {
 
 interface OpenAiToolCallShape {
   function?: { name?: string; arguments?: string };
-}
-
-/**
- * Fallback for models WITHOUT native tool-calling (e.g. Gemma builds on
- * Ollama): the system prompt asks for a bare JSON envelope; if the reply
- * content parses as {"tool": ..., "args": {...}}, treat it as a tool call.
- */
-export function parseJsonToolEnvelope(content: string | null): AgentToolCall | null {
-  if (!content) return null;
-  const match = content.match(/\{[\s\S]*\}/);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[0]) as { tool?: unknown; args?: unknown };
-    if (typeof parsed.tool !== 'string') return null;
-    const args =
-      typeof parsed.args === 'object' && parsed.args !== null
-        ? Object.fromEntries(
-            Object.entries(parsed.args as Record<string, unknown>).map(([key, value]) => [
-              key,
-              String(value),
-            ]),
-          )
-        : {};
-    return { name: parsed.tool, args };
-  } catch {
-    return null;
-  }
 }
 
 const JSON_TOOL_INSTRUCTION =

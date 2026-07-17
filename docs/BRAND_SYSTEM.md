@@ -117,12 +117,12 @@ and no critical-shell image above 200 KiB.
 
 ## 7. Acceptance checklist
 
-- [ ] The original has been copied without mutation and its checksum matches this document.
-- [ ] Every promoted derivative is readable at 16 px and 44 px, has no visible edge/fringe, and
+- [x] The original has been copied without mutation and its checksum matches this document.
+- [x] Every promoted derivative is readable at 16 px and 44 px, has no visible edge/fringe, and
       has a documented source.
-- [ ] The login, mobile header and sidebar use the same component/asset rather than divergent
+- [x] The login, mobile header and sidebar use the same component/asset rather than divergent
       logos.
 - [ ] PWA manifest, favicon, Apple touch icon and social metadata resolve locally over HTTPS.
-- [ ] Brand changes do not add a remote request, break CSP, weaken offline behavior, or displace
+- [x] Brand changes do not add a remote request, break CSP, weaken offline behavior, or displace
       the teacher's primary action.
-- [ ] A visual review at 1440 × 900 and 390 × 844 confirms hierarchy, focus and reflow.
+- [x] A visual review at 1440 × 900 and 390 × 844 confirms hierarchy, focus and reflow.
