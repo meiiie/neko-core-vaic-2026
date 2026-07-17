@@ -46,6 +46,17 @@ describe('graph and event integrity', () => {
     ).toThrow('Conflicting duplicate event id');
   });
 
+  it('counts distinct items rather than repeated attempts as direct evidence', () => {
+    const repeatedItem = eventsFor('repeat', [
+      ['K01-CHECK-1', true],
+      ['K01-CHECK-1', true],
+    ]);
+    const state = computeMastery(HERO_GRAPH, HERO_ITEMS, repeatedItem).get('K01');
+
+    expect(state?.evidenceEventIds).toHaveLength(2);
+    expect(state?.directEvidenceCount).toBe(1);
+  });
+
   it('is deterministic for shuffled input and duplicate delivery', () => {
     const original = heroDiagnosis('an');
     const shuffled = diagnose({
@@ -104,6 +115,22 @@ describe('hero diagnosis contract', () => {
       nextItemId: 'K10-TRANSFER',
       pathKcIds: [],
     });
+  });
+
+  it('does not grant a fast path from repeated copies of one item per KC', () => {
+    const repeatedAnswers = HERO_GRAPH.nodes.flatMap((node) => [
+      [`${node.id}-CHECK-1`, true] as const,
+      [`${node.id}-CHECK-1`, true] as const,
+    ]);
+    const result = diagnose({
+      learnerId: 'repeater',
+      targetKcId: 'K10',
+      graph: HERO_GRAPH,
+      items: HERO_ITEMS,
+      events: eventsFor('repeater', repeatedAnswers),
+    });
+
+    expect(result.status).not.toBe('FAST_PATH');
   });
 
   it('returns out of scope instead of guessing an unknown target', () => {

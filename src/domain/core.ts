@@ -260,6 +260,7 @@ export function computeMastery(
       {
         probability: config.initialMastery,
         evidenceEventIds: [] as string[],
+        evidenceItemIds: new Set<string>(),
       },
     ]),
   );
@@ -284,6 +285,7 @@ export function computeMastery(
         config.learnProbability,
       );
       state.evidenceEventIds.push(event.id);
+      state.evidenceItemIds.add(item.id);
     }
   }
 
@@ -293,7 +295,7 @@ export function computeMastery(
       {
         kcId,
         probability: state.probability,
-        directEvidenceCount: state.evidenceEventIds.length,
+        directEvidenceCount: state.evidenceItemIds.size,
         evidenceEventIds: [...state.evidenceEventIds],
       },
     ]),
@@ -352,13 +354,15 @@ export function planPracticePath(
   targetKcId: string,
   mastery: ReadonlyMap<string, MasteryState>,
   masteryThreshold: number,
+  minDirectEvidence = 1,
 ): PathPlan {
   const graphPathKcIds = shortestPath(graph, rootKcId, targetKcId);
   const practiceKcIds = graphPathKcIds.filter(
     (kcId) =>
       kcId === rootKcId ||
       kcId === targetKcId ||
-      (mastery.get(kcId)?.probability ?? 0) < masteryThreshold,
+      (mastery.get(kcId)?.probability ?? 0) < masteryThreshold ||
+      (mastery.get(kcId)?.directEvidenceCount ?? 0) < minDirectEvidence,
   );
   return { graphPathKcIds, practiceKcIds };
 }
@@ -366,6 +370,13 @@ export function planPracticePath(
 function diagnosticEventCount(events: readonly LearnerEvent[], items: readonly Item[]): number {
   const roles = new Map(items.map((item) => [item.id, item.role]));
   return events.filter((event) => roles.get(event.itemId) === 'DIAGNOSTIC').length;
+}
+
+function isSufficientlyMastered(state: MasteryState, config: DomainConfig): boolean {
+  return (
+    state.probability >= config.masteryThreshold &&
+    state.directEvidenceCount >= config.minDirectEvidence
+  );
 }
 
 function emptyResult(input: DiagnosisInput, status: DiagnosisResult['status']): DiagnosisResult {
@@ -402,7 +413,7 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
 
   if (
     targetAndPrerequisites.every(
-      (kcId) => mastery.get(kcId)!.probability >= config.masteryThreshold,
+      (kcId) => isSufficientlyMastered(mastery.get(kcId)!, config),
     )
   ) {
     const usedItemIds = new Set(learnerEvents.map((event) => event.itemId));
@@ -436,7 +447,9 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
   const actionable = evidencedGaps.filter((kcId) =>
     incoming
       .get(kcId)!
-      .every((prerequisiteId) => mastery.get(prerequisiteId)!.probability >= config.masteryThreshold),
+      .every((prerequisiteId) =>
+        isSufficientlyMastered(mastery.get(prerequisiteId)!, config),
+      ),
   );
   const ranked = [...actionable].sort(
     (left, right) =>
@@ -477,6 +490,7 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
       input.targetKcId,
       mastery,
       config.masteryThreshold,
+      config.minDirectEvidence,
     );
     if (path.graphPathKcIds.length === 0) {
       return {
