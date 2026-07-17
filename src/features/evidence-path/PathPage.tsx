@@ -65,7 +65,7 @@ export function PathPage() {
               NekoPath bỏ qua phần đã vững và chỉ giữ các bước cần thiết để quay lại mục tiêu lớp.
             </p>
           </div>
-          <Link className="button-primary" to="/student/check-in">
+          <Link className="button-primary" to="/student/practice">
             Bắt đầu luyện tập
           </Link>
         </section>
@@ -78,7 +78,7 @@ export function PathPage() {
             <h2>Không cần học lại phần đã nắm chắc</h2>
             <p>Bước tiếp theo là một bài toán chuyển giao thay vì lặp lại bài cơ bản.</p>
           </div>
-          <Link className="button-primary" to="/student/check-in">
+          <Link className="button-primary" to="/student/practice">
             Nhận bài thử thách
           </Link>
         </section>

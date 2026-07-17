@@ -6,4 +6,5 @@ export const curriculumGraphDraft = toDomainGraph(contentGraphDraft);
 
 export * from './hero-class';
 export * from './hero-demo';
+export * from './hero-practice';
 export * from './schema';

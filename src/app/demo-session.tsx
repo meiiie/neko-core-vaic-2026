@@ -14,10 +14,28 @@ export interface DemoAccount {
   readonly initials: string;
   readonly shortName: string;
   readonly subtitle: string;
-  readonly learnerId?: 'chi';
+  readonly learnerId?: 'an' | 'binh' | 'chi' | 'minh';
 }
 
 export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
+  {
+    id: 'student-7a-an',
+    role: 'STUDENT',
+    name: 'Trần Ngọc An',
+    initials: 'NA',
+    shortName: 'An',
+    subtitle: 'Học sinh • Lớp 7A',
+    learnerId: 'an',
+  },
+  {
+    id: 'student-7a-binh',
+    role: 'STUDENT',
+    name: 'Lê Thanh Bình',
+    initials: 'TB',
+    shortName: 'Bình',
+    subtitle: 'Học sinh • Lớp 7A',
+    learnerId: 'binh',
+  },
   {
     id: 'student-7a-chi',
     role: 'STUDENT',
@@ -26,6 +44,15 @@ export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
     shortName: 'Chi',
     subtitle: 'Học sinh • Lớp 7A',
     learnerId: 'chi',
+  },
+  {
+    id: 'student-7a-minh',
+    role: 'STUDENT',
+    name: 'Phạm Quang Minh',
+    initials: 'QM',
+    shortName: 'Minh',
+    subtitle: 'Học sinh • Lớp 7A',
+    learnerId: 'minh',
   },
   {
     id: 'teacher-7a-ha',

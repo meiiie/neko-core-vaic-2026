@@ -2,6 +2,7 @@ import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { PathPage } from '../features/evidence-path/PathPage';
 import { LearnPage } from '../features/student/LearnPage';
+import { PracticePage } from '../features/student/PracticePage';
 import { StudentDashboardPage } from '../features/student/StudentDashboardPage';
 import { SystemPage } from '../features/system/SystemPage';
 import { TeacherClassPage } from '../features/teacher/TeacherClassPage';
@@ -55,6 +56,7 @@ export function App() {
             <Route element={<RequireRole role="STUDENT" />}>
               <Route path="student" element={<StudentDashboardPage />} />
               <Route path="student/check-in" element={<LearnPage />} />
+              <Route path="student/practice" element={<PracticePage />} />
               <Route path="student/path" element={<PathPage />} />
             </Route>
             <Route element={<RequireRole role="TEACHER" />}>
