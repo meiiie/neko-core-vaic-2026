@@ -22,10 +22,10 @@ statement.
 
 ## Current status
 
-The local-first PWA scaffold and deterministic root-gap core now exist with runnable checks. The
-selected visual direction is “Sổ can thiệp lớp học”. UI/domain wiring, named curriculum review,
-the 30-profile frozen evaluation and deployment remain explicit next gates; no real-learning or
-whole-curriculum result is claimed.
+The local-first PWA scaffold, deterministic root-gap core, guarded hero content and reproducible
+40-learner synthetic classroom now exist with runnable checks. The selected visual direction is
+“Sổ can thiệp lớp học”. UI/domain wiring, named curriculum review, the 30-profile frozen evaluation
+and deployment remain explicit next gates; no real-learning or whole-curriculum result is claimed.
 
 ## Non-negotiables
 

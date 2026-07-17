@@ -4,5 +4,6 @@ import { contentGraphSchema, toDomainGraph } from './schema';
 export const contentGraphDraft = contentGraphSchema.parse(graphDraftJson);
 export const curriculumGraphDraft = toDomainGraph(contentGraphDraft);
 
+export * from './hero-class';
 export * from './hero-demo';
 export * from './schema';
