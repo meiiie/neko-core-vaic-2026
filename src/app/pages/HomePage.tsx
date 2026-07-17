@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { HERO_LEARNERS } from '../adapters/mock-tutor';
+import { HERO_LEARNERS } from '../adapters/hero-tutor';
 
 export function HomePage() {
   return (
