@@ -6,6 +6,7 @@ import { LearnPage } from '../features/student/LearnPage';
 import { PracticePage } from '../features/student/PracticePage';
 import { StudentDashboardPage } from '../features/student/StudentDashboardPage';
 import { SystemPage } from '../features/system/SystemPage';
+import { ConsolePage } from '../features/teacher/ConsolePage';
 import { TeacherAssignmentsPage } from '../features/teacher/TeacherAssignmentsPage';
 import { TeacherClassPage } from '../features/teacher/TeacherClassPage';
 import { TeacherPage } from '../features/teacher/TeacherPage';
@@ -72,6 +73,7 @@ export function App() {
               <Route path="teacher/class" element={<TeacherClassPage />} />
               <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
               <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
+              <Route path="teacher/console" element={<ConsolePage />} />
             </Route>
             <Route path="system" element={<SystemPage />} />
             <Route path="*" element={<NotFoundPage />} />

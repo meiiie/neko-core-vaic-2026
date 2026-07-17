@@ -26,6 +26,7 @@ const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
     { to: '/teacher/class', label: 'Nhóm can thiệp', index: '02' },
     { to: '/teacher/questions', label: 'Ngân hàng câu hỏi', index: '03' },
     { to: '/teacher/assignments', label: 'Giao bài', index: '04' },
+    { to: '/teacher/console', label: 'Neko Console', index: '05' },
   ],
 };
 

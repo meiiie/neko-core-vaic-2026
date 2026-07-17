@@ -149,6 +149,10 @@ export function DemoSessionProvider({ children }: { children: ReactNode }) {
         } else if (response.status === 401) {
           setAccount(null);
           writeCache(null);
+        } else {
+          // Server unhealthy (5xx / proxy error): behave like offline and
+          // keep the cached identity so local-first work can continue.
+          setAccount(readCache());
         }
       } catch {
         // Network unreachable: fall back to the cached identity so the
