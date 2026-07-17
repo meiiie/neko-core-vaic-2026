@@ -1,0 +1,23 @@
+# Caddy edge for NekoPath (docs/IMPLEMENTATION_MASTER_PLAN.md §8/§13).
+# Replace nekopath.example.com with the real domain; Caddy handles TLS.
+
+nekopath.example.com {
+	encode zstd gzip
+
+	# Never let intermediaries cache the SW-critical trio.
+	@swCritical path /index.html /sw.js /manifest.webmanifest /
+	header @swCritical Cache-Control "no-cache"
+
+	# Hashed assets are immutable.
+	@hashed path /assets/*
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		X-Frame-Options "DENY"
+	}
+
+	reverse_proxy app:3001
+}

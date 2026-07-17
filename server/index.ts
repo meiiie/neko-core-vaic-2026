@@ -12,6 +12,7 @@ import { seed } from './seed.ts';
  */
 
 const PORT = Number(process.env.PORT ?? 3001);
+const HOST = process.env.HOST ?? '127.0.0.1'; // compose sets 0.0.0.0 behind Caddy
 const DB_PATH = process.env.NEKOPATH_DB ?? 'server/data/nekopath.db';
 
 mkdirSync('server/data', { recursive: true });
@@ -34,5 +35,5 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-await app.listen({ port: PORT, host: '127.0.0.1' });
-console.log(`NekoPath API listening on http://127.0.0.1:${PORT} (db: ${DB_PATH})`);
+await app.listen({ port: PORT, host: HOST });
+console.log(`NekoPath API listening on http://${HOST}:${PORT} (db: ${DB_PATH})`);

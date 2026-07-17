@@ -56,8 +56,58 @@ export interface DemoSessionState {
   readonly account: DemoAccount | null;
   readonly ready: boolean;
   readonly signIn: (username: string, password: string) => Promise<string | null>;
+  /** Server-less entry (static/recovery deploy): local synthetic profiles only. */
+  readonly enterLocalMode: (profileId: string) => void;
   readonly signOut: () => void;
 }
+
+/** Built-in profiles for the no-server recovery mode. Synthetic, like the seed. */
+export const LOCAL_PROFILES: readonly DemoAccount[] = [
+  {
+    id: 'local-teacher-ha',
+    role: 'TEACHER',
+    name: 'Nguyễn Thu Hà',
+    initials: 'TH',
+    shortName: 'Cô Hà',
+    subtitle: 'Giáo viên Toán • Lớp 7A (cục bộ)',
+  },
+  {
+    id: 'local-student-an',
+    role: 'STUDENT',
+    name: 'Trần Ngọc An',
+    initials: 'NA',
+    shortName: 'An',
+    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
+    learnerId: 'an',
+  },
+  {
+    id: 'local-student-binh',
+    role: 'STUDENT',
+    name: 'Lê Thanh Bình',
+    initials: 'TB',
+    shortName: 'Bình',
+    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
+    learnerId: 'binh',
+  },
+  {
+    id: 'local-student-chi',
+    role: 'STUDENT',
+    name: 'Nguyễn Minh Chi',
+    initials: 'MC',
+    shortName: 'Chi',
+    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
+    learnerId: 'chi',
+  },
+  {
+    id: 'local-student-minh',
+    role: 'STUDENT',
+    name: 'Phạm Quang Minh',
+    initials: 'QM',
+    shortName: 'Minh',
+    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
+    learnerId: 'minh',
+  },
+];
 
 const CACHE_KEY = 'nekopath.session-cache.v1';
 
@@ -136,6 +186,13 @@ export function DemoSessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const enterLocalMode = useCallback((profileId: string) => {
+    const profile = LOCAL_PROFILES.find((candidate) => candidate.id === profileId);
+    if (!profile) return;
+    setAccount(profile);
+    writeCache(profile);
+  }, []);
+
   const signOut = useCallback(() => {
     setAccount(null);
     writeCache(null);
@@ -145,8 +202,8 @@ export function DemoSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<DemoSessionState>(
-    () => ({ account, ready, signIn, signOut }),
-    [account, ready, signIn, signOut],
+    () => ({ account, ready, signIn, enterLocalMode, signOut }),
+    [account, ready, signIn, enterLocalMode, signOut],
   );
 
   return <DemoSessionContext.Provider value={value}>{children}</DemoSessionContext.Provider>;

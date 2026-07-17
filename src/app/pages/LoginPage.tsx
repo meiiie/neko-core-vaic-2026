@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDemoSession } from '../demo-session';
+import { LOCAL_PROFILES, useDemoSession } from '../demo-session';
 
 /**
  * Real login against the API (session cookie). The directory of seeded demo
@@ -23,7 +23,7 @@ function destination(role: 'STUDENT' | 'TEACHER'): string {
 }
 
 export function LoginPage() {
-  const { account, ready, signIn } = useDemoSession();
+  const { account, ready, signIn, enterLocalMode } = useDemoSession();
   const navigate = useNavigate();
   const [directory, setDirectory] = useState<DirectoryAccount[]>([]);
   const [directoryError, setDirectoryError] = useState(false);
@@ -97,9 +97,32 @@ export function LoginPage() {
           </p>
 
           {directoryError ? (
-            <p role="alert" className="error-message">
-              Không tải được danh bạ tài khoản. Máy chủ chưa chạy? (<code>npm run server</code>)
-            </p>
+            <section className="login-role-group" aria-label="Chế độ cục bộ">
+              <p role="alert" className="error-message">
+                Không kết nối được máy chủ lớp học. Em vẫn có thể học bằng chế độ cục bộ — toàn bộ
+                dữ liệu lưu trên thiết bị này và tự đồng bộ khi máy chủ trở lại.
+              </p>
+              <p className="login-role-label">Vào chế độ cục bộ</p>
+              <div className="demo-account-list">
+                {LOCAL_PROFILES.map((profile) => (
+                  <button
+                    className="demo-account"
+                    key={profile.id}
+                    type="button"
+                    onClick={() => enterLocalMode(profile.id)}
+                  >
+                    <span className="account-avatar" aria-hidden="true">
+                      {profile.initials}
+                    </span>
+                    <span className="account-copy">
+                      <strong>{profile.name}</strong>
+                      <span>{profile.subtitle}</span>
+                    </span>
+                    <span className="account-action">Vào cục bộ</span>
+                  </button>
+                ))}
+              </div>
+            </section>
           ) : null}
 
           {(
