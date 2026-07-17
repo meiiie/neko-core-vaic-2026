@@ -23,7 +23,10 @@ function installMobileViewport() {
 }
 
 describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', () => {
-  beforeEach(() => window.localStorage.clear());
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.body.style.overflow = '';
+  });
   afterEach(() => vi.unstubAllGlobals());
 
   it('opens on the real login screen with the server directory', async () => {
@@ -51,8 +54,17 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
     );
 
     await user.click(await screen.findByRole('button', { name: /Trần Ngọc An/ }));
-    expect(await screen.findByRole('navigation', { name: 'Điều hướng chính' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Bài kiểm tra/ })).toBeTruthy();
+    const navigation = await screen.findByRole('navigation', { name: 'Điều hướng chính' });
+    expect([...navigation.querySelectorAll('a')].map((link) => link.textContent)).toEqual([
+      'Hôm nay',
+      'Kiểm tra thích ứng',
+      'Lộ trình học',
+      'Luyện tập',
+      'Bài được giao',
+      'Dữ liệu & ngoại tuyến',
+    ]);
+    expect(navigation.querySelector('.nav-index')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Đổi hồ sơ' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Bài được giao/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Ngân hàng câu hỏi/ })).toBeNull();
   });
@@ -110,6 +122,7 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
     const currentRoute = await screen.findByRole('link', { name: /Tổng quan lớp/ });
     await waitFor(() => expect(document.activeElement).toBe(currentRoute));
     expect(sidebar?.hasAttribute('inert')).toBe(false);
+    expect(document.body.style.overflow).toBe('hidden');
 
     const firstDrawerControl = sidebar?.querySelector<HTMLElement>('a[href]');
     const lastDrawerControl = sidebar?.querySelector<HTMLElement>('.sidebar-account button');
@@ -129,6 +142,7 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
     await user.keyboard('{Escape}');
     await waitFor(() => expect(document.activeElement).toBe(menu));
     expect(sidebar?.hasAttribute('inert')).toBe(true);
+    expect(document.body.style.overflow).toBe('');
 
     await user.click(menu);
     await waitFor(() => expect(document.activeElement).toBe(currentRoute));
