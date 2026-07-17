@@ -13,6 +13,7 @@ path instead of repeating the same fixed lesson sequence.
 - [48-hour product contract](docs/PRODUCT_CONTRACT.md)
 - [Curriculum and hero-profile draft](docs/CONTENT_MODEL_DRAFT.md)
 - [Implementation master plan and Fable 5 handoff](docs/IMPLEMENTATION_MASTER_PLAN.md)
+- [Evaluation status and reproducibility](docs/EVALUATION.md)
 - [AI collaboration log](AI_COLLABORATION_LOG.csv)
 
 The official problem text is intentionally short. Anything not stated there is an internal
@@ -25,7 +26,8 @@ statement.
 The local-first PWA scaffold, deterministic root-gap core, guarded hero content and reproducible
 40-learner synthetic classroom now exist with runnable checks. The selected visual direction is
 “Sổ can thiệp lớp học”. UI/domain wiring, named curriculum review, the 30-profile frozen evaluation
-and deployment remain explicit next gates; no real-learning or whole-curriculum result is claimed.
+the six independently owned held-out labels and deployment remain explicit next gates; no
+real-learning or whole-curriculum result is claimed.
 
 ## Non-negotiables
 
