@@ -1,21 +1,21 @@
-# NekoPath VPS runbook
+# NekoPath production runbook
 
 Canonical URL: `https://nekopath.holilihu.online`
 
-Production inventory:
+## Inventory
 
 - GCP project: `the-wiii-lab-500306`
 - zone: `asia-southeast1-c`
 - VM: `nekopath-production`
 - static IP: `34.142.197.144`
 - application directory: `/opt/nekopath`
-- recovery origin: `https://nekopath-vaic.pages.dev`
+- Cloudflare Worker: `nekopath-edge`
+- HTTPS origin: `https://nekopath-origin.34-142-197-144.sslip.io`
+- recovery Pages URL: `https://nekopath-vaic.pages.dev`
 
-Do not copy API keys or local `.env` files to this host. The current release runs the deterministic
-core and mock LLM profile; external inference is admitted only through a server-side secret after
-its own evaluation gate.
+Do not copy API keys or local `.env` files to this host. The current release runs the deterministic core and mock LLM profile; external inference is admitted only through a server-side secret after its own evaluation gate.
 
-## Connect
+## Connect and inspect
 
 ```powershell
 gcloud compute ssh nekopath-production `
@@ -23,17 +23,16 @@ gcloud compute ssh nekopath-production `
   --zone=asia-southeast1-c
 ```
 
-## Inspect
-
 ```bash
 cd /opt/nekopath
 git rev-parse HEAD
 sudo docker compose -f ops/compose.yml ps
 sudo docker compose -f ops/compose.yml logs --tail=100 app caddy
-curl -fsS https://nekopath.holilihu.online/api/healthz
+curl -fsS https://nekopath-origin.34-142-197-144.sslip.io/api/healthz
+curl -fsSI https://nekopath.holilihu.online/api/healthz
 ```
 
-Expected: both services are `healthy`; health JSON has `"status":"ok"`.
+Expected: both services are `healthy`; origin health JSON has `"status":"ok"`; canonical response has `X-NekoPath-Edge: cloudflare`.
 
 ## Deploy a reviewed main commit
 
@@ -47,13 +46,11 @@ sudo docker compose -f ops/compose.yml up -d
 sudo docker compose -f ops/compose.yml ps
 ```
 
-Build is the release gate: the Dockerfile runs typecheck, tests and the PWA production build before
-creating the runtime image. Do not use `--no-cache` unless cache corruption is established.
+The Docker build is the release gate: it runs typecheck, tests and the PWA production build before creating the runtime image. Do not use `--no-cache` unless cache corruption is established.
 
 ## Back up SQLite
 
-This short procedure stops only the application container so the SQLite file is copied consistently.
-Caddy may return a temporary 502 during the stop window.
+This short procedure stops only the application container so the SQLite file is copied consistently. Caddy may return a temporary 502 during the stop window.
 
 ```bash
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
@@ -68,8 +65,7 @@ sudo docker compose -f ops/compose.yml ps
 
 ## Roll back code
 
-Use a known-good immutable commit. Database migrations must remain backward compatible for this
-48-hour release; restore the matching backup if a later migration is not backward compatible.
+Use a known-good immutable commit. Database migrations must remain backward compatible for this 48-hour release; restore the matching backup if a later migration is not backward compatible.
 
 ```bash
 cd /opt/nekopath
@@ -90,15 +86,16 @@ sudo tar -C /var/lib/docker/volumes/ops_nekopath-data/_data \
 sudo docker compose -f ops/compose.yml start app
 ```
 
-Restore only a backup whose timestamp and release commit are recorded in the AI collaboration log.
+Record the backup timestamp and release commit in the AI collaboration log.
 
-## DNS recovery
+## Edge recovery
 
-If the VPS is not recoverable before judging, change the Cloudflare DNS record back to:
+The canonical hostname belongs to the Cloudflare Worker custom-domain binding; do not create a competing DNS record manually.
 
-```text
-CNAME  nekopath  nekopath-vaic.pages.dev  TTL Auto
-```
+If the VPS cannot be recovered before judging:
 
-The canonical hostname remains unchanged. Cloudflare Pages then serves the local-first recovery
-artifact, while VPS repair continues off the critical path.
+1. remove the `nekopath.holilihu.online` custom-domain binding from Worker `nekopath-edge`;
+2. add `nekopath.holilihu.online` back to Pages project `nekopath-vaic` as its custom domain;
+3. wait for the Pages domain to become active and smoke test the local-first recovery artifact.
+
+To return to full-stack, deploy the reviewed `main` Worker configuration from `edge/wrangler.jsonc`, then verify the canonical health endpoint and secure login flow.

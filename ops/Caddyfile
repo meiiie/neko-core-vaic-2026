@@ -2,7 +2,9 @@
 # The canonical hostname is served by a Cloudflare Worker custom domain. The
 # sslip.io hostname gives that Worker an independently verifiable HTTPS origin.
 
-nekopath.holilihu.online, nekopath-origin.34-142-197-144.sslip.io {
+# Cloudflare owns the public TLS certificate for the canonical hostname. Caddy
+# terminates TLS only for the private origin hostname used by that Worker.
+nekopath-origin.34-142-197-144.sslip.io {
 	encode zstd gzip
 
 	# Never let intermediaries cache the SW-critical trio.
