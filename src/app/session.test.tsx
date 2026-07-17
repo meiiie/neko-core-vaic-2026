@@ -9,10 +9,10 @@ function Probe() {
     <div>
       <output data-testid="ready">{String(ready)}</output>
       <output data-testid="who">{account ? `${account.role}:${account.shortName}` : 'none'}</output>
-      <button type="button" onClick={() => void signIn('an.tn', 'nekopath-2026')}>
+      <button type="button" onClick={() => void signIn('an@nekopath.edu.vn', 'Nekopath@2026')}>
         in-good
       </button>
-      <button type="button" onClick={() => void signIn('an.tn', 'sai')}>
+      <button type="button" onClick={() => void signIn('an@nekopath.edu.vn', 'sai')}>
         in-bad
       </button>
       <button type="button" onClick={() => signOut()}>

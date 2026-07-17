@@ -1,45 +1,41 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BrandMark } from '../../components/BrandMark';
-import { LOCAL_PROFILES, useSession } from '../session';
+import { useSession } from '../session';
 
 /**
- * Real login against the API (session cookie). The directory of seeded demo
- * accounts and the shared demo password are displayed on purpose: this is a
- * synthetic evaluation environment, not production credential handling.
+ * Sign-in — one calm centred card. Picking your name from the class roll
+ * (dropdown) beats typing an email on a shared rural-classroom device; the
+ * password stays the only secret. Returning users on this device are restored
+ * from the cached session and never see this screen; the first sign-in needs
+ * the network, so an unreachable server falls back to a plain email field
+ * with an honest note.
  */
 
-const DEMO_PASSWORD = 'nekopath-2026';
+const LAST_EMAIL_KEY = 'nekopath.last-email.v1';
 
 interface DirectoryAccount {
-  username: string;
-  role: 'STUDENT' | 'TEACHER';
+  email: string;
   name: string;
-  initials: string;
+  role: 'STUDENT' | 'TEACHER';
   subtitle: string;
 }
 
-function destination(role: 'STUDENT' | 'TEACHER'): string {
-  return role === 'STUDENT' ? '/student' : '/teacher';
-}
-
-const LAST_ACCOUNT_KEY = 'nekopath.last-username.v1';
-
 export function LoginPage() {
-  const { account, ready, signIn, enterLocalMode } = useSession();
+  const { account, ready, signIn } = useSession();
   const navigate = useNavigate();
-  const [directory, setDirectory] = useState<DirectoryAccount[]>([]);
-  const [directoryError, setDirectoryError] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState(DEMO_PASSWORD);
+
+  const [directory, setDirectory] = useState<DirectoryAccount[] | null>(null);
+  const [directoryFailed, setDirectoryFailed] = useState(false);
+  const [email, setEmail] = useState(() => window.localStorage.getItem(LAST_EMAIL_KEY) ?? '');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lastUsername = window.localStorage.getItem(LAST_ACCOUNT_KEY);
-  const lastAccount = directory.find((entry) => entry.username === lastUsername) ?? null;
 
   useEffect(() => {
-    if (ready && account) navigate(destination(account.role), { replace: true });
+    if (ready && account)
+      navigate(account.role === 'STUDENT' ? '/student' : '/teacher', { replace: true });
   }, [ready, account, navigate]);
 
   useEffect(() => {
@@ -51,213 +47,141 @@ export function LoginPage() {
         if (!cancelled) setDirectory(body.accounts);
       })
       .catch(() => {
-        if (!cancelled) setDirectoryError(true);
+        if (!cancelled) setDirectoryFailed(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  async function enter(user: string) {
-    setPending(user);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (pending) return;
+    setPending(true);
     setError(null);
-    const failure = await signIn(user, password);
-    setPending(null);
-    if (failure) setError(failure);
-    else {
-      try {
-        window.localStorage.setItem(LAST_ACCOUNT_KEY, user);
-      } catch {
-        // Remembering the account is a convenience only.
-      }
+    const failure = await signIn(email.trim(), password);
+    setPending(false);
+    if (failure) {
+      setError(failure);
+      return;
     }
-    // Successful sign-in redirects via the effect above.
+    try {
+      window.localStorage.setItem(LAST_EMAIL_KEY, email.trim());
+    } catch {
+      // Remembering the choice is a convenience only.
+    }
   }
 
+  const teachers = (directory ?? []).filter((entry) => entry.role === 'TEACHER');
+  const students = (directory ?? []).filter((entry) => entry.role === 'STUDENT');
+
   return (
-    <main className="login-page">
-      <section className="login-story" aria-labelledby="product-name">
-        <a className="login-brand" href="/login" aria-label="NekoPath">
-          <BrandMark size={44} />
+    <main className="auth">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <BrandMark size={40} />
           <span>NekoPath</span>
-        </a>
-        <div className="login-story-copy">
-          <p className="eyebrow">Trợ giảng thích ứng cho lớp học đa trình độ</p>
-          <h1 id="product-name">Mỗi học sinh một lộ trình. Giáo viên vẫn là người quyết định.</h1>
-          <p>
-            NekoPath lần theo kiến thức nền, chọn câu kiểm tra tiếp theo và gom lớp theo nhu cầu để
-            giáo viên can thiệp đúng chỗ.
-          </p>
         </div>
-        <dl className="login-proof-list">
-          <div>
-            <dt>Chạy cục bộ</dt>
-            <dd>Làm bài và xem lộ trình ngay cả khi mạng yếu.</dd>
-          </div>
-          <div>
-            <dt>Giải thích được</dt>
-            <dd>Mỗi nhóm và đề xuất đều có bằng chứng đi kèm.</dd>
-          </div>
-        </dl>
-      </section>
+        <h1 className="auth-title">Đăng nhập</h1>
+        <p className="auth-subtitle">Trợ giảng thích ứng cho lớp học đa trình độ.</p>
 
-      <section className="login-panel" aria-labelledby="login-heading">
-        <div className="login-card">
-          <p className="eyebrow">Môi trường dùng thử</p>
-          <h2 id="login-heading">Đăng nhập bằng tài khoản mẫu</h2>
-          <p className="login-intro">
-            Tài khoản thật trên máy chủ demo — mật khẩu chung: <code>{DEMO_PASSWORD}</code>
-          </p>
+        <form className="auth-form" onSubmit={(e) => void submit(e)} noValidate>
+          {directory ? (
+            <label className="auth-field">
+              <span>Bạn là ai?</span>
+              <select
+                className="auth-select"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              >
+                <option value="" disabled>
+                  Chọn tên của bạn trong lớp…
+                </option>
+                {teachers.length > 0 ? (
+                  <optgroup label="Giáo viên">
+                    {teachers.map((entry) => (
+                      <option key={entry.email} value={entry.email}>
+                        {entry.name} — {entry.subtitle}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {students.length > 0 ? (
+                  <optgroup label="Học sinh lớp 7A">
+                    {students.map((entry) => (
+                      <option key={entry.email} value={entry.email}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+              </select>
+            </label>
+          ) : (
+            <label className="auth-field">
+              <span>Email</span>
+              <input
+                type="email"
+                name="email"
+                autoComplete="username"
+                inputMode="email"
+                placeholder="ban@nekopath.edu.vn"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              {directoryFailed ? (
+                <small className="auth-hint">
+                  Không tải được danh sách lớp — nhập email tài khoản. Lần đăng nhập đầu cần có
+                  mạng.
+                </small>
+              ) : null}
+            </label>
+          )}
 
-          {lastAccount ? (
-            <section className="login-role-group" aria-label="Tiếp tục">
-              <p className="login-role-label">Lần trước bạn dùng</p>
+          <label className="auth-field">
+            <span>Mật khẩu</span>
+            <span className="auth-password">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
               <button
-                className="demo-account demo-account--continue"
                 type="button"
-                disabled={pending !== null}
-                onClick={() => void enter(lastAccount.username)}
+                className="auth-password-toggle"
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((v) => !v)}
               >
-                <span className="account-avatar" aria-hidden="true">
-                  {lastAccount.initials}
-                </span>
-                <span className="account-copy">
-                  <strong>Tiếp tục với {lastAccount.name}</strong>
-                  <span>{lastAccount.subtitle}</span>
-                </span>
-                <span className="account-action">
-                  {pending === lastAccount.username ? 'Đang vào…' : 'Vào ngay'}
-                </span>
+                {showPassword ? 'Ẩn' : 'Hiện'}
               </button>
-            </section>
-          ) : null}
-
-          {directoryError ? (
-            <section className="login-role-group" aria-label="Chế độ cục bộ">
-              <p role="alert" className="error-message">
-                Không kết nối được máy chủ lớp học. Em vẫn có thể học bằng chế độ cục bộ — toàn bộ
-                dữ liệu lưu trên thiết bị này và tự đồng bộ khi máy chủ trở lại.
-              </p>
-              <p className="login-role-label">Vào chế độ cục bộ</p>
-              <div className="demo-account-list">
-                {LOCAL_PROFILES.map((profile) => (
-                  <button
-                    className="demo-account"
-                    key={profile.id}
-                    type="button"
-                    onClick={() => enterLocalMode(profile.id)}
-                  >
-                    <span className="account-avatar" aria-hidden="true">
-                      {profile.initials}
-                    </span>
-                    <span className="account-copy">
-                      <strong>{profile.name}</strong>
-                      <span>{profile.subtitle}</span>
-                    </span>
-                    <span className="account-action">Vào cục bộ</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {(
-            [
-              ['TEACHER', 'Giáo viên'],
-              ['STUDENT', 'Học sinh lớp 7A'],
-            ] as const
-          ).map(([role, label]) => {
-            const entries = directory.filter((entry) => entry.role === role);
-            if (entries.length === 0) return null;
-            return (
-              <section key={role} className="login-role-group" aria-label={label}>
-                <p className="login-role-label">{label}</p>
-                <div className="demo-account-list">
-                  {entries.map((entry) => (
-                    <button
-                      className="demo-account"
-                      key={entry.username}
-                      type="button"
-                      disabled={pending !== null}
-                      onClick={() => void enter(entry.username)}
-                    >
-                      <span className="account-avatar" aria-hidden="true">
-                        {entry.initials}
-                      </span>
-                      <span className="account-copy">
-                        <strong>{entry.name}</strong>
-                        <span>{entry.subtitle}</span>
-                      </span>
-                      <span className="account-action">
-                        {pending === entry.username ? 'Đang vào…' : 'Đăng nhập'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-
-          <details className="login-other">
-            <summary>Đăng nhập bằng tài khoản khác (36 học sinh còn lại)</summary>
-            <form
-              className="login-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (username) void enter(username);
-              }}
-            >
-              <label>
-                Tên đăng nhập
-                <input
-                  name="username"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="vd: hs05.7a"
-                />
-              </label>
-              <label>
-                Mật khẩu
-                <span className="password-field">
-                  <input
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle"
-                    aria-pressed={showPassword}
-                    onClick={() => setShowPassword((current) => !current)}
-                  >
-                    {showPassword ? 'Ẩn' : 'Hiện'}
-                  </button>
-                </span>
-              </label>
-              <button
-                className="button-secondary"
-                type="submit"
-                disabled={pending !== null || !username.trim()}
-              >
-                Đăng nhập
-              </button>
-            </form>
-          </details>
+            </span>
+          </label>
 
           {error ? (
-            <p role="alert" className="error-message">
+            <p className="auth-error" role="alert">
               {error}
             </p>
           ) : null}
 
-          <p className="login-disclosure">
-            Đây là môi trường đánh giá sử dụng dữ liệu mẫu, không chứa thông tin học sinh thật.
-          </p>
-        </div>
-      </section>
+          <button
+            className="auth-submit"
+            type="submit"
+            disabled={pending || !email.trim() || !password}
+          >
+            {pending ? 'Đang đăng nhập…' : 'Đăng nhập'}
+          </button>
+        </form>
+
+        <p className="auth-fineprint">
+          Tài khoản do nhà trường cấp. Dữ liệu học tập lưu trên thiết bị và tự đồng bộ khi có mạng.
+        </p>
+      </div>
     </main>
   );
 }

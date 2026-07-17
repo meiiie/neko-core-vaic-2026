@@ -22,14 +22,14 @@ function installMobileViewport() {
   );
 }
 
-describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', () => {
+describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transport)', () => {
   beforeEach(() => {
     window.localStorage.clear();
     document.body.style.overflow = '';
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('opens on the real login screen with the server directory', async () => {
+  it('opens on a sign-in card with the class-roll dropdown (no demo picker, no Google)', async () => {
     installApiStub(null);
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -37,14 +37,15 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
       </MemoryRouter>,
     );
 
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Đăng nhập bằng tài khoản mẫu' }),
-    ).toBeTruthy();
-    expect(await screen.findByRole('button', { name: /Trần Ngọc An/ })).toBeTruthy();
-    expect(screen.getByText(/không chứa thông tin học sinh thật/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeTruthy();
+    expect(await screen.findByRole('combobox')).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Trần Ngọc An/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Đăng nhập' })).toBeTruthy();
+    expect(screen.queryByText(/tài khoản mẫu/i)).toBeNull();
+    expect(screen.queryByText(/Google/)).toBeNull();
   });
 
-  it('signs in as a student and shows the role-specific sidebar', async () => {
+  it('signs in by picking a name and typing the password', async () => {
     installApiStub(null);
     const user = userEvent.setup();
     render(
@@ -53,7 +54,10 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByRole('button', { name: /Trần Ngọc An/ }));
+    await user.selectOptions(await screen.findByRole('combobox'), 'an@nekopath.edu.vn');
+    await user.type(screen.getByPlaceholderText('••••••••'), 'Nekopath@2026');
+    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+
     const navigation = await screen.findByRole('navigation', { name: 'Điều hướng chính' });
     expect([...navigation.querySelectorAll('a')].map((link) => link.textContent)).toEqual([
       'Hôm nay',
@@ -70,7 +74,7 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
   });
 
   it('restores a teacher session from the server and shows teacher tools', async () => {
-    installApiStub('co.ha');
+    installApiStub('co.ha@nekopath.edu.vn');
     render(
       <MemoryRouter initialEntries={['/teacher']}>
         <App />
@@ -94,14 +98,12 @@ describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', (
         <App />
       </MemoryRouter>,
     );
-    expect(
-      await screen.findByRole('heading', { level: 2, name: 'Đăng nhập bằng tài khoản mẫu' }),
-    ).toBeTruthy();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeTruthy();
   });
 
   it('keeps mobile drawer focus and exit behavior continuous', async () => {
     installMobileViewport();
-    installApiStub('co.ha');
+    installApiStub('co.ha@nekopath.edu.vn');
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/teacher']}>

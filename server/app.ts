@@ -3,7 +3,13 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { createSession, destroySession, userForSession, verifyPassword } from './auth.ts';
+import {
+  createSession,
+  credentialsByEmail,
+  destroySession,
+  userForSession,
+  verifyPassword,
+} from './auth.ts';
 import { CLASS_7A_ID } from './seed.ts';
 
 /**
@@ -15,7 +21,10 @@ import { CLASS_7A_ID } from './seed.ts';
 
 const SESSION_COOKIE = 'nekopath_sid';
 
-const loginSchema = z.object({ username: z.string().min(1), password: z.string().min(1) });
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
 
 const questionSchema = z.object({
   kcId: z.string().min(1),
@@ -121,14 +130,34 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     return user;
   }
 
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  function startSession(reply: FastifyReply, userId: string) {
+    const sessionId = createSession(db, userId);
+    void reply.setCookie(SESSION_COOKIE, sessionId, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: isProduction,
+      path: '/',
+      maxAge: 60 * 60 * 12,
+    });
+    return userForSession(db, sessionId);
+  }
+
   app.get('/api/healthz', () => ({ status: 'ok', time: new Date().toISOString() }));
 
-  /** Synthetic demo directory shown on the login screen (event environment). */
+  /**
+   * Class roll for the sign-in dropdown — picking your name like a class
+   * roll-call beats typing an email on a shared rural-classroom device.
+   * Names/emails are the class roster (already public within a class);
+   * passwords remain the only secret.
+   */
   app.get('/api/auth/directory', () => {
     const rows = db
       .prepare(
-        `SELECT username, role, name, initials, subtitle FROM users
-         WHERE username IN ('an.tn','binh.lt','chi.nm','minh.pq','co.ha') ORDER BY role, name`,
+        `SELECT email, name, role, subtitle FROM users
+         WHERE email IS NOT NULL
+         ORDER BY CASE role WHEN 'TEACHER' THEN 0 ELSE 1 END, name`,
       )
       .all();
     return { accounts: rows };
@@ -137,22 +166,11 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
   app.post('/api/auth/login', (request, reply) => {
     const parsed = loginSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
-    const row = db
-      .prepare('SELECT id, password_hash FROM users WHERE username = ?')
-      .get(parsed.data.username) as { id: string; password_hash: string } | undefined;
-    if (!row || !verifyPassword(parsed.data.password, row.password_hash)) {
+    const credentials = credentialsByEmail(db, parsed.data.email);
+    if (!credentials || !verifyPassword(parsed.data.password, credentials.passwordHash)) {
       return reply.code(401).send({ error: 'INVALID_CREDENTIALS' });
     }
-    const sessionId = createSession(db, row.id);
-    void reply.setCookie(SESSION_COOKIE, sessionId, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60 * 60 * 12,
-    });
-    const user = userForSession(db, sessionId);
-    return { user };
+    return { user: startSession(reply, credentials.id) };
   });
 
   app.post('/api/auth/logout', (request, reply) => {

@@ -124,3 +124,19 @@ To return to full-stack, deploy the reviewed `main` Worker configuration from `e
   account with Compute OS Login + IAP-secured tunnel access, download its
   JSON key, and add it as the `GCP_SA_KEY` secret. Until that secret exists,
   deploys stay manual per the section above (identical commands).
+
+## Accounts
+
+Real accounts live in the database (per-row scrypt hashes). The sign-in screen
+shows the class roll as a dropdown — pick your name, type the password. This
+deliberately avoids external identity providers (Google/OAuth): rural Grade-7
+students rarely have email accounts, and the first sign-in must work on a
+shared classroom device with minimal typing. Seed credentials (documented for
+judges, never shown in the UI):
+
+- Teacher: `co.ha@nekopath.edu.vn`
+- Students: `an@`, `binh@`, `chi@`, `minh@`, and `hs01@`…`hs36@` `nekopath.edu.vn`
+- Shared demo password: `Nekopath@2026`
+
+Returning users on a device are restored from the cached session without the
+login screen; only the first sign-in needs the network.
