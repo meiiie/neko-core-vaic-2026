@@ -46,11 +46,13 @@ other runtime. These commands exist and pass on the scaffold:
 
 ```powershell
 npm ci
-npm run dev
+npm run server        # Fastify API + SQLite (node:sqlite); seeds class 7A on boot
+npm run dev           # Vite dev server; proxies /api -> http://127.0.0.1:3001
+npm run seed          # standalone re-seed of server/data/nekopath.db
 npm run format:check
 npm run lint
 npm run typecheck
-npm run test
+npm run test          # includes real API tests (fastify.inject + in-memory SQLite)
 npm run eval
 npm run build
 ```

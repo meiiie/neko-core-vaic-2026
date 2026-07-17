@@ -1,51 +1,88 @@
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installApiStub } from '../test/api-stub';
 import { DemoSessionProvider, useDemoSession } from './demo-session';
 
 function Probe() {
-  const { account, signIn, signOut } = useDemoSession();
+  const { account, ready, signIn, signOut } = useDemoSession();
   return (
     <div>
-      <output data-testid="account">{account?.id ?? 'signed-out'}</output>
-      <button type="button" onClick={() => signIn('teacher-7a-ha')}>
-        Sign in teacher
+      <output data-testid="ready">{String(ready)}</output>
+      <output data-testid="who">{account ? `${account.role}:${account.shortName}` : 'none'}</output>
+      <button type="button" onClick={() => void signIn('an.tn', 'nekopath-2026')}>
+        in-good
       </button>
-      <button type="button" onClick={signOut}>
-        Sign out
+      <button type="button" onClick={() => void signIn('an.tn', 'sai')}>
+        in-bad
+      </button>
+      <button type="button" onClick={() => signOut()}>
+        out
       </button>
     </div>
   );
 }
 
-describe('DemoSession', () => {
+describe('API-backed session', () => {
   beforeEach(() => window.localStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
 
-  it('starts signed out instead of silently choosing a role', () => {
+  it('starts signed-out when the server has no session', async () => {
+    installApiStub(null);
     render(
       <DemoSessionProvider>
         <Probe />
       </DemoSessionProvider>,
     );
-    expect(screen.getByTestId('account').textContent).toBe('signed-out');
+    await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
+    expect(screen.getByTestId('who').textContent).toBe('none');
   });
 
-  it('enters a named demo account, persists it and signs out', async () => {
-    const user = userEvent.setup();
+  it('signs in with real credentials, caches identity, rejects bad passwords', async () => {
+    installApiStub(null);
     render(
       <DemoSessionProvider>
         <Probe />
       </DemoSessionProvider>,
     );
+    await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
 
-    await user.click(screen.getByRole('button', { name: 'Sign in teacher' }));
-    expect(screen.getByTestId('account').textContent).toBe('teacher-7a-ha');
-    expect(JSON.parse(window.localStorage.getItem('nekopath.demo-session.v2') ?? 'null')).toEqual({
-      accountId: 'teacher-7a-ha',
-    });
+    screen.getByRole('button', { name: 'in-bad' }).click();
+    await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('none'));
 
-    await user.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(screen.getByTestId('account').textContent).toBe('signed-out');
-    expect(window.localStorage.getItem('nekopath.demo-session.v2')).toBeNull();
+    screen.getByRole('button', { name: 'in-good' }).click();
+    await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));
+    expect(window.localStorage.getItem('nekopath.session-cache.v1')).toContain('an');
+
+    screen.getByRole('button', { name: 'out' }).click();
+    await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('none'));
+    expect(window.localStorage.getItem('nekopath.session-cache.v1')).toBeNull();
+  });
+
+  it('falls back to the cached identity when the network is unreachable', async () => {
+    window.localStorage.setItem(
+      'nekopath.session-cache.v1',
+      JSON.stringify({
+        id: 'user-student-an',
+        role: 'STUDENT',
+        name: 'Trần Ngọc An',
+        initials: 'NA',
+        shortName: 'An',
+        subtitle: 'Học sinh • Lớp 7A',
+        learnerId: 'an',
+      }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('network down');
+      }),
+    );
+    render(
+      <DemoSessionProvider>
+        <Probe />
+      </DemoSessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
+    expect(screen.getByTestId('who').textContent).toBe('STUDENT:An');
   });
 });

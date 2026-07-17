@@ -1,22 +1,27 @@
 import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { PathPage } from '../features/evidence-path/PathPage';
+import { AssignmentsPage, AssignmentTakePage } from '../features/student/AssignmentsPage';
 import { LearnPage } from '../features/student/LearnPage';
 import { PracticePage } from '../features/student/PracticePage';
 import { StudentDashboardPage } from '../features/student/StudentDashboardPage';
 import { SystemPage } from '../features/system/SystemPage';
+import { TeacherAssignmentsPage } from '../features/teacher/TeacherAssignmentsPage';
 import { TeacherClassPage } from '../features/teacher/TeacherClassPage';
 import { TeacherPage } from '../features/teacher/TeacherPage';
+import { TeacherQuestionsPage } from '../features/teacher/TeacherQuestionsPage';
 import { DemoSessionProvider, useDemoSession, type DemoRole } from './demo-session';
 import { LoginPage } from './pages/LoginPage';
 
 function RequireSession() {
-  const { account } = useDemoSession();
+  const { account, ready } = useDemoSession();
+  if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
   return account ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 function RequireRole({ role }: { role: DemoRole }) {
-  const { account } = useDemoSession();
+  const { account, ready } = useDemoSession();
+  if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
   if (!account) return <Navigate to="/login" replace />;
   if (account.role !== role) {
     return <Navigate to={account.role === 'STUDENT' ? '/student' : '/teacher'} replace />;
@@ -25,7 +30,8 @@ function RequireRole({ role }: { role: DemoRole }) {
 }
 
 function WorkspaceHome() {
-  const { account } = useDemoSession();
+  const { account, ready } = useDemoSession();
+  if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
   if (!account) return <Navigate to="/login" replace />;
   return <Navigate to={account.role === 'STUDENT' ? '/student' : '/teacher'} replace />;
 }
@@ -57,11 +63,15 @@ export function App() {
               <Route path="student" element={<StudentDashboardPage />} />
               <Route path="student/check-in" element={<LearnPage />} />
               <Route path="student/practice" element={<PracticePage />} />
+              <Route path="student/assignments" element={<AssignmentsPage />} />
+              <Route path="student/assignments/:assignmentId" element={<AssignmentTakePage />} />
               <Route path="student/path" element={<PathPage />} />
             </Route>
             <Route element={<RequireRole role="TEACHER" />}>
               <Route path="teacher" element={<TeacherPage />} />
               <Route path="teacher/class" element={<TeacherClassPage />} />
+              <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
+              <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
             </Route>
             <Route path="system" element={<SystemPage />} />
             <Route path="*" element={<NotFoundPage />} />

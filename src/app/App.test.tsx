@@ -2,13 +2,16 @@ import 'fake-indexeddb/auto';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installApiStub } from '../test/api-stub';
 import { App } from './App';
 
-describe('NekoPath MVP entry and shell', () => {
+describe('NekoPath MVP entry and shell (real-API session, stubbed transport)', () => {
   beforeEach(() => window.localStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
 
-  it('opens on a truthful one-click demo login', () => {
+  it('opens on the real login screen with the server directory', async () => {
+    installApiStub(null);
     render(
       <MemoryRouter initialEntries={['/login']}>
         <App />
@@ -18,12 +21,12 @@ describe('NekoPath MVP entry and shell', () => {
     expect(
       screen.getByRole('heading', { level: 2, name: 'Đăng nhập bằng tài khoản mẫu' }),
     ).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Nguyễn Minh Chi/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Nguyễn Thu Hà/ })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Trần Ngọc An/ })).toBeTruthy();
     expect(screen.getByText(/không chứa thông tin học sinh thật/i)).toBeTruthy();
   });
 
-  it('enters the student workspace and shows the role-specific sidebar', async () => {
+  it('signs in as a student and shows the role-specific sidebar', async () => {
+    installApiStub(null);
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -31,42 +34,35 @@ describe('NekoPath MVP entry and shell', () => {
       </MemoryRouter>,
     );
 
-    await user.click(screen.getByRole('button', { name: /Nguyễn Minh Chi/ }));
-    expect(
-      await screen.findByRole('heading', { level: 1, name: /Chào buổi chiều, Chi/ }),
-    ).toBeTruthy();
-    const nav = screen.getByRole('navigation', { name: 'Điều hướng chính' });
-    expect(nav).toBeTruthy();
+    await user.click(await screen.findByRole('button', { name: /Trần Ngọc An/ }));
+    expect(await screen.findByRole('navigation', { name: 'Điều hướng chính' })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Bài kiểm tra/ })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Nhóm can thiệp/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Bài được giao/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Ngân hàng câu hỏi/ })).toBeNull();
   });
 
-  it('restores the teacher account and renders the operational class overview', async () => {
-    window.localStorage.setItem(
-      'nekopath.demo-session.v2',
-      JSON.stringify({ accountId: 'teacher-7a-ha' }),
-    );
+  it('restores a teacher session from the server and shows teacher tools', async () => {
+    installApiStub('co.ha');
     render(
       <MemoryRouter initialEntries={['/teacher']}>
         <App />
       </MemoryRouter>,
     );
 
-    expect(
-      await screen.findByRole('heading', { level: 1, name: /Chào buổi chiều, Cô Hà/ }),
-    ).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Nhóm can thiệp/ })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: /Ngân hàng câu hỏi/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Giao bài/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Bài kiểm tra/ })).toBeNull();
   });
 
-  it('redirects protected routes to login when no account is selected', () => {
+  it('redirects protected routes to login when the server has no session', async () => {
+    installApiStub(null);
     render(
       <MemoryRouter initialEntries={['/teacher']}>
         <App />
       </MemoryRouter>,
     );
     expect(
-      screen.getByRole('heading', { level: 2, name: 'Đăng nhập bằng tài khoản mẫu' }),
+      await screen.findByRole('heading', { level: 2, name: 'Đăng nhập bằng tài khoản mẫu' }),
     ).toBeTruthy();
   });
 });

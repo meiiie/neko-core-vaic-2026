@@ -1,22 +1,64 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DEMO_ACCOUNTS, useDemoSession } from '../demo-session';
+import { useDemoSession } from '../demo-session';
+
+/**
+ * Real login against the API (session cookie). The directory of seeded demo
+ * accounts and the shared demo password are displayed on purpose: this is a
+ * synthetic evaluation environment, not production credential handling.
+ */
+
+const DEMO_PASSWORD = 'nekopath-2026';
+
+interface DirectoryAccount {
+  username: string;
+  role: 'STUDENT' | 'TEACHER';
+  name: string;
+  initials: string;
+  subtitle: string;
+}
 
 function destination(role: 'STUDENT' | 'TEACHER'): string {
   return role === 'STUDENT' ? '/student' : '/teacher';
 }
 
 export function LoginPage() {
-  const { account, signIn } = useDemoSession();
+  const { account, ready, signIn } = useDemoSession();
   const navigate = useNavigate();
+  const [directory, setDirectory] = useState<DirectoryAccount[]>([]);
+  const [directoryError, setDirectoryError] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState(DEMO_PASSWORD);
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (account) navigate(destination(account.role), { replace: true });
-  }, [account, navigate]);
+    if (ready && account) navigate(destination(account.role), { replace: true });
+  }, [ready, account, navigate]);
 
-  function enter(accountId: string) {
-    const selected = DEMO_ACCOUNTS.find((candidate) => candidate.id === accountId);
-    if (selected && signIn(accountId)) navigate(destination(selected.role), { replace: true });
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/auth/directory')
+      .then(async (response) => {
+        if (!response.ok) throw new Error(String(response.status));
+        const body = (await response.json()) as { accounts: DirectoryAccount[] };
+        if (!cancelled) setDirectory(body.accounts);
+      })
+      .catch(() => {
+        if (!cancelled) setDirectoryError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function enter(user: string) {
+    setPending(user);
+    setError(null);
+    const failure = await signIn(user, password);
+    setPending(null);
+    if (failure) setError(failure);
+    // Successful sign-in redirects via the effect above.
   }
 
   return (
@@ -51,28 +93,75 @@ export function LoginPage() {
           <p className="eyebrow">Môi trường dùng thử</p>
           <h2 id="login-heading">Đăng nhập bằng tài khoản mẫu</h2>
           <p className="login-intro">
-            Chọn vai trò để mở đúng không gian làm việc. Không cần mật khẩu.
+            Tài khoản thật trên máy chủ demo — mật khẩu chung: <code>{DEMO_PASSWORD}</code>
           </p>
 
+          {directoryError ? (
+            <p role="alert" className="error-message">
+              Không tải được danh bạ tài khoản. Máy chủ chưa chạy? (<code>npm run server</code>)
+            </p>
+          ) : null}
+
           <div className="demo-account-list">
-            {DEMO_ACCOUNTS.map((demoAccount) => (
+            {directory.map((entry) => (
               <button
                 className="demo-account"
-                key={demoAccount.id}
+                key={entry.username}
                 type="button"
-                onClick={() => enter(demoAccount.id)}
+                disabled={pending !== null}
+                onClick={() => void enter(entry.username)}
               >
                 <span className="account-avatar" aria-hidden="true">
-                  {demoAccount.initials}
+                  {entry.initials}
                 </span>
                 <span className="account-copy">
-                  <strong>{demoAccount.name}</strong>
-                  <span>{demoAccount.subtitle}</span>
+                  <strong>{entry.name}</strong>
+                  <span>{entry.subtitle}</span>
                 </span>
-                <span className="account-action">Đăng nhập</span>
+                <span className="account-action">
+                  {pending === entry.username ? 'Đang vào…' : 'Đăng nhập'}
+                </span>
               </button>
             ))}
           </div>
+
+          <form
+            className="login-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (username) void enter(username);
+            }}
+          >
+            <label>
+              Tên đăng nhập
+              <input
+                name="username"
+                autoComplete="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="vd: hs05.7a"
+              />
+            </label>
+            <label>
+              Mật khẩu
+              <input
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            <button className="button-secondary" type="submit" disabled={pending !== null}>
+              Đăng nhập bằng tài khoản khác
+            </button>
+          </form>
+
+          {error ? (
+            <p role="alert" className="error-message">
+              {error}
+            </p>
+          ) : null}
 
           <p className="login-disclosure">
             Đây là môi trường đánh giá sử dụng dữ liệu mẫu, không chứa thông tin học sinh thật.

@@ -16,11 +16,14 @@ const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
     { to: '/student', label: 'Tổng quan', index: '01', end: true },
     { to: '/student/check-in', label: 'Bài kiểm tra', index: '02' },
     { to: '/student/practice', label: 'Luyện tập', index: '03' },
-    { to: '/student/path', label: 'Lộ trình của tôi', index: '04' },
+    { to: '/student/assignments', label: 'Bài được giao', index: '04' },
+    { to: '/student/path', label: 'Lộ trình của tôi', index: '05' },
   ],
   TEACHER: [
     { to: '/teacher', label: 'Tổng quan lớp', index: '01', end: true },
     { to: '/teacher/class', label: 'Nhóm can thiệp', index: '02' },
+    { to: '/teacher/questions', label: 'Ngân hàng câu hỏi', index: '03' },
+    { to: '/teacher/assignments', label: 'Giao bài', index: '04' },
   ],
 };
 
@@ -84,7 +87,7 @@ export function AppLayout() {
           <p className="sidebar-label sidebar-label--secondary">Thiết bị</p>
           <NavLink to="/system" onClick={() => setMobileOpen(false)}>
             <span className="nav-index" aria-hidden="true">
-              05
+              06
             </span>
             <span>Dữ liệu &amp; ngoại tuyến</span>
           </NavLink>

@@ -39,6 +39,12 @@ export default defineConfig({
       },
     }),
   ],
+  server: {
+    proxy: { '/api': 'http://127.0.0.1:3001' },
+  },
+  preview: {
+    proxy: { '/api': 'http://127.0.0.1:3001' },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

@@ -3,24 +3,29 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "NekoPath — local-first adaptive tutoring PWA for mixed-ability classrooms (sample evaluation data only)",
+  "description": "NekoPath â€” local-first adaptive tutoring PWA for mixed-ability classrooms (sample evaluation data only)",
   "engines": {
-    "node": ">=24.18.0 <25"
+    "node": "\u003e=24.18.0 \u003c25"
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit \u0026\u0026 vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "eval": "vitest run tests/eval"
+    "eval": "vitest run tests/eval",
+    "server": "node server/index.ts",
+    "seed": "node server/seed.ts"
   },
   "dependencies": {
+    "@fastify/cookie": "11.1.2",
+    "@fastify/static": "10.1.0",
     "dexie": "4.4.4",
     "dexie-react-hooks": "4.4.0",
+    "fastify": "5.10.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router-dom": "7.18.1",
