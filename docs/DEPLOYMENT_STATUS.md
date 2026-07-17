@@ -53,6 +53,16 @@ Trước khi deploy, gate local đã đạt lint, typecheck, 69 tests, 23 determ
 3. Không đổi `nekopath.holilihu.online` trong tài liệu hoặc pitch. Chỉ đổi route phía sau hostname khi recovery cần thiết.
 4. Mọi thay đổi hạ tầng, source commit, smoke result và rollback phải ghi vào AI collaboration log.
 
+## Brand and metadata release (2026-07-18 ICT)
+
+- Source release: `94e0e9f` (`fix(ops): preserve deployed build provenance`), after brand commit `b3ff0c7`.
+- GitHub Actions CI run `29601836947` passed: format, lint, typecheck, tests, deterministic evaluations, production PWA build and artifact integrity.
+- The VM rebuilt the release in Docker: `56/56` application tests passed, the PWA precache contains 16 entries / 683.45 KiB, and both `app` and `caddy` returned healthy.
+- Production artifact provenance was checked inside the running container: the client bundle embeds `94e0e9f`, rather than a fallback `dev` label.
+- Canonical smoke checks passed at `https://nekopath.holilihu.online`: HTTP 200; `X-NekoPath-Edge: cloudflare`; `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`; canonical, Open Graph and Twitter metadata; manifest and NekoPath PWA icons; PNG logo mark and 1200x630 social share image.
+
+The no-index policy is intentional: this public judging demo contains synthetic classroom data and is not presented as a real school service or public curriculum resource.
+
 ## Recovery
 
 Nếu VM/origin không thể khôi phục kịp thời, giữ nguyên canonical hostname nhưng thực hiện theo thứ tự:
