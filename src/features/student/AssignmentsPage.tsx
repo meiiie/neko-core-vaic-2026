@@ -96,7 +96,13 @@ export function AssignmentTakePage() {
       .then(async (response) => {
         if (!response.ok) throw new Error(String(response.status));
         const body = (await response.json()) as ApiAssignmentDetail;
-        if (!cancelled) setDetail(body);
+        if (!cancelled) {
+          setDetail(body);
+          void fetch(`/api/assignments/${assignmentId}/open`, {
+            method: 'POST',
+            credentials: 'include',
+          }).catch(() => undefined);
+        }
       })
       .catch(() => {
         if (!cancelled) setError(true);

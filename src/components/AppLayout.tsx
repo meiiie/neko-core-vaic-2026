@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession, type Role } from '../app/session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
@@ -29,16 +29,38 @@ const NAVIGATION: Record<Role, readonly NavItem[]> = {
   ],
   TEACHER: [
     { to: '/teacher', label: 'Tổng quan lớp', index: '01', end: true },
-    { to: '/teacher/class', label: 'Nhóm can thiệp', index: '02' },
+    { to: '/teacher/class', label: 'Nhóm cần hỗ trợ', index: '02' },
     { to: '/teacher/questions', label: 'Ngân hàng câu hỏi', index: '03' },
     { to: '/teacher/assignments', label: 'Giao bài', index: '04' },
   ],
 };
 
+const MOBILE_NAVIGATION_QUERY = '(max-width: 52rem)';
+
 export function AppLayout() {
   const { account, signOut } = useSession();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia?.(MOBILE_NAVIGATION_QUERY).matches === true,
+  );
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const restoreMenuFocusRef = useRef(false);
+
+  const closeMobileNavigation = useCallback((restoreMenuFocus: boolean) => {
+    restoreMenuFocusRef.current = restoreMenuFocus;
+    setMobileOpen(false);
+  }, []);
+
+  const selectMobileRoute = useCallback(() => {
+    if (!isMobile) return;
+    closeMobileNavigation(false);
+    window.requestAnimationFrame(() => mainRef.current?.focus());
+  }, [closeMobileNavigation, isMobile]);
   const [nekoOpen, setNekoOpen] = useState(
     () => window.localStorage.getItem('nekopath.neko-dock.open') === '1',
   );
@@ -47,6 +69,73 @@ export function AppLayout() {
   useEffect(() => {
     registerSyncTriggers();
   }, []);
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const media = window.matchMedia(MOBILE_NAVIGATION_QUERY);
+    const updateViewport = () => {
+      setIsMobile(media.matches);
+      if (!media.matches) {
+        restoreMenuFocusRef.current = false;
+        setMobileOpen(false);
+      }
+    };
+
+    updateViewport();
+    media.addEventListener('change', updateViewport);
+    return () => media.removeEventListener('change', updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile || !mobileOpen) return;
+
+    const currentRoute = sidebarRef.current?.querySelector<HTMLElement>(
+      '.sidebar-nav [aria-current="page"]',
+    );
+    const firstRoute = sidebarRef.current?.querySelector<HTMLElement>('.sidebar-nav a');
+    (currentRoute ?? firstRoute)?.focus();
+  }, [isMobile, mobileOpen]);
+
+  useEffect(() => {
+    if (!isMobile || !mobileOpen) return;
+
+    const handleDrawerKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMobileNavigation(true);
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const drawer = sidebarRef.current;
+      if (!drawer) return;
+
+      const tabbable = [...drawer.querySelectorAll<HTMLElement>('a[href], button')].filter(
+        (element) => element.tabIndex >= 0 && !element.hasAttribute('disabled'),
+      );
+      const first = tabbable[0];
+      const last = tabbable.at(-1);
+      if (!first || !last) return;
+
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !drawer.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !drawer.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDrawerKeydown);
+    return () => document.removeEventListener('keydown', handleDrawerKeydown);
+  }, [closeMobileNavigation, isMobile, mobileOpen]);
+
+  useEffect(() => {
+    if (mobileOpen || !restoreMenuFocusRef.current) return;
+    restoreMenuFocusRef.current = false;
+    menuButtonRef.current?.focus();
+  }, [mobileOpen]);
 
   useEffect(() => {
     try {
@@ -59,6 +148,7 @@ export function AppLayout() {
   if (!account) return null;
   const isTeacher = account.role === 'TEACHER';
   const home = account.role === 'STUDENT' ? '/student' : '/teacher';
+  const closedMobileTabIndex = isMobile && !mobileOpen ? -1 : undefined;
 
   function exitWorkspace() {
     signOut();
@@ -76,25 +166,40 @@ export function AppLayout() {
         Bỏ qua điều hướng
       </a>
 
-      <header className="mobile-header">
+      <header className="mobile-header" inert={isMobile && mobileOpen ? true : undefined}>
         <NavLink className="brand-lockup" to={home}>
           <BrandMark size={36} />
           <span>NekoPath</span>
         </NavLink>
         <button
+          ref={menuButtonRef}
           className="mobile-menu-button"
           type="button"
           aria-expanded={mobileOpen}
           aria-controls="product-sidebar"
-          onClick={() => setMobileOpen((open) => !open)}
+          onClick={() => {
+            if (mobileOpen) closeMobileNavigation(true);
+            else setMobileOpen(true);
+          }}
         >
           {mobileOpen ? 'Đóng' : 'Menu'}
         </button>
       </header>
 
-      <aside id="product-sidebar" className="product-sidebar" data-open={mobileOpen || undefined}>
+      <aside
+        ref={sidebarRef}
+        id="product-sidebar"
+        className="product-sidebar"
+        data-open={mobileOpen || undefined}
+        inert={isMobile && !mobileOpen ? true : undefined}
+      >
         <div className="sidebar-head">
-          <NavLink className="brand-lockup" to={home} onClick={() => setMobileOpen(false)}>
+          <NavLink
+            className="brand-lockup"
+            to={home}
+            tabIndex={closedMobileTabIndex}
+            onClick={selectMobileRoute}
+          >
             <BrandMark size={40} />
             <span>
               <strong>NekoPath</strong>
@@ -106,7 +211,13 @@ export function AppLayout() {
         <nav className="sidebar-nav" aria-label="Điều hướng chính">
           <p className="sidebar-label">Không gian làm việc</p>
           {NAVIGATION[account.role].map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMobileOpen(false)}>
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              tabIndex={closedMobileTabIndex}
+              onClick={selectMobileRoute}
+            >
               <span className="nav-index" aria-hidden="true">
                 {item.index}
               </span>
@@ -115,7 +226,7 @@ export function AppLayout() {
           ))}
 
           <p className="sidebar-label sidebar-label--secondary">Thiết bị</p>
-          <NavLink to="/system" onClick={() => setMobileOpen(false)}>
+          <NavLink to="/system" tabIndex={closedMobileTabIndex} onClick={selectMobileRoute}>
             <span className="nav-index" aria-hidden="true">
               06
             </span>
@@ -131,22 +242,32 @@ export function AppLayout() {
             <strong>{account.shortName}</strong>
             <span>{account.subtitle}</span>
           </span>
-          <button type="button" onClick={exitWorkspace}>
+          <button
+            type="button"
+            aria-label="Đổi tài khoản"
+            tabIndex={closedMobileTabIndex}
+            onClick={exitWorkspace}
+          >
             Đổi
           </button>
         </div>
       </aside>
 
-      {mobileOpen ? (
-        <button
-          className="sidebar-backdrop"
-          type="button"
-          aria-label="Đóng điều hướng"
-          onClick={() => setMobileOpen(false)}
-        />
-      ) : null}
+      <button
+        className="sidebar-backdrop"
+        type="button"
+        aria-label="Đóng điều hướng"
+        aria-hidden={!mobileOpen}
+        tabIndex={-1}
+        data-open={mobileOpen || undefined}
+        onClick={() => closeMobileNavigation(true)}
+      />
 
-      <div className="product-workspace" data-neko-open={(isTeacher && nekoOpen) || undefined}>
+      <div
+        className="product-workspace"
+        data-neko-open={(isTeacher && nekoOpen) || undefined}
+        inert={isMobile && mobileOpen ? true : undefined}
+      >
         <header className="workspace-status">
           <span className="environment-label">Dữ liệu mẫu</span>
           <SyncBadge />
@@ -163,7 +284,7 @@ export function AppLayout() {
           ) : null}
         </header>
         <UpdatePrompt />
-        <main id="main-content" tabIndex={-1}>
+        <main ref={mainRef} id="main-content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>

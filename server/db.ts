@@ -47,6 +47,7 @@ export function openDb(path: string): DatabaseSync {
       correct_choice_id TEXT NOT NULL,
       hints_json TEXT NOT NULL DEFAULT '[]',
       explanation TEXT NOT NULL DEFAULT '',
+      difficulty TEXT NOT NULL DEFAULT 'UNSPECIFIED',
       review_state TEXT NOT NULL DEFAULT 'UNREVIEWED',
       created_at TEXT NOT NULL
     );
@@ -57,7 +58,15 @@ export function openDb(path: string): DatabaseSync {
       title TEXT NOT NULL,
       question_ids_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      due_at TEXT
+      due_at TEXT,
+      allow_retake INTEGER NOT NULL DEFAULT 1,
+      shuffle_answers INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS assignment_views (
+      assignment_id TEXT NOT NULL REFERENCES assignments(id),
+      learner_id TEXT NOT NULL REFERENCES users(id),
+      opened_at TEXT NOT NULL,
+      PRIMARY KEY (assignment_id, learner_id)
     );
     CREATE TABLE IF NOT EXISTS events (
       id TEXT PRIMARY KEY,
@@ -73,5 +82,20 @@ export function openDb(path: string): DatabaseSync {
     CREATE INDEX IF NOT EXISTS idx_events_learner ON events(learner_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_events_assignment ON events(assignment_id);
   `);
+
+  // Small additive migrations keep an existing event database usable during the UI refinement.
+  const questionColumns = db.prepare('PRAGMA table_info(questions)').all() as { name: string }[];
+  if (!questionColumns.some((column) => column.name === 'difficulty')) {
+    db.exec("ALTER TABLE questions ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'UNSPECIFIED';");
+  }
+  const assignmentColumns = db.prepare('PRAGMA table_info(assignments)').all() as {
+    name: string;
+  }[];
+  if (!assignmentColumns.some((column) => column.name === 'allow_retake')) {
+    db.exec('ALTER TABLE assignments ADD COLUMN allow_retake INTEGER NOT NULL DEFAULT 1;');
+  }
+  if (!assignmentColumns.some((column) => column.name === 'shuffle_answers')) {
+    db.exec('ALTER TABLE assignments ADD COLUMN shuffle_answers INTEGER NOT NULL DEFAULT 0;');
+  }
   return db;
 }

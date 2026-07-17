@@ -19,6 +19,7 @@ const loginSchema = z.object({ username: z.string().min(1), password: z.string()
 
 const questionSchema = z.object({
   kcId: z.string().min(1),
+  difficulty: z.enum(['UNSPECIFIED', 'EASY', 'MEDIUM', 'HARD']).default('UNSPECIFIED'),
   prompt: z.string().min(8).max(500),
   choices: z
     .array(
@@ -38,6 +39,9 @@ const questionSchema = z.object({
 const assignmentSchema = z.object({
   title: z.string().min(3).max(120),
   questionIds: z.array(z.string().min(1)).min(1).max(20),
+  dueAt: z.string().datetime().nullable().default(null),
+  allowRetake: z.boolean().default(false),
+  shuffleAnswers: z.boolean().default(false),
 });
 
 const eventSchema = z.object({
@@ -59,6 +63,7 @@ interface QuestionRow {
   correct_choice_id: string;
   hints_json: string;
   explanation: string;
+  difficulty: string;
   review_state: string;
 }
 
@@ -67,6 +72,7 @@ function toQuestionDto(row: QuestionRow, includeAnswer: boolean) {
     id: row.id,
     kcId: row.kc_id,
     prompt: row.prompt,
+    difficulty: row.difficulty,
     choices: JSON.parse(row.choices_json) as unknown[],
     reviewState: row.review_state,
     ...(includeAnswer
@@ -77,6 +83,15 @@ function toQuestionDto(row: QuestionRow, includeAnswer: boolean) {
         }
       : {}),
   };
+}
+
+function stableOrder(seed: string): number {
+  let hash = 2166136261;
+  for (const character of seed) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 export function buildApp(db: DatabaseSync): FastifyInstance {
@@ -190,8 +205,8 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     db.prepare(
       `INSERT INTO questions
        (id, owner_id, kc_id, prompt, choices_json, correct_choice_id, hints_json, explanation,
-        review_state, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'UNREVIEWED', ?)`,
+        difficulty, review_state, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNREVIEWED', ?)`,
     ).run(
       id,
       user.id,
@@ -201,9 +216,43 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       body.correctChoiceId,
       JSON.stringify(body.hints),
       body.explanation,
+      body.difficulty,
       new Date().toISOString(),
     );
     return reply.code(201).send({ id });
+  });
+
+  app.patch('/api/questions/:id', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    const parsed = questionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', detail: parsed.error.issues });
+    }
+    const body = parsed.data;
+    if (!body.choices.some((choice) => choice.id === body.correctChoiceId)) {
+      return reply.code(400).send({ error: 'CORRECT_CHOICE_NOT_IN_CHOICES' });
+    }
+    const { id } = request.params as { id: string };
+    const result = db
+      .prepare(
+        `UPDATE questions SET kc_id = ?, prompt = ?, choices_json = ?, correct_choice_id = ?,
+         hints_json = ?, explanation = ?, difficulty = ?, review_state = 'UNREVIEWED'
+         WHERE id = ? AND owner_id = ?`,
+      )
+      .run(
+        body.kcId,
+        body.prompt,
+        JSON.stringify(body.choices),
+        body.correctChoiceId,
+        JSON.stringify(body.hints),
+        body.explanation,
+        body.difficulty,
+        id,
+        user.id,
+      );
+    if (Number(result.changes) === 0) return reply.code(404).send({ error: 'NOT_FOUND' });
+    return { id };
   });
 
   app.post('/api/assignments', (request, reply) => {
@@ -221,8 +270,10 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     }
     const id = `assignment-${randomUUID()}`;
     db.prepare(
-      `INSERT INTO assignments (id, class_id, teacher_id, title, question_ids_json, created_at, due_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+      `INSERT INTO assignments
+       (id, class_id, teacher_id, title, question_ids_json, created_at, due_at, allow_retake,
+        shuffle_answers)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       CLASS_7A_ID,
@@ -230,6 +281,9 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       parsed.data.title,
       JSON.stringify(parsed.data.questionIds),
       new Date().toISOString(),
+      parsed.data.dueAt,
+      parsed.data.allowRetake ? 1 : 0,
+      parsed.data.shuffleAnswers ? 1 : 0,
     );
     return reply.code(201).send({ id });
   });
@@ -245,6 +299,9 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       question_ids_json: string;
       created_at: string;
       teacher_id: string;
+      due_at: string | null;
+      allow_retake: number;
+      shuffle_answers: number;
     }[];
     const rosterCount = (
       db.prepare('SELECT COUNT(*) AS n FROM enrollments WHERE class_id = ?').get(CLASS_7A_ID) as {
@@ -258,6 +315,28 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
           .prepare('SELECT COUNT(DISTINCT learner_id) AS n FROM events WHERE assignment_id = ?')
           .get(row.id) as { n: number }
       ).n;
+      const progress = db
+        .prepare(
+          `SELECT learner_id AS learnerId, COUNT(DISTINCT item_id) AS answered
+           FROM events WHERE assignment_id = ? GROUP BY learner_id`,
+        )
+        .all(row.id) as { learnerId: string; answered: number }[];
+      const opened = (
+        db
+          .prepare('SELECT COUNT(*) AS n FROM assignment_views WHERE assignment_id = ?')
+          .get(row.id) as { n: number }
+      ).n;
+      const completed = progress.filter((entry) => entry.answered >= questionIds.length).length;
+      const kcIds = [
+        ...new Set(
+          questionIds.flatMap((questionId) => {
+            const question = db
+              .prepare('SELECT kc_id FROM questions WHERE id = ?')
+              .get(questionId) as { kc_id: string } | undefined;
+            return question ? [question.kc_id] : [];
+          }),
+        ),
+      ];
       const myAnswers = (
         db
           .prepare('SELECT COUNT(*) AS n FROM events WHERE assignment_id = ? AND learner_id = ?')
@@ -267,7 +346,14 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
         id: row.id,
         title: row.title,
         createdAt: row.created_at,
+        dueAt: row.due_at,
+        allowRetake: Boolean(row.allow_retake),
+        shuffleAnswers: Boolean(row.shuffle_answers),
         questionCount: questionIds.length,
+        kcIds,
+        openedLearnerCount: opened,
+        inProgressLearnerCount: Math.max(0, progress.length - completed),
+        completedLearnerCount: completed,
         submittedLearnerCount: submitted,
         rosterCount,
         myAnswerCount: myAnswers,
@@ -276,15 +362,49 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     return { assignments };
   });
 
+  app.post('/api/assignments/:id/open', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
+    const { id } = request.params as { id: string };
+    const exists = db.prepare('SELECT id FROM assignments WHERE id = ?').get(id);
+    if (!exists) return reply.code(404).send({ error: 'NOT_FOUND' });
+    db.prepare(
+      `INSERT OR IGNORE INTO assignment_views (assignment_id, learner_id, opened_at)
+       VALUES (?, ?, ?)`,
+    ).run(id, user.id, new Date().toISOString());
+    return { ok: true };
+  });
+
   app.get('/api/assignments/:id', (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return;
     const { id } = request.params as { id: string };
     const row = db.prepare('SELECT * FROM assignments WHERE id = ?').get(id) as
-      { id: string; title: string; question_ids_json: string } | undefined;
+      | {
+          id: string;
+          title: string;
+          question_ids_json: string;
+          allow_retake: number;
+          shuffle_answers: number;
+        }
+      | undefined;
     if (!row) return reply.code(404).send({ error: 'NOT_FOUND' });
     const questionIds = JSON.parse(row.question_ids_json) as string[];
+    const answeredIds =
+      user.role === 'STUDENT' && !row.allow_retake
+        ? new Set(
+            (
+              db
+                .prepare(
+                  'SELECT DISTINCT item_id AS itemId FROM events WHERE assignment_id = ? AND learner_id = ?',
+                )
+                .all(id, user.id) as { itemId: string }[]
+            ).map((event) => event.itemId),
+          )
+        : new Set<string>();
     const questions = questionIds
+      .filter((questionId) => !answeredIds.has(questionId))
       .map(
         (questionId) =>
           db.prepare('SELECT * FROM questions WHERE id = ?').get(questionId) as
@@ -293,8 +413,24 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       .filter((question): question is QuestionRow => question !== undefined)
       // Students receive the answer key only per-question AFTER submitting —
       // the client asks for grading via POST /api/assignments/:id/answers.
-      .map((question) => toQuestionDto(question, user.role === 'TEACHER'));
-    return { id: row.id, title: row.title, questions };
+      .map((question) => {
+        const dto = toQuestionDto(question, user.role === 'TEACHER');
+        if (!row.shuffle_answers || user.role === 'TEACHER') return dto;
+        const choices = [...dto.choices] as { id?: string }[];
+        choices.sort(
+          (left, right) =>
+            stableOrder(`${id}:${user.id}:${left.id ?? ''}`) -
+            stableOrder(`${id}:${user.id}:${right.id ?? ''}`),
+        );
+        return { ...dto, choices };
+      });
+    return {
+      id: row.id,
+      title: row.title,
+      allowRetake: Boolean(row.allow_retake),
+      shuffleAnswers: Boolean(row.shuffle_answers),
+      questions,
+    };
   });
 
   /** Grade one answer server-side and append it to the event log. */
@@ -307,12 +443,24 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       .safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'INVALID_BODY' });
     const assignment = db
-      .prepare('SELECT question_ids_json FROM assignments WHERE id = ?')
-      .get(id) as { question_ids_json: string } | undefined;
+      .prepare('SELECT question_ids_json, due_at, allow_retake FROM assignments WHERE id = ?')
+      .get(id) as
+      { question_ids_json: string; due_at: string | null; allow_retake: number } | undefined;
     if (!assignment) return reply.code(404).send({ error: 'NOT_FOUND' });
     const questionIds = JSON.parse(assignment.question_ids_json) as string[];
     if (!questionIds.includes(body.data.questionId)) {
       return reply.code(400).send({ error: 'QUESTION_NOT_IN_ASSIGNMENT' });
+    }
+    if (assignment.due_at && new Date(assignment.due_at).getTime() < Date.now()) {
+      return reply.code(409).send({ error: 'DUE_DATE_PASSED' });
+    }
+    if (!assignment.allow_retake) {
+      const answered = db
+        .prepare(
+          'SELECT id FROM events WHERE assignment_id = ? AND learner_id = ? AND item_id = ? LIMIT 1',
+        )
+        .get(id, user.id, body.data.questionId);
+      if (answered) return reply.code(409).send({ error: 'ALREADY_ANSWERED' });
     }
     const question = db
       .prepare('SELECT * FROM questions WHERE id = ?')
