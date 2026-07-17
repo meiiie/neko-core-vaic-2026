@@ -6,6 +6,7 @@ import { registerSyncTriggers } from '../services/sync';
 import { NekoDock } from './NekoDock';
 import { OnlineStatusBadge } from './OnlineStatusBadge';
 import { SyncBadge } from './SyncBadge';
+import { BrandMark } from './BrandMark';
 
 interface NavItem {
   readonly to: string;
@@ -67,7 +68,7 @@ export function AppLayout() {
 
       <header className="mobile-header">
         <NavLink className="brand-lockup" to={home}>
-          <img src="/icons/icon-192.png" alt="" width="36" height="36" />
+          <BrandMark size={36} />
           <span>NekoPath</span>
         </NavLink>
         <button
@@ -84,7 +85,7 @@ export function AppLayout() {
       <aside id="product-sidebar" className="product-sidebar" data-open={mobileOpen || undefined}>
         <div className="sidebar-head">
           <NavLink className="brand-lockup" to={home} onClick={() => setMobileOpen(false)}>
-            <img src="/icons/icon-192.png" alt="" width="40" height="40" />
+            <BrandMark size={40} />
             <span>
               <strong>NekoPath</strong>
               <small>{account.role === 'STUDENT' ? 'Cổng học sinh' : 'Cổng giáo viên'}</small>

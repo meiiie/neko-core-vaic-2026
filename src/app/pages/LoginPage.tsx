@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BrandMark } from '../../components/BrandMark';
 import { LOCAL_PROFILES, useSession } from '../session';
 
 /**
@@ -65,7 +66,7 @@ export function LoginPage() {
     <main className="login-page">
       <section className="login-story" aria-labelledby="product-name">
         <a className="login-brand" href="/login" aria-label="NekoPath">
-          <img src="/icons/icon-192.png" alt="" width="44" height="44" />
+          <BrandMark size={44} />
           <span>NekoPath</span>
         </a>
         <div className="login-story-copy">

@@ -1,68 +1,60 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSession } from '../app/session';
 import { runAgent, type AgentProvider, type AgentTraceEvent } from '../services/agent/loop';
 import { AGENT_PROVIDERS } from '../services/agent/providers';
-import { AGENT_TOOLS, toolByName } from '../services/agent/tools';
+import { AGENT_TOOLS } from '../services/agent/tools';
 import { isWebLlmCached, setWebLlmProgressListener } from '../services/agent/webllm-provider';
 
 /**
- * Neko — the classroom agent as a right-hand dock (Cursor/Copilot pattern):
- * always one keystroke away, never a separate destination. Same NekoCore-style
- * loop underneath; every number in an answer traces to a tool result shown in
- * the transcript.
+ * Neko — the classroom assistant as a calm product panel (not a terminal).
+ * Same tool-grounded loop underneath; transparency lives in a quiet
+ * expandable "Nguồn dữ kiện" per answer instead of raw JSON walls.
  */
 
-interface ConsoleLine {
-  readonly id: number;
-  readonly type: 'input' | 'trace' | 'result' | 'answer' | 'error' | 'info';
+interface TraceLine {
+  readonly kind: 'call' | 'result' | 'note';
   readonly text: string;
 }
 
-const BANNER = [
-  'Neko — trợ lý lớp học (thử nghiệm)',
-  'Mọi con số đều đến từ công cụ deterministic; model chỉ diễn đạt.',
-  'Gõ /help, hoặc hỏi tự nhiên: "Chẩn đoán của bạn An?"',
+interface ChatMessage {
+  readonly id: number;
+  readonly role: 'user' | 'assistant';
+  readonly text: string;
+  readonly trace?: readonly TraceLine[];
+}
+
+const SUGGESTIONS = [
+  'Hôm nay nên dạy lại gì cho lớp?',
+  'Chẩn đoán của bạn An thế nào?',
+  'Tiến độ các bài đã giao?',
+  'Giải thích kiến thức K02',
 ];
 
-const HELP_TEXT = [
-  '/lop            — tổng quan lớp (nhóm, ưu tiên, lỗ hổng)',
-  '/hocsinh <id>   — chẩn đoán an | binh | chi | minh',
-  '/kc <mã>        — vị trí kiến thức trong đồ thị, vd /kc K02',
-  '/baigiao        — bài đã giao và tiến độ nộp (cần mạng)',
-  '/model <id>     — đổi bộ não: rule | local (Ollama) | web (Gemma trong trình duyệt)',
-  '/clear          — xóa màn hình',
-  'Câu hỏi tự nhiên chạy vòng lặp agent: gọi công cụ → quan sát → trả lời.',
-];
-
-let lineId = 0;
-function line(type: ConsoleLine['type'], text: string): ConsoleLine {
-  lineId += 1;
-  return { id: lineId, type, text };
+let messageId = 0;
+function nextId(): number {
+  messageId += 1;
+  return messageId;
 }
 
 export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [lines, setLines] = useState<ConsoleLine[]>(BANNER.map((text) => line('info', text)));
+  const { account } = useSession();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [streamText, setStreamText] = useState('');
+  const [progressNote, setProgressNote] = useState<string | null>(null);
   const [provider, setProvider] = useState<AgentProvider>(AGENT_PROVIDERS[0]);
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [lines, streamText]);
+    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, streamText]);
 
   useEffect(() => {
-    let lastDecile = -1;
-    setWebLlmProgressListener(({ progress, text }) => {
-      const decile = Math.floor(progress * 10);
-      if (decile === lastDecile) return;
-      lastDecile = decile;
-      append(
-        line('info', `Gemma (trình duyệt): ${Math.round(progress * 100)}% — ${text.slice(0, 80)}`),
-      );
+    setWebLlmProgressListener(({ progress }) => {
+      setProgressNote(`Đang nạp Gemma trong trình duyệt… ${Math.round(progress * 100)}%`);
+      if (progress >= 1) setProgressNote(null);
     });
     return () => setWebLlmProgressListener(null);
   }, []);
@@ -77,169 +69,175 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
-  function append(...next: ConsoleLine[]) {
-    setLines((previous) => [...previous, ...next]);
-  }
-
-  function onTrace(event: AgentTraceEvent) {
-    if (event.kind === 'tool_call') {
-      append(line('trace', `→ gọi ${event.name}(${JSON.stringify(event.args)})`));
-    } else if (event.kind === 'tool_result') {
-      append(line(event.ok ? 'result' : 'error', `← ${event.name}: ${event.summary}`));
-    } else if (event.kind === 'answer') {
-      append(line('answer', event.text));
-    } else {
-      append(line('info', event.text));
-    }
-  }
-
-  async function runTool(name: string, args: Record<string, string>) {
-    const tool = toolByName(name);
-    if (!tool) {
-      append(line('error', `Không có công cụ ${name}.`));
+  async function switchProvider(id: string) {
+    if (id === 'web' && !(await isWebLlmCached())) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: nextId(),
+          role: 'assistant',
+          text: 'Model Gemma trong trình duyệt chưa được tải. Vào «Dữ liệu & ngoại tuyến» và bấm «Tải model» khi có mạng tốt — tải một lần, sau đó dùng không cần mạng.',
+        },
+      ]);
       return;
     }
-    append(line('trace', `→ gọi ${name}(${JSON.stringify(args)})`));
-    const result = await tool.run(args);
-    append(
-      line(
-        result.ok ? 'result' : 'error',
-        result.ok ? `← ${JSON.stringify(result.data)}` : `← ${result.error}`,
-      ),
-    );
+    const next = AGENT_PROVIDERS.find((candidate) => candidate.id === id);
+    if (next) setProvider(next);
   }
 
-  async function execute(raw: string) {
-    const command = raw.trim();
-    if (!command) return;
-    append(line('input', `neko> ${command}`));
-    setHistory((previous) => [command, ...previous].slice(0, 50));
-    setHistoryIndex(-1);
+  async function ask(raw: string) {
+    const question = raw.trim();
+    if (!question || busy) return;
+    setMessages((previous) => [...previous, { id: nextId(), role: 'user', text: question }]);
     setBusy(true);
-    try {
-      if (command === '/clear') {
-        setLines([]);
-      } else if (command === '/help') {
-        append(...HELP_TEXT.map((text) => line('info', text)));
-      } else if (command === '/lop') {
-        await runTool('tong_quan_lop', {});
-      } else if (command.startsWith('/hocsinh')) {
-        await runTool('chan_doan_hoc_sinh', { hoc_sinh: command.split(/\s+/)[1] ?? '' });
-      } else if (command.startsWith('/kc')) {
-        await runTool('giai_thich_kien_thuc', { kc: command.split(/\s+/)[1] ?? '' });
-      } else if (command === '/baigiao') {
-        await runTool('bai_duoc_giao', {});
-      } else if (command.startsWith('/model')) {
-        const requested = command.split(/\s+/)[1];
-        const next = AGENT_PROVIDERS.find((candidate) => candidate.id === requested);
-        if (requested === 'web' && !(await isWebLlmCached())) {
-          append(
-            line(
-              'info',
-              'Model Gemma trong trình duyệt chưa được tải. Vào «Dữ liệu & ngoại tuyến» → «Tải model (~1.6GB)» khi có mạng tốt — tải một lần, dùng mãi không cần mạng.',
-            ),
-          );
-        } else if (next) {
-          setProvider(next);
-          append(line('info', `Đã chuyển bộ não: ${next.label}`));
-        } else {
-          append(
-            line(
-              'info',
-              `Bộ não hiện tại: ${provider.label}. Khả dụng: ${AGENT_PROVIDERS.map((p) => p.id).join(', ')}`,
-            ),
-          );
-        }
-      } else if (command.startsWith('/')) {
-        append(line('error', `Lệnh không hợp lệ: ${command}. Gõ /help.`));
-      } else {
-        setStreamText('');
-        await runAgent(command, provider, AGENT_TOOLS, onTrace, undefined, (delta) =>
-          setStreamText((current) => current + delta),
-        );
-        setStreamText('');
+    setStreamText('');
+    const trace: TraceLine[] = [];
+    const onTrace = (event: AgentTraceEvent) => {
+      if (event.kind === 'tool_call') {
+        trace.push({
+          kind: 'call',
+          text: `Kiểm tra: ${event.name}(${JSON.stringify(event.args)})`,
+        });
+      } else if (event.kind === 'tool_result') {
+        trace.push({ kind: 'result', text: `${event.name} → ${event.summary}` });
+      } else if (event.kind === 'note') {
+        trace.push({ kind: 'note', text: event.text });
       }
-    } catch (error) {
-      append(
-        line(
-          'error',
-          `Lỗi: ${error instanceof Error ? error.message : 'không rõ'}${provider.id === 'local' ? ' — model cục bộ đã chạy chưa? (ollama serve)' : ''}`,
-        ),
+    };
+    try {
+      const answer = await runAgent(question, provider, AGENT_TOOLS, onTrace, undefined, (delta) =>
+        setStreamText((current) => current + delta),
       );
+      setMessages((previous) => [
+        ...previous,
+        { id: nextId(), role: 'assistant', text: answer, trace },
+      ]);
+    } catch (error) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: nextId(),
+          role: 'assistant',
+          text: `Không xử lý được: ${error instanceof Error ? error.message : 'lỗi không rõ'}${provider.id === 'local' ? '. Model cục bộ đã chạy chưa? (ollama serve)' : ''}`,
+        },
+      ]);
     } finally {
+      setStreamText('');
       setBusy(false);
       inputRef.current?.focus();
     }
   }
 
-  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      const next = Math.min(historyIndex + 1, history.length - 1);
-      if (history[next] !== undefined) {
-        setHistoryIndex(next);
-        setInput(history[next]);
-      }
-    } else if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      const next = historyIndex - 1;
-      setHistoryIndex(next);
-      setInput(next >= 0 ? (history[next] ?? '') : '');
-    }
-  }
-
   if (!open) return null;
 
+  const greetName = account?.shortName ?? 'bạn';
+
   return (
-    <aside className="neko-dock" role="complementary" aria-label="Neko — trợ lý lớp học">
-      <div className="console-titlebar">
-        <span className="console-dot" aria-hidden="true" />
-        <span className="console-dot" aria-hidden="true" />
-        <span className="console-dot" aria-hidden="true" />
-        <span className="console-title">neko@7a — {provider.label}</span>
-        <button type="button" className="dock-close" onClick={onClose} aria-label="Đóng Neko (Esc)">
+    <aside className="neko-panel" role="complementary" aria-label="Neko — trợ lý lớp học">
+      <header className="neko-panel-head">
+        <span className="neko-mark" aria-hidden="true">
+          ✦
+        </span>
+        <div>
+          <strong>Neko</strong>
+          <small>Trợ lý lớp học · dữ kiện từ hệ thống</small>
+        </div>
+        <button type="button" className="dock-close" onClick={onClose} aria-label="Đóng (Esc)">
           ✕
         </button>
-      </div>
-      <div className="console-log" ref={logRef} role="log" aria-live="polite">
-        {lines.map((entry) => (
-          <p key={entry.id} className={`console-line console-line--${entry.type}`}>
-            {entry.text}
-          </p>
-        ))}
-        {busy && streamText ? (
-          <p className="console-line console-line--answer">{streamText}</p>
-        ) : busy ? (
-          <p className="console-line console-line--info">…</p>
+      </header>
+
+      <div className="neko-scroll" ref={logRef} role="log" aria-live="polite">
+        {messages.length === 0 ? (
+          <div className="neko-hello">
+            <h2>
+              Chào {greetName} <span aria-hidden="true">👋</span>
+            </h2>
+            <p>
+              Tôi nắm dữ liệu lớp 7A — hỏi tôi về nhóm cần giúp, từng học sinh, hay bài đã giao.
+            </p>
+            <div className="neko-chips" role="list">
+              {SUGGESTIONS.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  role="listitem"
+                  type="button"
+                  className="neko-chip"
+                  onClick={() => void ask(suggestion)}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
+
+        {messages.map((message) => (
+          <div key={message.id} className={`neko-msg neko-msg--${message.role}`}>
+            <p>{message.text}</p>
+            {message.trace && message.trace.length > 0 ? (
+              <details className="neko-sources">
+                <summary>
+                  Nguồn dữ kiện ({message.trace.filter((t) => t.kind === 'call').length})
+                </summary>
+                <ul>
+                  {message.trace.map((line, index) => (
+                    <li key={index} data-kind={line.kind}>
+                      {line.text}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+        ))}
+
+        {busy ? (
+          <div className="neko-msg neko-msg--assistant">
+            <p>{streamText || 'Đang kiểm tra dữ liệu lớp…'}</p>
+          </div>
+        ) : null}
+        {progressNote ? <p className="neko-progress">{progressNote}</p> : null}
       </div>
+
       <form
-        className="console-input-row"
+        className="neko-input-row"
         onSubmit={(event) => {
           event.preventDefault();
           const value = input;
           setInput('');
-          void execute(value);
+          void ask(value);
         }}
       >
-        <label className="console-prompt" htmlFor="neko-dock-input">
-          neko&gt;
-        </label>
         <input
-          id="neko-dock-input"
           ref={inputRef}
           autoComplete="off"
-          spellCheck={false}
           disabled={busy}
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="hỏi tự nhiên hoặc /help"
+          placeholder="Hỏi về lớp học…"
+          aria-label="Câu hỏi cho Neko"
         />
         <button className="button-primary" type="submit" disabled={busy || !input.trim()}>
-          Chạy
+          Gửi
         </button>
       </form>
+
+      <footer className="neko-foot">
+        <label>
+          Bộ não
+          <select
+            value={provider.id}
+            onChange={(event) => void switchProvider(event.target.value)}
+            aria-label="Chọn bộ não cho Neko"
+          >
+            <option value="rule">Cục bộ tức thời (không cần model)</option>
+            <option value="local">Ollama trên máy (Gemma 3)</option>
+            <option value="web">Gemma trong trình duyệt</option>
+          </select>
+        </label>
+        <span className="muted">Mọi con số đều truy vết được về dữ liệu lớp.</span>
+      </footer>
     </aside>
   );
 }

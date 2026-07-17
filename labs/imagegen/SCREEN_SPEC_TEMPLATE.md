@@ -48,4 +48,3 @@ only a pitch/presentation image.
 - Reviewers: <human + AI visual pass>
 - Acceptance hypothesis: <what should become easier to understand?>
 ```
-

@@ -26,22 +26,34 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['favicon.svg', 'offline.svg', 'icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: [
+        'offline.svg',
+        'brand/nekopath-mark-v1-512.png',
+        'icons/nekopath-192.png',
+        'icons/nekopath-512.png',
+        'icons/nekopath-maskable-512.png',
+        'icons/nekopath-apple-touch-180.png',
+      ],
       manifest: {
-        name: 'NekoPath — Trợ giảng thích ứng',
+        name: 'NekoPath — Trợ giảng thích ứng cho lớp học đa trình độ',
         short_name: 'NekoPath',
         description:
-          'Chẩn đoán khoảng trống kiến thức gốc và gợi ý lộ trình luyện tập từ dữ liệu đánh giá mẫu.',
+          'Giúp giáo viên nhận diện khoảng trống kiến thức nền, gợi ý lộ trình ngắn và nhóm nhu cầu lớp học từ dữ liệu đánh giá mẫu.',
         lang: 'vi',
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        background_color: '#f4f7fb',
-        theme_color: '#0b234d',
+        background_color: '#F4F0E6',
+        theme_color: '#006B61',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/nekopath-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icons/nekopath-512.png', sizes: '512x512', type: 'image/png' },
+          {
+            src: '/icons/nekopath-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {
@@ -50,7 +62,7 @@ export default defineConfig({
         // precache every student pays for, but cache it on first use so the
         // in-browser Gemma brain works offline afterwards (with its weights,
         // which WebLLM itself caches). Still no /api response caching.
-        globIgnores: ['**/webllm-*.js'],
+        globIgnores: ['**/webllm-*.js', '**/nekopath-share-v1.png'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',
         // The SPA fallback must never swallow future API routes.

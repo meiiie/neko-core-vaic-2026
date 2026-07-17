@@ -18,6 +18,8 @@ path instead of repeating the same fixed lesson sequence.
 - [UX/UI audit and Codex–Fable execution plan](docs/UX_UI_AUDIT_AND_EXECUTION_PLAN.md)
 - [Product and UI constitution](docs/PRODUCT_UI_CONSTITUTION.md)
 - [Operational role-based MVP](docs/OPERATIONAL_MVP.md)
+- [Brand system and asset governance](docs/BRAND_SYSTEM.md)
+- [SEO and share audit](docs/SEO_AND_SHARE_AUDIT.md)
 - [Evaluation status and reproducibility](docs/EVALUATION.md)
 - [AI collaboration log](AI_COLLABORATION_LOG.csv)
 

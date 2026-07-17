@@ -23,6 +23,7 @@ nekopath-origin.34-142-197-144.sslip.io {
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
 		Strict-Transport-Security "max-age=31536000"
 	}
 

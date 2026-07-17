@@ -59,4 +59,3 @@ Any failure is **reject**.
 - License/provenance, prompt and reviewer decision are recorded.
 - `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm run test`, `npm run eval` and
   `npm run build` remain green after integration.
-

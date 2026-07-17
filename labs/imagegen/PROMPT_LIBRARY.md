@@ -99,4 +99,3 @@ Color palette: NekoPath warm paper, deep ink, teal evidence, amber review, minim
 Constraints: no numbers, letters, equations, logos, gradients, watermark or claims of success
 Avoid: AI robots, glowing brains, generic graduation caps, photorealistic students, UI screenshots
 ```
-
