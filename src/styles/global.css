@@ -2189,3 +2189,50 @@ details li {
     animation: neko-dock-in 200ms ease-out;
   }
 }
+
+/* ---------- Login refinements ---------- */
+
+.demo-account--continue {
+  border-color: var(--primary, #155eef);
+  background: var(--primary-soft, #eff4ff);
+}
+
+.login-other {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule, #e4e7ec);
+}
+
+.login-other summary {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  color: var(--muted, #667085);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-other[open] summary {
+  color: var(--ink, #101828);
+}
+
+.password-field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.password-field input {
+  flex: 1;
+}
+
+.password-toggle {
+  min-height: 2.75rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--rule-strong, #d0d5dd);
+  border-radius: 0.5rem;
+  background: var(--surface, #fff);
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--muted-strong, #475467);
+}
