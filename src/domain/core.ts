@@ -431,7 +431,7 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
       evidenceEventIds: sortedUnique(
         targetAndPrerequisites.flatMap((kcId) => mastery.get(kcId)!.evidenceEventIds),
       ),
-      nextItemId: transferItem?.id,
+      ...(transferItem ? { nextItemId: transferItem.id } : {}),
       reasonCodes: ['TARGET_AND_PREREQUISITES_MASTERED'],
     };
   }
@@ -467,16 +467,17 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
         config.ambiguityMargin
     ) {
       const competingKcIds = [best, second];
+      const nextItemId =
+        diagnosticsUsed < config.maxDiagnosticItems
+          ? selectProbe(competingKcIds, input.items, learnerEvents, mastery, config)
+          : undefined;
       return {
         ...emptyResult(input, 'NEEDS_MORE_EVIDENCE'),
         competingKcIds,
         evidenceEventIds: sortedUnique(
           competingKcIds.flatMap((kcId) => mastery.get(kcId)!.evidenceEventIds),
         ),
-        nextItemId:
-          diagnosticsUsed < config.maxDiagnosticItems
-            ? selectProbe(competingKcIds, input.items, learnerEvents, mastery, config)
-            : undefined,
+        ...(nextItemId ? { nextItemId } : {}),
         reasonCodes:
           diagnosticsUsed < config.maxDiagnosticItems
             ? ['COMPETING_ROOTS']
@@ -524,15 +525,16 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
     )
     .slice(0, 2);
   const budgetAvailable = diagnosticsUsed < config.maxDiagnosticItems;
+  const nextItemId = budgetAvailable
+    ? selectProbe(uncertainCandidates, input.items, learnerEvents, mastery, config)
+    : undefined;
   return {
     ...emptyResult(input, 'NEEDS_MORE_EVIDENCE'),
     competingKcIds: uncertainCandidates,
     evidenceEventIds: sortedUnique(
       uncertainCandidates.flatMap((kcId) => mastery.get(kcId)!.evidenceEventIds),
     ),
-    nextItemId: budgetAvailable
-      ? selectProbe(uncertainCandidates, input.items, learnerEvents, mastery, config)
-      : undefined,
+    ...(nextItemId ? { nextItemId } : {}),
     reasonCodes: budgetAvailable
       ? ['INSUFFICIENT_DIRECT_EVIDENCE', 'NO_ACTIONABLE_ROOT']
       : ['INSUFFICIENT_DIRECT_EVIDENCE', 'DIAGNOSTIC_BUDGET_EXHAUSTED'],
@@ -579,7 +581,7 @@ export function groupForTeacher(
       return {
         id,
         status,
-        rootKcId,
+        ...(rootKcId ? { rootKcId } : {}),
         learnerIds,
         sufficientEvidenceCount: members.filter(
           (member) => member.status === 'DIAGNOSED' || member.status === 'FAST_PATH',
