@@ -33,6 +33,14 @@ export default {
     if (location?.startsWith(ORIGIN)) {
       headers.set('Location', `${incoming.origin}${location.slice(ORIGIN.length)}`);
     }
+
+    const cacheControl = headers.get('Cache-Control');
+    if (
+      headers.get('Content-Type')?.toLowerCase().includes('text/html') &&
+      !cacheControl?.toLowerCase().includes('no-transform')
+    ) {
+      headers.set('Cache-Control', [cacheControl, 'no-transform'].filter(Boolean).join(', '));
+    }
     headers.set('X-NekoPath-Edge', 'cloudflare');
 
     return new Response(upstreamResponse.body, {
