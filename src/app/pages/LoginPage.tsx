@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LOCAL_PROFILES, useDemoSession } from '../demo-session';
+import { BrandMark } from '../../components/BrandMark';
+import { LOCAL_PROFILES, useSession } from '../session';
 
 /**
  * Real login against the API (session cookie). The directory of seeded demo
@@ -23,7 +24,7 @@ function destination(role: 'STUDENT' | 'TEACHER'): string {
 }
 
 export function LoginPage() {
-  const { account, ready, signIn, enterLocalMode } = useDemoSession();
+  const { account, ready, signIn, enterLocalMode } = useSession();
   const navigate = useNavigate();
   const [directory, setDirectory] = useState<DirectoryAccount[]>([]);
   const [directoryError, setDirectoryError] = useState(false);
@@ -65,7 +66,7 @@ export function LoginPage() {
     <main className="login-page">
       <section className="login-story" aria-labelledby="product-name">
         <a className="login-brand" href="/login" aria-label="NekoPath">
-          <img src="/icons/icon-192.png" alt="" width="44" height="44" />
+          <BrandMark size={44} />
           <span>NekoPath</span>
         </a>
         <div className="login-story-copy">

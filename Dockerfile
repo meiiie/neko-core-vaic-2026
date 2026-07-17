@@ -1,6 +1,11 @@
 # Build stage — pinned Node LTS per docs/IMPLEMENTATION_MASTER_PLAN.md §3
 FROM node:24.18.0-alpine AS build
 WORKDIR /app
+# The repository is intentionally excluded from the Docker context. Inject the
+# immutable source revision at build time so the in-product version screen can
+# identify the deployed artifact without shipping Git into the runtime image.
+ARG GITHUB_SHA=dev
+ENV GITHUB_SHA=${GITHUB_SHA}
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json vite.config.ts index.html eslint.config.js ./

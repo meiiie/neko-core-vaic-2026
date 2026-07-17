@@ -1,11 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
-import { useDemoSession } from '../../app/demo-session';
+import { useSession } from '../../app/session';
 import { diagnoseHero, kcName, STATUS_LABELS } from '../../app/adapters/hero-tutor';
 import { listEventsByLearner } from '../../storage/event-repository';
 
 export function StudentDashboardPage() {
-  const { account } = useDemoSession();
+  const { account } = useSession();
   const learnerId = account?.learnerId ?? 'chi';
   const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
 

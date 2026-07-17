@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: the gate only reads the repo and uploads artifacts.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.18.0 # pinned LTS — must match .nvmrc / Dockerfile
+          cache: npm
+
+      - run: npm ci
+
+      - name: Format check
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit + integration tests
+        run: npm run test
+      - name: Deterministic eval suite
+        run: npm run eval
+      - name: Production build (PWA artifacts)
+        run: npm run build
+
+      - name: Verify PWA artifact integrity
+        run: |
+          test -f dist/sw.js
+          test -f dist/manifest.webmanifest
+          grep -q '"lang":"vi"' dist/manifest.webmanifest
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist
+          retention-days: 7

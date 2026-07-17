@@ -29,7 +29,7 @@ export default tseslint.config(
   {
     // Context modules intentionally export a provider component next to its
     // hook and constants; fast-refresh granularity is not a goal there.
-    files: ['src/app/demo-session.tsx'],
+    files: ['src/app/session.tsx'],
     rules: {
       'react-refresh/only-export-components': 'off',
     },

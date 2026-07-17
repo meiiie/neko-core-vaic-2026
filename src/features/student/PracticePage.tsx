@@ -7,7 +7,7 @@ import {
   kcName,
   questionForItem,
 } from '../../app/adapters/hero-tutor';
-import { useDemoSession } from '../../app/demo-session';
+import { useSession } from '../../app/session';
 import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
 import { queueEventForSync } from '../../services/sync';
@@ -41,7 +41,7 @@ function nextQuestion(
 }
 
 export function PracticePage() {
-  const { account } = useDemoSession();
+  const { account } = useSession();
   const learnerId = account?.learnerId ?? 'chi';
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('answering');

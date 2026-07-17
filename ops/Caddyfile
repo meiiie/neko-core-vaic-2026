@@ -2,7 +2,9 @@
 # The canonical hostname is served by a Cloudflare Worker custom domain. The
 # sslip.io hostname gives that Worker an independently verifiable HTTPS origin.
 
-nekopath.holilihu.online, nekopath-origin.34-142-197-144.sslip.io {
+# Cloudflare owns the public TLS certificate for the canonical hostname. Caddy
+# terminates TLS only for the private origin hostname used by that Worker.
+nekopath-origin.34-142-197-144.sslip.io {
 	encode zstd gzip
 
 	# Never let intermediaries cache the SW-critical trio.
@@ -14,11 +16,14 @@ nekopath.holilihu.online, nekopath-origin.34-142-197-144.sslip.io {
 	header @hashed Cache-Control "public, max-age=31536000, immutable"
 
 	header {
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# connect-src allows Hugging Face + GitHub raw for the ONE-TIME WebLLM
+		# Gemma weight download (cached after; inference is fully offline).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; font-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		X-Frame-Options "DENY"
+		X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
 		Strict-Transport-Security "max-age=31536000"
 	}
 

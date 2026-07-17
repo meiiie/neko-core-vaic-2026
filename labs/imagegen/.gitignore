@@ -1,0 +1,7 @@
+# Raw visual drafts are local research material. Promote only reviewed, purpose-bound assets.
+generated/*
+!generated/.gitkeep
+
+# Ephemeral browser and external-audit captures; the reviewed conclusion belongs in docs.
+current-*.png
+seo-pagespeed-*.json

@@ -1,0 +1,32 @@
+/* NekoPath product identity. See docs/BRAND_SYSTEM.md. */
+:root {
+  --canvas: #f4f0e6;
+  --surface: #fffcf5;
+  --surface-subtle: #f8f4ec;
+  --ink: #17211d;
+  --muted: #5b625d;
+  --muted-strong: #424a45;
+  --rule: #d8d0c0;
+  --rule-strong: #c9bdab;
+  --primary: #006b61;
+  --primary-hover: #00564e;
+  --primary-soft: #e5f4ef;
+  --evidence: #006b61;
+  --evidence-soft: #e5f4ef;
+  --review: #9a5a00;
+  --review-soft: #fff4dc;
+  --focus: #1358be;
+}
+
+.brand-mark {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.login-brand .brand-mark {
+  box-sizing: border-box;
+  padding: var(--s-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}

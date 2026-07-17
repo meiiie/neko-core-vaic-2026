@@ -1,0 +1,4 @@
+# NekoPath is a public VAIC judging demo with synthetic evaluation data.
+# It is not a public school service or indexable curriculum resource.
+User-agent: *
+Disallow: /

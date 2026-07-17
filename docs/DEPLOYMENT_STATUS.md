@@ -1,104 +1,74 @@
-# Báo cáo triển khai & chuẩn hóa tên miền — gửi Codex
+# NekoPath deployment status
 
-Ngày: 2026-07-17 · Soạn: Fable 5, xác minh: Codex · Trạng thái: **VPS full-stack đã sẵn sàng; chờ cắt một DNS record từ Pages sang VPS**
+Ngày xác minh: 2026-07-17 · Trạng thái: **production full-stack đang live**.
 
-## 1. Kết luận nhanh
+## Canonical production route
 
-- **Domain chuẩn duy nhất: `https://nekopath.holilihu.online`** — đã được gắn vào project
-  Cloudflare Pages `nekopath-vaic` (custom domain có sẵn trong project) và **đang phục vụ đúng
-  bản build mới nhất**.
-- Tình trạng "2 bản deployment khác nhau" **đã chấm dứt** tại thời điểm báo cáo: cả ba URL dưới
-  đây trả về cùng một bundle `assets/index-CQWqmXmz.js` (build của commit `4cced7c`, chính là
-  `origin/main` hiện tại):
+`https://nekopath.holilihu.online` là URL duy nhất dùng trong README, slide, video demo và form nộp bài.
 
-| URL | Vai trò | Trạng thái |
-|---|---|---|
-| `nekopath.holilihu.online` | **CANONICAL — dùng cho mọi truyền thông/nộp bài** | 200, bundle `index-CQWqmXmz` |
-| `nekopath-vaic.pages.dev` | Production Pages gốc (giữ làm hạ tầng, không quảng bá) | 200, cùng bundle |
-| `fable-pwa-shell.nekopath-vaic.pages.dev` | Preview alias theo branch (chỉ nội bộ) | 200, cùng bundle |
+```text
+Browser
+  → Cloudflare Worker custom domain (nekopath-edge)
+  → HTTPS origin: nekopath-origin.34-142-197-144.sslip.io
+  → Caddy + NekoPath app trên GCP VM
+```
 
-## 2. Bản đang live chứa gì (commit `4cced7c`, main)
+- Worker version đang live: `2738e858-6bde-4e1c-bd46-32c461f55276`.
+- Worker thêm header `X-NekoPath-Edge: cloudflare`; đây là dấu hiệu kiểm tra routing nhanh.
+- Cloudflare quản lý DNS record và chứng thư edge cho custom domain. Không tự tạo A/CNAME song song cho hostname `nekopath`.
+- Origin dùng hostname `sslip.io` có chứng thư riêng; Caddy **không** cấp/chấm dứt TLS cho hostname canonical nữa.
+- `https://nekopath-vaic.pages.dev` vẫn giữ làm recovery artifact local-first, nhưng không quảng bá ra ngoài.
 
-Đăng nhập tài khoản mẫu theo vai trò → sidebar workspace; học sinh: bài kiểm tra thích ứng,
-vòng luyện tập mastery-driven (misconception notes + hint 3 bậc), bài được giao, lộ trình; giáo
-viên: tổng quan lớp, nhóm can thiệp, ngân hàng câu hỏi, giao bài; sync outbox kiểu LMS; LLM
-harness L1 (mock profile). Vì Pages là static không có API, app tự chuyển **chế độ cục bộ**
-(recovery artifact đúng contract): thông điệp trung thực + 5 hồ sơ local, toàn bộ lõi chẩn
-đoán/luyện tập/dashboard chạy đầy đủ trên thiết bị.
-
-## 3. Quy ước từ bây giờ (đề nghị thống nhất)
-
-1. **Mọi nơi hiển thị URL** (README, slide, video, form nộp bài, platform BTC) chỉ dùng
-   `https://nekopath.holilihu.online`. Không đưa `*.pages.dev` ra ngoài.
-2. **Chỉ deploy production từ `main`**: `npx wrangler pages deploy dist
-   --project-name=nekopath-vaic --branch=main`. Preview alias theo branch chỉ để review nội bộ.
-3. Khi VPS full-stack sẵn sàng (image + `ops/compose.yml` + `ops/Caddyfile` đã trỏ đúng
-   `nekopath.holilihu.online` trong repo): **cắt DNS của đúng record này sang VPS**. Cùng
-   origin nên service worker/IndexedDB của người dùng giữ nguyên; app tự "tỉnh dậy" với API
-   thật (login server, giao bài, sync) mà không cần deploy lại client. Pages giữ nguyên làm
-   recovery: nếu VPS sự cố, trỏ DNS về Pages là sản phẩm vẫn sống ở chế độ cục bộ.
-
-## 4. DNS và TLS đã xác minh
-
-Kiểm tra ngày 2026-07-17 cho thấy:
-
-| Hạng mục | Trạng thái xác minh |
-|---|---|
-| Zone | `holilihu.online`, authoritative nameserver: `courtney.ns.cloudflare.com` và `marek.ns.cloudflare.com` |
-| Record được tạo ban đầu | `CNAME nekopath → nekopath-vaic.pages.dev`, TTL Auto; ảnh cấu hình do captain cung cấp ghi nhận `DNS only` tại thời điểm tạo |
-| Phân giải công khai hiện tại | A: `104.21.41.24`, `172.67.159.16`; AAAA: `2606:4700:3031::6815:2918`, `2606:4700:3031::ac43:9f10` |
-| Pages custom domain | `active`; domain verification `active` |
-| Chứng thư | `active`, HTTP validation, Google Trust Services (`CN=WE1`), hostname `nekopath.holilihu.online` |
-| Hiệu lực chứng thư quan sát | 2026-07-17 10:08:37Z → 2026-10-15 11:08:34Z; Cloudflare/Pages tự quản lý gia hạn |
-| Kết nối kiểm tra | HTTP 200, `server: cloudflare`, TLS 1.3, HTTP/3 được quảng bá qua `alt-svc` |
-| Zone SSL/TLS encryption mode | **Chưa quan sát được**: Wrangler OAuth hiện có Pages access nhưng Cloudflare Zone Settings API trả 403. Không suy đoán Flexible/Full/Strict từ chứng thư edge. |
-
-Lưu ý: địa chỉ A/AAAA là edge Cloudflare và không chứng minh riêng trạng thái nút proxy của record.
-Trước khi cắt sang VPS, người vận hành phải mở Cloudflare Dashboard, chụp lại record hiện hành và
-đặt SSL/TLS mode thành **Full (strict)** sau khi Caddy đã cấp chứng thư hợp lệ; không chuyển DNS nếu
-`/api/healthz`, đăng nhập, giao bài và đồng bộ chưa qua smoke test trực tiếp trên VPS.
-
-README và baseline UX đã được đổi sang domain chuẩn. Các URL `*.pages.dev` chỉ còn xuất hiện trong
-tài liệu vận hành với vai trò origin/recovery hoặc preview nội bộ.
-
-## 5. Kiểm chứng đã thực hiện (bằng lệnh, không suy đoán)
-
-- `wrangler pages project list` → project `nekopath-vaic` có domains: `nekopath-vaic.pages.dev`,
-  `nekopath.holilihu.online`.
-- HTTP 200 + so khớp hash bundle trên cả 3 URL (bảng trên).
-- Ảnh chụp headless bản live xác nhận chế độ cục bộ hiển thị đúng khi không có API.
-
-## 6. VPS full-stack đã triển khai
+## Hạ tầng GCP
 
 | Hạng mục | Giá trị |
 |---|---|
-| GCP project | `the-wiii-lab-500306` |
+| Project | `the-wiii-lab-500306` |
 | VM | `nekopath-production` · `asia-southeast1-c` · `e2-medium` · Debian 12 |
 | IP tĩnh | `34.142.197.144` (`nekopath-production-ip`) |
-| Disk | 20 GB persistent disk; dữ liệu SQLite và chứng thư Caddy dùng Docker named volume |
-| Quyền máy | Không gắn service account, không OAuth scope; Shielded VM bật Secure Boot, vTPM và integrity monitoring |
-| Network | Tag `nekopath-web`; public ingress chỉ dành cho TCP 80/443 và UDP 443 qua rule riêng |
-| Release | `main` tại commit `3a83c50b706ad868d5bb7158d8e0c0968c006af7` |
-| Runtime | Docker Engine 29.6.2 · Docker Compose 5.3.1 · `app` + `caddy` |
+| Ứng dụng | `/opt/nekopath` · Docker Compose (`app`, `caddy`) |
+| Lưu trữ | 20 GB persistent disk; SQLite và Caddy state dùng Docker named volumes |
+| Network | Firewall chỉ mở TCP 80/443 và UDP 443 với tag `nekopath-web` |
+| Backup trước cutover | `/var/backups/nekopath/data-pre-cutover-20260717.tgz` |
 
-Các gate đã đạt trước cutover:
+Không copy FPT/API key hoặc `.env` cá nhân lên host. Bản hiện tại chạy deterministic core và mock LLM profile; chỉ bật inference server-side sau gate đánh giá riêng.
 
-- local: format, lint, typecheck, 66 test, 23 deterministic eval, production build;
-- container build: typecheck, 43 test, PWA production build;
-- runtime: cả `app` và `caddy` đều `healthy`, `/api/healthz` trả 200;
-- functional smoke: frontend + manifest, directory 5 tài khoản mẫu, từ chối sai mật khẩu,
-  cookie `HttpOnly`/`Secure`/`SameSite=Lax`, phiên giáo viên, roster 40 học sinh, bank 12 câu,
-  phiên học sinh, RBAC 403 và danh sách bài được giao.
+## Bằng chứng kiểm tra sau cutover
 
-## 7. Cutover còn lại
+Smoke test trực tiếp trên canonical domain đã đạt:
 
-Wrangler OAuth không có quyền `DNS Write`, còn bridge Chrome lỗi trước khi mở Dashboard. Captain cần sửa
-duy nhất record `nekopath` trong Cloudflare DNS:
+- `GET /api/healthz` → `200`, `status: ok`;
+- header `X-NekoPath-Edge: cloudflare` có mặt;
+- password sai bị từ chối (`401`);
+- giáo viên `co.ha` đăng nhập thành công;
+- cookie có `HttpOnly`, `Secure`, `SameSite=Lax`;
+- phiên `/api/auth/me` và `POST /api/auth/logout` hoạt động (`200`).
 
-1. thay `CNAME nekopath → nekopath-vaic.pages.dev` bằng `A nekopath → 34.142.197.144`;
-2. đặt **DNS only** và TTL Auto trong lúc Caddy lấy chứng thư;
-3. sau khi HTTPS origin được xác minh, có thể bật proxy và đặt SSL/TLS thành **Full (strict)**.
+Trước khi deploy, gate local đã đạt lint, typecheck, 69 tests, 23 deterministic eval và Wrangler dry-run.
 
-Rollback tức thời nếu origin gặp sự cố: trả record về
-`CNAME nekopath → nekopath-vaic.pages.dev`; Pages vẫn giữ nguyên recovery artifact local-first.
-Các lệnh deploy, kiểm tra, backup và rollback chi tiết nằm ở `ops/RUNBOOK.md`.
+## Quy ước vận hành
+
+1. Production chỉ xuất phát từ `main`; không deploy preview branch lên hostname canonical.
+2. Sau mỗi thay đổi server/ops: deploy VM trước, smoke test origin, rồi smoke test canonical URL.
+3. Không đổi `nekopath.holilihu.online` trong tài liệu hoặc pitch. Chỉ đổi route phía sau hostname khi recovery cần thiết.
+4. Mọi thay đổi hạ tầng, source commit, smoke result và rollback phải ghi vào AI collaboration log.
+
+## Brand and metadata release (2026-07-18 ICT)
+
+- Source release: `94e0e9f` (`fix(ops): preserve deployed build provenance`), after brand commit `b3ff0c7`.
+- GitHub Actions CI run `29601836947` passed: format, lint, typecheck, tests, deterministic evaluations, production PWA build and artifact integrity.
+- The VM rebuilt the release in Docker: `56/56` application tests passed, the PWA precache contains 16 entries / 683.45 KiB, and both `app` and `caddy` returned healthy.
+- Production artifact provenance was checked inside the running container: the client bundle embeds `94e0e9f`, rather than a fallback `dev` label.
+- Canonical smoke checks passed at `https://nekopath.holilihu.online`: HTTP 200; `X-NekoPath-Edge: cloudflare`; `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`; canonical, Open Graph and Twitter metadata; manifest and NekoPath PWA icons; PNG logo mark and 1200x630 social share image.
+
+The no-index policy is intentional: this public judging demo contains synthetic classroom data and is not presented as a real school service or public curriculum resource.
+
+## Recovery
+
+Nếu VM/origin không thể khôi phục kịp thời, giữ nguyên canonical hostname nhưng thực hiện theo thứ tự:
+
+1. Gỡ Worker custom-domain binding cho `nekopath.holilihu.online` trong Cloudflare;
+2. thêm lại hostname vào Pages project `nekopath-vaic` làm custom domain;
+3. chờ Cloudflare xác nhận active, rồi smoke test trang Pages và local-first mode.
+
+Không thêm một A/CNAME thủ công khi Worker custom domain còn tồn tại. Khi chuyển lại Worker, deploy lại `edge/wrangler.jsonc`; Cloudflare sẽ quản lý record/certificate. Chi tiết vận hành còn lại ở `ops/RUNBOOK.md`.

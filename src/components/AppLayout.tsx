@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useDemoSession, type DemoRole } from '../app/demo-session';
+import { useSession, type Role } from '../app/session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { registerSyncTriggers } from '../services/sync';
 import { OnlineStatusBadge } from './OnlineStatusBadge';
 import { SyncBadge } from './SyncBadge';
+import { BrandMark } from './BrandMark';
+
+const NekoDock = lazy(async () => {
+  const module = await import('./NekoDock');
+  return { default: module.NekoDock };
+});
 
 interface NavItem {
   readonly to: string;
@@ -13,7 +19,7 @@ interface NavItem {
   readonly end?: boolean;
 }
 
-const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
+const NAVIGATION: Record<Role, readonly NavItem[]> = {
   STUDENT: [
     { to: '/student', label: 'Tổng quan', index: '01', end: true },
     { to: '/student/check-in', label: 'Bài kiểm tra', index: '02' },
@@ -32,7 +38,7 @@ const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
 const MOBILE_NAVIGATION_QUERY = '(max-width: 52rem)';
 
 export function AppLayout() {
-  const { account, signOut } = useDemoSession();
+  const { account, signOut } = useSession();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(
@@ -55,6 +61,10 @@ export function AppLayout() {
     closeMobileNavigation(false);
     window.requestAnimationFrame(() => mainRef.current?.focus());
   }, [closeMobileNavigation, isMobile]);
+  const [nekoOpen, setNekoOpen] = useState(
+    () => window.localStorage.getItem('nekopath.neko-dock.open') === '1',
+  );
+  const [nekoLoaded, setNekoLoaded] = useState(nekoOpen);
 
   useEffect(() => {
     registerSyncTriggers();
@@ -127,13 +137,27 @@ export function AppLayout() {
     menuButtonRef.current?.focus();
   }, [mobileOpen]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('nekopath.neko-dock.open', nekoOpen ? '1' : '0');
+    } catch {
+      // Preference only; losing it is harmless.
+    }
+  }, [nekoOpen]);
+
   if (!account) return null;
+  const isTeacher = account.role === 'TEACHER';
   const home = account.role === 'STUDENT' ? '/student' : '/teacher';
   const closedMobileTabIndex = isMobile && !mobileOpen ? -1 : undefined;
 
   function exitWorkspace() {
     signOut();
     navigate('/login', { replace: true });
+  }
+
+  function toggleNeko() {
+    setNekoLoaded(true);
+    setNekoOpen((open) => !open);
   }
 
   return (
@@ -144,7 +168,7 @@ export function AppLayout() {
 
       <header className="mobile-header" inert={isMobile && mobileOpen ? true : undefined}>
         <NavLink className="brand-lockup" to={home}>
-          <img src="/icons/icon-192.png" alt="" width="36" height="36" />
+          <BrandMark size={36} />
           <span>NekoPath</span>
         </NavLink>
         <button
@@ -176,7 +200,7 @@ export function AppLayout() {
             tabIndex={closedMobileTabIndex}
             onClick={selectMobileRoute}
           >
-            <img src="/icons/icon-192.png" alt="" width="40" height="40" />
+            <BrandMark size={40} />
             <span>
               <strong>NekoPath</strong>
               <small>{account.role === 'STUDENT' ? 'Cổng học sinh' : 'Cổng giáo viên'}</small>
@@ -239,17 +263,37 @@ export function AppLayout() {
         onClick={() => closeMobileNavigation(true)}
       />
 
-      <div className="product-workspace" inert={isMobile && mobileOpen ? true : undefined}>
+      <div
+        className="product-workspace"
+        data-neko-open={(isTeacher && nekoOpen) || undefined}
+        inert={isMobile && mobileOpen ? true : undefined}
+      >
         <header className="workspace-status">
           <span className="environment-label">Dữ liệu mẫu</span>
           <SyncBadge />
           <OnlineStatusBadge />
+          {isTeacher ? (
+            <button
+              type="button"
+              className="neko-toggle"
+              aria-pressed={nekoOpen}
+              onClick={toggleNeko}
+            >
+              ✦ Neko
+            </button>
+          ) : null}
         </header>
         <UpdatePrompt />
         <main ref={mainRef} id="main-content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
+
+      {isTeacher && nekoLoaded ? (
+        <Suspense fallback={null}>
+          <NekoDock open={nekoOpen} onClose={() => setNekoOpen(false)} />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

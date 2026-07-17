@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installApiStub } from '../test/api-stub';
-import { DemoSessionProvider, useDemoSession } from './demo-session';
+import { SessionProvider, useSession } from './session';
 
 function Probe() {
-  const { account, ready, signIn, signOut } = useDemoSession();
+  const { account, ready, signIn, signOut } = useSession();
   return (
     <div>
       <output data-testid="ready">{String(ready)}</output>
@@ -29,9 +29,9 @@ describe('API-backed session', () => {
   it('starts signed-out when the server has no session', async () => {
     installApiStub(null);
     render(
-      <DemoSessionProvider>
+      <SessionProvider>
         <Probe />
-      </DemoSessionProvider>,
+      </SessionProvider>,
     );
     await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
     expect(screen.getByTestId('who').textContent).toBe('none');
@@ -40,9 +40,9 @@ describe('API-backed session', () => {
   it('signs in with real credentials, caches identity, rejects bad passwords', async () => {
     installApiStub(null);
     render(
-      <DemoSessionProvider>
+      <SessionProvider>
         <Probe />
-      </DemoSessionProvider>,
+      </SessionProvider>,
     );
     await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
 
@@ -78,9 +78,9 @@ describe('API-backed session', () => {
       }),
     );
     render(
-      <DemoSessionProvider>
+      <SessionProvider>
         <Probe />
-      </DemoSessionProvider>,
+      </SessionProvider>,
     );
     await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
     expect(screen.getByTestId('who').textContent).toBe('STUDENT:An');

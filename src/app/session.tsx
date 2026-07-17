@@ -14,11 +14,11 @@ import {
  * last confirmed identity is cached locally so an already-signed-in device can
  * keep practising without the network; any write still syncs when back online.
  */
-export type DemoRole = 'STUDENT' | 'TEACHER';
+export type Role = 'STUDENT' | 'TEACHER';
 
-export interface DemoAccount {
+export interface Account {
   readonly id: string;
-  readonly role: DemoRole;
+  readonly role: Role;
   readonly name: string;
   readonly initials: string;
   readonly shortName: string;
@@ -28,7 +28,7 @@ export interface DemoAccount {
 
 interface ApiUser {
   id: string;
-  role: DemoRole;
+  role: Role;
   name: string;
   initials: string;
   shortName: string;
@@ -36,7 +36,7 @@ interface ApiUser {
   learnerProfile: string | null;
 }
 
-function toAccount(user: ApiUser): DemoAccount {
+function toAccount(user: ApiUser): Account {
   const profile = user.learnerProfile;
   return {
     id: user.id,
@@ -52,8 +52,8 @@ function toAccount(user: ApiUser): DemoAccount {
   };
 }
 
-export interface DemoSessionState {
-  readonly account: DemoAccount | null;
+export interface SessionState {
+  readonly account: Account | null;
   readonly ready: boolean;
   readonly signIn: (username: string, password: string) => Promise<string | null>;
   /** Server-less entry (static/recovery deploy): local synthetic profiles only. */
@@ -62,7 +62,7 @@ export interface DemoSessionState {
 }
 
 /** Built-in profiles for the no-server recovery mode. Synthetic, like the seed. */
-export const LOCAL_PROFILES: readonly DemoAccount[] = [
+export const LOCAL_PROFILES: readonly Account[] = [
   {
     id: 'local-teacher-ha',
     role: 'TEACHER',
@@ -111,16 +111,16 @@ export const LOCAL_PROFILES: readonly DemoAccount[] = [
 
 const CACHE_KEY = 'nekopath.session-cache.v1';
 
-function readCache(): DemoAccount | null {
+function readCache(): Account | null {
   try {
     const raw = window.localStorage.getItem(CACHE_KEY);
-    return raw ? (JSON.parse(raw) as DemoAccount) : null;
+    return raw ? (JSON.parse(raw) as Account) : null;
   } catch {
     return null;
   }
 }
 
-function writeCache(account: DemoAccount | null): void {
+function writeCache(account: Account | null): void {
   try {
     if (account) window.localStorage.setItem(CACHE_KEY, JSON.stringify(account));
     else window.localStorage.removeItem(CACHE_KEY);
@@ -129,10 +129,10 @@ function writeCache(account: DemoAccount | null): void {
   }
 }
 
-const DemoSessionContext = createContext<DemoSessionState | null>(null);
+const DemoSessionContext = createContext<SessionState | null>(null);
 
-export function DemoSessionProvider({ children }: { children: ReactNode }) {
-  const [account, setAccount] = useState<DemoAccount | null>(null);
+export function SessionProvider({ children }: { children: ReactNode }) {
+  const [account, setAccount] = useState<Account | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -149,6 +149,10 @@ export function DemoSessionProvider({ children }: { children: ReactNode }) {
         } else if (response.status === 401) {
           setAccount(null);
           writeCache(null);
+        } else {
+          // Server unhealthy (5xx / proxy error): behave like offline and
+          // keep the cached identity so local-first work can continue.
+          setAccount(readCache());
         }
       } catch {
         // Network unreachable: fall back to the cached identity so the
@@ -201,7 +205,7 @@ export function DemoSessionProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo<DemoSessionState>(
+  const value = useMemo<SessionState>(
     () => ({ account, ready, signIn, enterLocalMode, signOut }),
     [account, ready, signIn, enterLocalMode, signOut],
   );
@@ -209,8 +213,8 @@ export function DemoSessionProvider({ children }: { children: ReactNode }) {
   return <DemoSessionContext.Provider value={value}>{children}</DemoSessionContext.Provider>;
 }
 
-export function useDemoSession(): DemoSessionState {
+export function useSession(): SessionState {
   const context = useContext(DemoSessionContext);
-  if (!context) throw new Error('useDemoSession must be used inside <DemoSessionProvider>');
+  if (!context) throw new Error('useSession must be used inside <SessionProvider>');
   return context;
 }
