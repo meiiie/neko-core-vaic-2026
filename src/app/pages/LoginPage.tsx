@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LOCAL_PROFILES, useDemoSession } from '../demo-session';
+import { LOCAL_PROFILES, useSession } from '../session';
 
 /**
  * Real login against the API (session cookie). The directory of seeded demo
@@ -23,7 +23,7 @@ function destination(role: 'STUDENT' | 'TEACHER'): string {
 }
 
 export function LoginPage() {
-  const { account, ready, signIn, enterLocalMode } = useDemoSession();
+  const { account, ready, signIn, enterLocalMode } = useSession();
   const navigate = useNavigate();
   const [directory, setDirectory] = useState<DirectoryAccount[]>([]);
   const [directoryError, setDirectoryError] = useState(false);

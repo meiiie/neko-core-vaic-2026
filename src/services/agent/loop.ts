@@ -60,6 +60,7 @@ export async function runAgent(
     { role: 'system', content: AGENT_SYSTEM_PROMPT },
     { role: 'user', content: question },
   ];
+  const seenCalls = new Set<string>();
 
   for (let step = 1; step <= MAX_STEPS; step++) {
     const completion = await provider.complete(messages, tools, signal);
@@ -71,12 +72,31 @@ export async function runAgent(
       return answer;
     }
 
-    for (const call of completion.toolCalls) {
+    // Stuck-loop guard (NekoCore trait): the exact same call twice means the
+    // brain is spinning — stop and report the facts gathered so far.
+    const keys = completion.toolCalls.map((call) => `${call.name}:${JSON.stringify(call.args)}`);
+    if (keys.some((key) => seenCalls.has(key))) {
+      const stuck = 'Bộ não lặp lại cùng một lệnh công cụ — dừng để tránh vòng lặp vô ích.';
+      onTrace({ kind: 'note', text: stuck });
+      return stuck;
+    }
+    keys.forEach((key) => seenCalls.add(key));
+
+    // Every tool is read-only, so a batch fans out in parallel (NekoCore's
+    // read-only tool fan-out).
+    completion.toolCalls.forEach((call) => {
       onTrace({ kind: 'tool_call', name: call.name, args: call.args });
-      const tool = toolByName(call.name);
-      const result = tool
-        ? await tool.run(call.args)
-        : { ok: false, error: `Không có công cụ ${call.name}.` };
+    });
+    const results = await Promise.all(
+      completion.toolCalls.map(async (call) => {
+        const tool = toolByName(call.name);
+        return tool
+          ? await tool.run(call.args)
+          : { ok: false as const, error: `Không có công cụ ${call.name}.` };
+      }),
+    );
+    completion.toolCalls.forEach((call, index) => {
+      const result = results[index];
       const payload = JSON.stringify(result);
       onTrace({
         kind: 'tool_result',
@@ -90,7 +110,7 @@ export async function runAgent(
         toolName: call.name,
       });
       messages.push({ role: 'tool', content: payload, toolName: call.name });
-    }
+    });
   }
 
   const fallback =

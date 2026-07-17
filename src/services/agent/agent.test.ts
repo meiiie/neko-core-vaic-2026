@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
-import { runAgent, type AgentProvider, type AgentTraceEvent } from './loop';
+import { runAgent, type AgentProvider, type AgentToolCall, type AgentTraceEvent } from './loop';
 import { OpenAiCompatAgentProvider, RuleBasedProvider } from './providers';
 import { AGENT_TOOLS, toolByName } from './tools';
 
@@ -56,7 +56,7 @@ describe('agent loop with the rule-based brain', () => {
     expect(answer).toContain('tổng quan lớp');
   });
 
-  it('caps a runaway provider at the step budget', async () => {
+  it('stops a spinning provider that repeats the same tool call (stuck guard)', async () => {
     const looping: AgentProvider = {
       id: 'loop',
       label: 'loop',
@@ -67,8 +67,31 @@ describe('agent loop with the rule-based brain', () => {
     };
     const { events, onTrace } = collect();
     const answer = await runAgent('vòng lặp', looping, AGENT_TOOLS, onTrace);
+    expect(answer).toContain('lặp lại cùng một lệnh');
+    expect(events.filter((e) => e.kind === 'tool_call')).toHaveLength(1);
+  });
+
+  it('caps distinct-call chatter at the step budget and fans out batches in parallel', async () => {
+    let step = 0;
+    const chatty: AgentProvider = {
+      id: 'chatty',
+      label: 'chatty',
+      complete: async () => {
+        step += 1;
+        const toolCalls: AgentToolCall[] = [
+          { name: 'giai_thich_kien_thuc', args: { kc: `K0${step}` } },
+          {
+            name: 'chan_doan_hoc_sinh',
+            args: { hoc_sinh: ['an', 'binh', 'chi', 'minh'][step - 1] ?? 'an' },
+          },
+        ];
+        return { content: null, toolCalls };
+      },
+    };
+    const { events, onTrace } = collect();
+    const answer = await runAgent('nói nhiều', chatty, AGENT_TOOLS, onTrace);
     expect(answer).toContain('giới hạn số bước');
-    expect(events.filter((e) => e.kind === 'tool_call')).toHaveLength(4);
+    expect(events.filter((e) => e.kind === 'tool_call')).toHaveLength(8); // 4 bước × 2 tool song song
   });
 });
 

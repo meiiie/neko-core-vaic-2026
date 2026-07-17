@@ -6,22 +6,21 @@ import { LearnPage } from '../features/student/LearnPage';
 import { PracticePage } from '../features/student/PracticePage';
 import { StudentDashboardPage } from '../features/student/StudentDashboardPage';
 import { SystemPage } from '../features/system/SystemPage';
-import { ConsolePage } from '../features/teacher/ConsolePage';
 import { TeacherAssignmentsPage } from '../features/teacher/TeacherAssignmentsPage';
 import { TeacherClassPage } from '../features/teacher/TeacherClassPage';
 import { TeacherPage } from '../features/teacher/TeacherPage';
 import { TeacherQuestionsPage } from '../features/teacher/TeacherQuestionsPage';
-import { DemoSessionProvider, useDemoSession, type DemoRole } from './demo-session';
+import { SessionProvider, useSession, type Role } from './session';
 import { LoginPage } from './pages/LoginPage';
 
 function RequireSession() {
-  const { account, ready } = useDemoSession();
+  const { account, ready } = useSession();
   if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
   return account ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
-function RequireRole({ role }: { role: DemoRole }) {
-  const { account, ready } = useDemoSession();
+function RequireRole({ role }: { role: Role }) {
+  const { account, ready } = useSession();
   if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
   if (!account) return <Navigate to="/login" replace />;
   if (account.role !== role) {
@@ -31,14 +30,14 @@ function RequireRole({ role }: { role: DemoRole }) {
 }
 
 function WorkspaceHome() {
-  const { account, ready } = useDemoSession();
+  const { account, ready } = useSession();
   if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
   if (!account) return <Navigate to="/login" replace />;
   return <Navigate to={account.role === 'STUDENT' ? '/student' : '/teacher'} replace />;
 }
 
 function NotFoundPage() {
-  const { account } = useDemoSession();
+  const { account } = useSession();
   const home = account?.role === 'TEACHER' ? '/teacher' : '/student';
   return (
     <section className="empty-state">
@@ -54,7 +53,7 @@ function NotFoundPage() {
 
 export function App() {
   return (
-    <DemoSessionProvider>
+    <SessionProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireSession />}>
@@ -73,13 +72,12 @@ export function App() {
               <Route path="teacher/class" element={<TeacherClassPage />} />
               <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
               <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
-              <Route path="teacher/console" element={<ConsolePage />} />
             </Route>
             <Route path="system" element={<SystemPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>
       </Routes>
-    </DemoSessionProvider>
+    </SessionProvider>
   );
 }

@@ -1912,3 +1912,81 @@ details li {
     }
   }
 }
+
+/* ---------- Neko dock (right-hand agent panel) ---------- */
+
+.neko-toggle {
+  margin-left: 0.5rem;
+  padding: 0.375rem 0.875rem;
+  border: 1px solid var(--rule-strong, #d0d5dd);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--ink, #101828);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.neko-toggle[aria-pressed='true'] {
+  border-color: #0c1220;
+  background: #0c1220;
+  color: #6ee7b7;
+}
+
+.neko-dock {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  width: min(26rem, 100vw);
+  flex-direction: column;
+  border-left: 1px solid #1f2937;
+  background: #0c1220;
+  color: #d7e2f4;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, 'Courier New', monospace;
+  font-size: 0.8125rem;
+  box-shadow: -1rem 0 2.5rem rgb(2 6 23 / 30%);
+}
+
+.neko-dock .console-log {
+  flex: 1;
+  height: auto;
+}
+
+.dock-close {
+  min-height: 2rem;
+  margin-left: auto;
+  padding: 0.125rem 0.5rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.dock-close:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+
+/* Desktop: dock pushes the workspace instead of covering it. */
+@media (min-width: 75rem) {
+  .product-workspace[data-neko-open] {
+    margin-right: 26rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .neko-dock {
+    animation: neko-dock-in 200ms ease-out;
+  }
+
+  @keyframes neko-dock-in {
+    from {
+      transform: translateX(1.5rem);
+      opacity: 0;
+    }
+  }
+}

@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { runAgent, type AgentProvider, type AgentTraceEvent } from '../../services/agent/loop';
-import { AGENT_PROVIDERS } from '../../services/agent/providers';
-import { AGENT_TOOLS, toolByName } from '../../services/agent/tools';
+import { runAgent, type AgentProvider, type AgentTraceEvent } from '../services/agent/loop';
+import { AGENT_PROVIDERS } from '../services/agent/providers';
+import { AGENT_TOOLS, toolByName } from '../services/agent/tools';
+
+/**
+ * Neko — the classroom agent as a right-hand dock (Cursor/Copilot pattern):
+ * always one keystroke away, never a separate destination. Same NekoCore-style
+ * loop underneath; every number in an answer traces to a tool result shown in
+ * the transcript.
+ */
 
 interface ConsoleLine {
   readonly id: number;
@@ -10,9 +17,9 @@ interface ConsoleLine {
 }
 
 const BANNER = [
-  'NekoCore Console — trợ lý lớp học (thử nghiệm)',
+  'Neko — trợ lý lớp học (thử nghiệm)',
   'Mọi con số đều đến từ công cụ deterministic; model chỉ diễn đạt.',
-  'Gõ /help để xem lệnh, hoặc hỏi tự nhiên: "Chẩn đoán của bạn An?"',
+  'Gõ /help, hoặc hỏi tự nhiên: "Chẩn đoán của bạn An?"',
 ];
 
 const HELP_TEXT = [
@@ -22,7 +29,7 @@ const HELP_TEXT = [
   '/baigiao        — bài đã giao và tiến độ nộp (cần mạng)',
   '/model <id>     — đổi bộ não: rule | local (Ollama/Gemma)',
   '/clear          — xóa màn hình',
-  'Câu hỏi tự nhiên sẽ chạy vòng lặp agent: gọi công cụ → quan sát → trả lời.',
+  'Câu hỏi tự nhiên chạy vòng lặp agent: gọi công cụ → quan sát → trả lời.',
 ];
 
 let lineId = 0;
@@ -31,7 +38,7 @@ function line(type: ConsoleLine['type'], text: string): ConsoleLine {
   return { id: lineId, type, text };
 }
 
-export function ConsolePage() {
+export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [lines, setLines] = useState<ConsoleLine[]>(BANNER.map((text) => line('info', text)));
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,6 +51,16 @@ export function ConsolePage() {
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [lines]);
+
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   function append(...next: ConsoleLine[]) {
     setLines((previous) => [...previous, ...next]);
@@ -145,66 +162,54 @@ export function ConsolePage() {
     }
   }
 
+  if (!open) return null;
+
   return (
-    <div className="page-stack">
-      <header className="page-heading">
-        <p className="eyebrow">Thử nghiệm</p>
-        <h1>Neko Console</h1>
-        <p>
-          Trợ lý lớp học kiểu terminal: hỏi tự nhiên hoặc dùng lệnh. Bộ não hiện tại:{' '}
-          <strong>{provider.label}</strong>. Mọi số liệu lấy từ công cụ deterministic — model không
-          được phép bịa.
-        </p>
-      </header>
-
-      <section className="neko-console" aria-label="Neko Console">
-        <div className="console-titlebar" aria-hidden="true">
-          <span className="console-dot" />
-          <span className="console-dot" />
-          <span className="console-dot" />
-          <span className="console-title">neko@7a — trợ lý lớp học</span>
-        </div>
-        <div className="console-log" ref={logRef} role="log" aria-live="polite">
-          {lines.map((entry) => (
-            <p key={entry.id} className={`console-line console-line--${entry.type}`}>
-              {entry.text}
-            </p>
-          ))}
-          {busy ? <p className="console-line console-line--info">…</p> : null}
-        </div>
-        <form
-          className="console-input-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const value = input;
-            setInput('');
-            void execute(value);
-          }}
-        >
-          <label className="console-prompt" htmlFor="console-input">
-            neko&gt;
-          </label>
-          <input
-            id="console-input"
-            ref={inputRef}
-            autoComplete="off"
-            spellCheck={false}
-            disabled={busy}
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder='thử: "Hôm nay nên dạy lại gì?" hoặc /help'
-          />
-          <button className="button-primary" type="submit" disabled={busy || !input.trim()}>
-            Chạy
-          </button>
-        </form>
-      </section>
-
-      <p className="muted">
-        Console chỉ đọc dữ liệu (không sửa điểm, không đổi nhóm). Bộ não «local» trỏ vào
-        Ollama/Gemma trên máy — cùng cổng OpenAI-compatible với WebLLM chạy ngay trong trình duyệt.
-      </p>
-    </div>
+    <aside className="neko-dock" role="complementary" aria-label="Neko — trợ lý lớp học">
+      <div className="console-titlebar">
+        <span className="console-dot" aria-hidden="true" />
+        <span className="console-dot" aria-hidden="true" />
+        <span className="console-dot" aria-hidden="true" />
+        <span className="console-title">neko@7a — {provider.label}</span>
+        <button type="button" className="dock-close" onClick={onClose} aria-label="Đóng Neko (Esc)">
+          ✕
+        </button>
+      </div>
+      <div className="console-log" ref={logRef} role="log" aria-live="polite">
+        {lines.map((entry) => (
+          <p key={entry.id} className={`console-line console-line--${entry.type}`}>
+            {entry.text}
+          </p>
+        ))}
+        {busy ? <p className="console-line console-line--info">…</p> : null}
+      </div>
+      <form
+        className="console-input-row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const value = input;
+          setInput('');
+          void execute(value);
+        }}
+      >
+        <label className="console-prompt" htmlFor="neko-dock-input">
+          neko&gt;
+        </label>
+        <input
+          id="neko-dock-input"
+          ref={inputRef}
+          autoComplete="off"
+          spellCheck={false}
+          disabled={busy}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="hỏi tự nhiên hoặc /help"
+        />
+        <button className="button-primary" type="submit" disabled={busy || !input.trim()}>
+          Chạy
+        </button>
+      </form>
+    </aside>
   );
 }

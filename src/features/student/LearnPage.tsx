@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useDemoSession } from '../../app/demo-session';
+import { useSession } from '../../app/session';
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
@@ -15,7 +15,7 @@ import { appendEvent, listEventsByLearner } from '../../storage/event-repository
 const QUESTION_BUDGET = 3;
 
 export function LearnPage() {
-  const { account } = useDemoSession();
+  const { account } = useSession();
   const learnerId = account?.learnerId ?? 'chi';
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useDemoSession, type DemoRole } from '../app/demo-session';
+import { useSession, type Role } from '../app/session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { registerSyncTriggers } from '../services/sync';
+import { NekoDock } from './NekoDock';
 import { OnlineStatusBadge } from './OnlineStatusBadge';
 import { SyncBadge } from './SyncBadge';
 
@@ -13,7 +14,7 @@ interface NavItem {
   readonly end?: boolean;
 }
 
-const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
+const NAVIGATION: Record<Role, readonly NavItem[]> = {
   STUDENT: [
     { to: '/student', label: 'Tổng quan', index: '01', end: true },
     { to: '/student/check-in', label: 'Bài kiểm tra', index: '02' },
@@ -26,20 +27,31 @@ const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
     { to: '/teacher/class', label: 'Nhóm can thiệp', index: '02' },
     { to: '/teacher/questions', label: 'Ngân hàng câu hỏi', index: '03' },
     { to: '/teacher/assignments', label: 'Giao bài', index: '04' },
-    { to: '/teacher/console', label: 'Neko Console', index: '05' },
   ],
 };
 
 export function AppLayout() {
-  const { account, signOut } = useDemoSession();
+  const { account, signOut } = useSession();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [nekoOpen, setNekoOpen] = useState(
+    () => window.localStorage.getItem('nekopath.neko-dock.open') === '1',
+  );
 
   useEffect(() => {
     registerSyncTriggers();
   }, []);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('nekopath.neko-dock.open', nekoOpen ? '1' : '0');
+    } catch {
+      // Preference only; losing it is harmless.
+    }
+  }, [nekoOpen]);
+
   if (!account) return null;
+  const isTeacher = account.role === 'TEACHER';
   const home = account.role === 'STUDENT' ? '/student' : '/teacher';
 
   function exitWorkspace() {
@@ -123,17 +135,29 @@ export function AppLayout() {
         />
       ) : null}
 
-      <div className="product-workspace">
+      <div className="product-workspace" data-neko-open={(isTeacher && nekoOpen) || undefined}>
         <header className="workspace-status">
           <span className="environment-label">Dữ liệu mẫu</span>
           <SyncBadge />
           <OnlineStatusBadge />
+          {isTeacher ? (
+            <button
+              type="button"
+              className="neko-toggle"
+              aria-pressed={nekoOpen}
+              onClick={() => setNekoOpen((open) => !open)}
+            >
+              ✦ Neko
+            </button>
+          ) : null}
         </header>
         <UpdatePrompt />
         <main id="main-content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
+
+      {isTeacher ? <NekoDock open={nekoOpen} onClose={() => setNekoOpen(false)} /> : null}
     </div>
   );
 }
