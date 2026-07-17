@@ -35,6 +35,38 @@ interface WebLlmEngine {
 
 let enginePromise: Promise<WebLlmEngine> | null = null;
 
+export const WEBLLM_MODEL_LABEL = 'Gemma 2 2B (bản trình duyệt, ~1.6GB)';
+
+/** Cheap cache probe — no 6MB engine import just to render a status row. */
+export async function isWebLlmCached(): Promise<boolean> {
+  try {
+    return await caches.has('webllm/model');
+  } catch {
+    return false;
+  }
+}
+
+export function isWebGpuAvailable(): boolean {
+  return typeof navigator !== 'undefined' && 'gpu' in navigator;
+}
+
+/** Explicit, consented download+compile. Progress flows to the listener. */
+export async function preloadWebLlm(): Promise<void> {
+  await engine();
+}
+
+/** Remove downloaded weights/wasm to free storage. */
+export async function deleteWebLlmCache(): Promise<void> {
+  enginePromise = null;
+  for (const name of ['webllm/model', 'webllm/wasm', 'webllm/config']) {
+    try {
+      await caches.delete(name);
+    } catch {
+      // Ignore; the next probe reports honest state.
+    }
+  }
+}
+
 async function engine(): Promise<WebLlmEngine> {
   enginePromise ??= (async () => {
     const webllm = await import('@mlc-ai/web-llm');

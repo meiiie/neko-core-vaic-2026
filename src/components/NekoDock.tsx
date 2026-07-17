@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { runAgent, type AgentProvider, type AgentTraceEvent } from '../services/agent/loop';
 import { AGENT_PROVIDERS } from '../services/agent/providers';
 import { AGENT_TOOLS, toolByName } from '../services/agent/tools';
-import { setWebLlmProgressListener } from '../services/agent/webllm-provider';
+import { isWebLlmCached, setWebLlmProgressListener } from '../services/agent/webllm-provider';
 
 /**
  * Neko — the classroom agent as a right-hand dock (Cursor/Copilot pattern):
@@ -132,7 +132,14 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       } else if (command.startsWith('/model')) {
         const requested = command.split(/\s+/)[1];
         const next = AGENT_PROVIDERS.find((candidate) => candidate.id === requested);
-        if (next) {
+        if (requested === 'web' && !(await isWebLlmCached())) {
+          append(
+            line(
+              'info',
+              'Model Gemma trong trình duyệt chưa được tải. Vào «Dữ liệu & ngoại tuyến» → «Tải model (~1.6GB)» khi có mạng tốt — tải một lần, dùng mãi không cần mạng.',
+            ),
+          );
+        } else if (next) {
           setProvider(next);
           append(line('info', `Đã chuyển bộ não: ${next.label}`));
         } else {

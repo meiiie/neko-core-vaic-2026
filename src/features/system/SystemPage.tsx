@@ -1,4 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useSession } from '../../app/session';
+import {
+  deleteWebLlmCache,
+  isWebGpuAvailable,
+  isWebLlmCached,
+  preloadWebLlm,
+  setWebLlmProgressListener,
+  WEBLLM_MODEL_LABEL,
+} from '../../services/agent/webllm-provider';
 import { flushOutbox, useSyncStatus } from '../../services/sync';
 import { DB_SCHEMA_VERSION } from '../../storage/db';
 import { countEvents, resetDemoData } from '../../storage/event-repository';
@@ -15,11 +24,59 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
+type ModelState =
+  | { phase: 'checking' }
+  | { phase: 'unsupported' }
+  | { phase: 'not-downloaded' }
+  | { phase: 'downloading'; percent: number; note: string }
+  | { phase: 'ready' }
+  | { phase: 'error'; message: string };
+
 export function SystemPage() {
+  const { account } = useSession();
   const [eventCount, setEventCount] = useState<number | null>(null);
   const [estimate, setEstimate] = useState<StorageEstimateState>({});
   const [resetState, setResetState] = useState<'idle' | 'confirm' | 'done' | 'error'>('idle');
+  const [model, setModel] = useState<ModelState>({ phase: 'checking' });
   const sync = useSyncStatus();
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (!isWebGpuAvailable()) {
+        if (!cancelled) setModel({ phase: 'unsupported' });
+        return;
+      }
+      const cached = await isWebLlmCached();
+      if (!cancelled) setModel(cached ? { phase: 'ready' } : { phase: 'not-downloaded' });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function downloadModel() {
+    setModel({ phase: 'downloading', percent: 0, note: 'Đang chuẩn bị…' });
+    setWebLlmProgressListener(({ progress, text }) => {
+      setModel({ phase: 'downloading', percent: Math.round(progress * 100), note: text });
+    });
+    try {
+      await preloadWebLlm();
+      setModel({ phase: 'ready' });
+    } catch (error) {
+      setModel({
+        phase: 'error',
+        message: error instanceof Error ? error.message : 'Tải không thành công.',
+      });
+    } finally {
+      setWebLlmProgressListener(null);
+    }
+  }
+
+  async function removeModel() {
+    await deleteWebLlmCache();
+    setModel({ phase: 'not-downloaded' });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +184,84 @@ export function SystemPage() {
             Đồng bộ ngay
           </button>
         </article>
+
+        {account?.role === 'TEACHER' ? (
+          <article className="summary-panel">
+            <p className="eyebrow">Trợ lý AI trên thiết bị</p>
+            <h2>{WEBLLM_MODEL_LABEL}</h2>
+            <p>
+              Tải MỘT LẦN khi có mạng tốt; sau đó Neko trả lời bằng model chạy ngay trong trình
+              duyệt, hoàn toàn không cần mạng. Dùng lệnh <code>/model web</code> trong Neko.
+            </p>
+            {model.phase === 'checking' ? <p>Đang kiểm tra…</p> : null}
+            {model.phase === 'unsupported' ? (
+              <p role="status">
+                Trình duyệt này chưa hỗ trợ WebGPU — Neko vẫn hoạt động với bộ điều phối cục bộ
+                (không cần model) hoặc Ollama trên máy.
+              </p>
+            ) : null}
+            {model.phase === 'not-downloaded' ? (
+              <button className="button-primary" type="button" onClick={() => void downloadModel()}>
+                Tải model (~1.6GB, một lần)
+              </button>
+            ) : null}
+            {model.phase === 'downloading' ? (
+              <div role="status">
+                <p>
+                  Đang tải: <strong>{model.percent}%</strong>
+                </p>
+                <div
+                  style={{
+                    height: '0.5rem',
+                    borderRadius: '0.25rem',
+                    background: 'var(--rule, #e4e7ec)',
+                    overflow: 'hidden',
+                    maxWidth: '20rem',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      height: '100%',
+                      width: `${model.percent}%`,
+                      background: 'var(--primary, #155eef)',
+                    }}
+                  />
+                </div>
+                <p className="muted">{model.note.slice(0, 90)}</p>
+                <p className="muted">Nếu gián đoạn, bấm tải lại — phần đã tải được giữ nguyên.</p>
+              </div>
+            ) : null}
+            {model.phase === 'ready' ? (
+              <>
+                <p role="status">
+                  <strong>Sẵn sàng — hoạt động không cần mạng.</strong>
+                </p>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => void removeModel()}
+                >
+                  Xóa model khỏi thiết bị
+                </button>
+              </>
+            ) : null}
+            {model.phase === 'error' ? (
+              <>
+                <p role="alert" className="error-message">
+                  {model.message}
+                </p>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => void downloadModel()}
+                >
+                  Thử tải lại
+                </button>
+              </>
+            ) : null}
+          </article>
+        ) : null}
 
         <article className="summary-panel danger-zone">
           <p className="eyebrow">Khôi phục môi trường dùng thử</p>
