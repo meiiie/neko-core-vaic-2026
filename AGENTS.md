@@ -40,4 +40,3 @@ rules/parameters from inference, and another owner controls held-out labels.
 Until implementation commands exist, the only valid state is “contract complete; product not
 built.” Add actual install/dev/typecheck/test/eval/build commands here immediately after the
 minimal scaffold is chosen.
-

@@ -194,4 +194,3 @@ and Bình receive different evidence-backed paths from one surface error, see Ch
 abstention and Minh take a fast path, use the teacher grouping/action view, then continue one
 interaction after the network is disabled. Every displayed claim maps to a frozen artifact or is
 visibly labeled as a hypothesis/simulation.
-

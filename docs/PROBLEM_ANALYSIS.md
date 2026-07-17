@@ -185,4 +185,3 @@ Forbidden without a real study or benchmark:
 5. What threshold should trigger whole-class reteaching versus a short small-group intervention?
 6. Does “offline” require cross-device local networking, or is local operation plus deferred sync
    acceptable? Do not promise the former without explicit confirmation and a working test.
-
