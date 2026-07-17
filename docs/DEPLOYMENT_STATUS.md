@@ -1,6 +1,6 @@
 # Báo cáo triển khai & chuẩn hóa tên miền — gửi Codex
 
-Ngày: 2026-07-17 · Soạn: Fable 5 · Trạng thái: **domain chuẩn đã live, chờ Codex xác nhận 2 việc cuối**
+Ngày: 2026-07-17 · Soạn: Fable 5, xác minh: Codex · Trạng thái: **domain chuẩn đã live; hai việc bàn giao đã hoàn tất trong phạm vi quyền truy cập hiện có**
 
 ## 1. Kết luận nhanh
 
@@ -38,13 +38,28 @@ harness L1 (mock profile). Vì Pages là static không có API, app tự chuyể
    thật (login server, giao bài, sync) mà không cần deploy lại client. Pages giữ nguyên làm
    recovery: nếu VPS sự cố, trỏ DNS về Pages là sản phẩm vẫn sống ở chế độ cục bộ.
 
-## 4. Hai việc cần Codex làm/xác nhận
+## 4. DNS và TLS đã xác minh
 
-1. **Xác nhận cấu hình DNS + SSL của `nekopath.holilihu.online` trong zone `holilihu.online`**
-   (Fable không thấy được zone qua wrangler pages): đang là CNAME/proxy về Pages? SSL mode gì?
-   Ghi lại vào tài liệu này để lần cắt sang VPS không mò mẫm.
-2. **README + tài liệu nộp bài**: cập nhật "Live demo" về domain chuẩn (hiện README đang ghi
-   `nekopath-vaic.pages.dev`).
+Kiểm tra ngày 2026-07-17 cho thấy:
+
+| Hạng mục | Trạng thái xác minh |
+|---|---|
+| Zone | `holilihu.online`, authoritative nameserver: `courtney.ns.cloudflare.com` và `marek.ns.cloudflare.com` |
+| Record được tạo ban đầu | `CNAME nekopath → nekopath-vaic.pages.dev`, TTL Auto; ảnh cấu hình do captain cung cấp ghi nhận `DNS only` tại thời điểm tạo |
+| Phân giải công khai hiện tại | A: `104.21.41.24`, `172.67.159.16`; AAAA: `2606:4700:3031::6815:2918`, `2606:4700:3031::ac43:9f10` |
+| Pages custom domain | `active`; domain verification `active` |
+| Chứng thư | `active`, HTTP validation, Google Trust Services (`CN=WE1`), hostname `nekopath.holilihu.online` |
+| Hiệu lực chứng thư quan sát | 2026-07-17 10:08:37Z → 2026-10-15 11:08:34Z; Cloudflare/Pages tự quản lý gia hạn |
+| Kết nối kiểm tra | HTTP 200, `server: cloudflare`, TLS 1.3, HTTP/3 được quảng bá qua `alt-svc` |
+| Zone SSL/TLS encryption mode | **Chưa quan sát được**: Wrangler OAuth hiện có Pages access nhưng Cloudflare Zone Settings API trả 403. Không suy đoán Flexible/Full/Strict từ chứng thư edge. |
+
+Lưu ý: địa chỉ A/AAAA là edge Cloudflare và không chứng minh riêng trạng thái nút proxy của record.
+Trước khi cắt sang VPS, người vận hành phải mở Cloudflare Dashboard, chụp lại record hiện hành và
+đặt SSL/TLS mode thành **Full (strict)** sau khi Caddy đã cấp chứng thư hợp lệ; không chuyển DNS nếu
+`/api/healthz`, đăng nhập, giao bài và đồng bộ chưa qua smoke test trực tiếp trên VPS.
+
+README và baseline UX đã được đổi sang domain chuẩn. Các URL `*.pages.dev` chỉ còn xuất hiện trong
+tài liệu vận hành với vai trò origin/recovery hoặc preview nội bộ.
 
 ## 5. Kiểm chứng đã thực hiện (bằng lệnh, không suy đoán)
 

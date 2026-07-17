@@ -2,7 +2,7 @@
 
 **Adaptive learning paths for mixed-ability classrooms — by Neko Core.**
 
-Live demo: [nekopath-vaic.pages.dev](https://nekopath-vaic.pages.dev/)
+Live demo: [nekopath.holilihu.online](https://nekopath.holilihu.online/)
 
 NekoPath diagnoses the earliest actionable prerequisite gap behind a learner's current
 mistake, asks for more evidence when the cause is ambiguous, and gives the teacher a

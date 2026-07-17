@@ -2,7 +2,7 @@
 
 Date: 2026-07-17  
 Status: implementation-ready for Fable 5; Codex owns independent review and integration  
-Production baseline: <https://nekopath-vaic.pages.dev/>
+Production baseline: <https://nekopath.holilihu.online/>
 
 ## 1. Outcome to optimize
 
