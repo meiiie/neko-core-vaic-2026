@@ -29,7 +29,7 @@ jobs:
           gcloud compute ssh nekopath-production \
             --zone=asia-southeast1-c \
             --tunnel-through-iap \
-            --command="cd /opt/nekopath && sudo git fetch origin && sudo git reset --hard origin/main && sudo docker compose -f ops/compose.yml up -d --build app"
+            --command="cd /opt/nekopath && git fetch origin main && git checkout main && git pull --ff-only origin main && export GITHUB_SHA=\$(git rev-parse HEAD) && sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app"
 
       - name: Smoke canonical URL
         run: |

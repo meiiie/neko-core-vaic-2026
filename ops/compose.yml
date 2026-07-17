@@ -3,6 +3,8 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        GITHUB_SHA: ${GITHUB_SHA:-dev}
     init: true
     restart: unless-stopped
     environment:

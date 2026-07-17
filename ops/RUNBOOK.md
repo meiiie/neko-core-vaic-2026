@@ -41,12 +41,13 @@ cd /opt/nekopath
 git fetch origin main
 git checkout main
 git pull --ff-only origin main
-sudo docker compose -f ops/compose.yml build app
+export GITHUB_SHA=$(git rev-parse HEAD)
+sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml build app
 sudo docker compose -f ops/compose.yml up -d
 sudo docker compose -f ops/compose.yml ps
 ```
 
-The Docker build is the release gate: it runs typecheck, tests and the PWA production build before creating the runtime image. Do not use `--no-cache` unless cache corruption is established.
+The Docker build is the release gate: it runs typecheck, tests and the PWA production build before creating the runtime image. `GITHUB_SHA` is passed as immutable build provenance and appears in the product's version screen. Do not use `--no-cache` unless cache corruption is established. Keep `/opt/nekopath` owned by the OS Login user; only Docker commands require `sudo`.
 
 ## Back up SQLite
 
