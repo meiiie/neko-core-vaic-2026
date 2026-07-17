@@ -16,6 +16,7 @@ path instead of repeating the same fixed lesson sequence.
 - [Curriculum and hero-profile draft](docs/CONTENT_MODEL_DRAFT.md)
 - [Implementation master plan and Fable 5 handoff](docs/IMPLEMENTATION_MASTER_PLAN.md)
 - [UX/UI audit and Codex–Fable execution plan](docs/UX_UI_AUDIT_AND_EXECUTION_PLAN.md)
+- [Product and UI constitution](docs/PRODUCT_UI_CONSTITUTION.md)
 - [Evaluation status and reproducibility](docs/EVALUATION.md)
 - [AI collaboration log](AI_COLLABORATION_LOG.csv)
 

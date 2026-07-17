@@ -78,3 +78,16 @@ bounded pass.
   deploy. Codex does not implement a competing visual redesign while Fable is active.
 - Handoff is one reviewed commit SHA plus route/viewport screenshots and check results. Preserve
   all synthetic, unreviewed, uncertainty and offline truth labels.
+
+## Post-Fable design-review gate
+
+Fable commit `21dad18` completed the first visual pass. Before any further UI code, read
+`docs/PRODUCT_UI_CONSTITUTION.md`.
+
+- The UX/UI teammate owns token/component/frame proposals and annotations, not domain rules or
+  generated results. Every screen state maps to existing adapter data or a named missing contract.
+- Codex owns code integration, behavioral fixes, browser/offline verification and deployment.
+- Do not create login, onboarding, a sixth product surface, a design-system package or Storybook.
+  A new comparison route is admitted only after the existing guided An→Bình flow fails a cold test.
+- CSS variables remain the 48-hour source of truth. Extract a React component only after two real
+  uses or to centralize behavior/accessibility.
