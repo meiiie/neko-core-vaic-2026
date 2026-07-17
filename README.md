@@ -11,6 +11,7 @@ path instead of repeating the same fixed lesson sequence.
 
 - [Problem analysis](docs/PROBLEM_ANALYSIS.md)
 - [48-hour product contract](docs/PRODUCT_CONTRACT.md)
+- [Curriculum and hero-profile draft](docs/CONTENT_MODEL_DRAFT.md)
 - [AI collaboration log](AI_COLLABORATION_LOG.csv)
 
 The official problem text is intentionally short. Anything not stated there is an internal
