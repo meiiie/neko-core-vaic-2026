@@ -206,7 +206,8 @@ export function canonicalizeEvents(events: readonly LearnerEvent[]): LearnerEven
   return [...byId.values()].sort(
     (left, right) =>
       left.sequence - right.sequence ||
-      compareIds(left.occurredAt, right.occurredAt) || compareIds(left.id, right.id),
+      compareIds(left.occurredAt, right.occurredAt) ||
+      compareIds(left.id, right.id),
   );
 }
 
@@ -307,11 +308,7 @@ function entropy(probability: number): number {
   return -p * Math.log2(p) - (1 - p) * Math.log2(1 - p);
 }
 
-function expectedInformationGain(
-  prior: number,
-  item: Item,
-  config: DomainConfig,
-): number {
+function expectedInformationGain(prior: number, item: Item, config: DomainConfig): number {
   const slip = item.slip ?? config.defaultSlip;
   const guess = item.guess ?? config.defaultGuess;
   const correctProbability = prior * (1 - slip) + (1 - prior) * guess;
@@ -411,11 +408,7 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
   const ancestors = ancestorIds(input.graph, input.targetKcId);
   const targetAndPrerequisites = [input.targetKcId, ...ancestors];
 
-  if (
-    targetAndPrerequisites.every(
-      (kcId) => isSufficientlyMastered(mastery.get(kcId)!, config),
-    )
-  ) {
+  if (targetAndPrerequisites.every((kcId) => isSufficientlyMastered(mastery.get(kcId)!, config))) {
     const usedItemIds = new Set(learnerEvents.map((event) => event.itemId));
     const transferItem = input.items
       .filter(
@@ -447,14 +440,11 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
   const actionable = evidencedGaps.filter((kcId) =>
     incoming
       .get(kcId)!
-      .every((prerequisiteId) =>
-        isSufficientlyMastered(mastery.get(prerequisiteId)!, config),
-      ),
+      .every((prerequisiteId) => isSufficientlyMastered(mastery.get(prerequisiteId)!, config)),
   );
   const ranked = [...actionable].sort(
     (left, right) =>
-      mastery.get(left)!.probability - mastery.get(right)!.probability ||
-      compareIds(left, right),
+      mastery.get(left)!.probability - mastery.get(right)!.probability || compareIds(left, right),
   );
   const diagnosticsUsed = diagnosticEventCount(learnerEvents, input.items);
 
@@ -520,8 +510,7 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
     .sort(
       (left, right) =>
         Math.abs(mastery.get(left)!.probability - 0.5) -
-          Math.abs(mastery.get(right)!.probability - 0.5) ||
-        compareIds(left, right),
+          Math.abs(mastery.get(right)!.probability - 0.5) || compareIds(left, right),
     )
     .slice(0, 2);
   const budgetAvailable = diagnosticsUsed < config.maxDiagnosticItems;
@@ -600,8 +589,7 @@ export function groupForTeacher(
       };
     })
     .sort(
-      (left, right) =>
-        right.priorityScore - left.priorityScore || compareIds(left.id, right.id),
+      (left, right) => right.priorityScore - left.priorityScore || compareIds(left.id, right.id),
     );
 }
 

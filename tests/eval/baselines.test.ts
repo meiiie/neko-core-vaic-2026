@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { diagnose, type DiagnosisInput } from '../../src/domain';
-import { fixedPrerequisiteBaseline, lowestMasteryBaseline, surfaceSkillBaseline } from './baselines';
+import {
+  fixedPrerequisiteBaseline,
+  lowestMasteryBaseline,
+  surfaceSkillBaseline,
+} from './baselines';
 import { HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './fixtures';
 
 type HeroId = keyof typeof HERO_EVENTS;

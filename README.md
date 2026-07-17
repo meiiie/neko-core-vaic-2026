@@ -22,9 +22,10 @@ statement.
 
 ## Current status
 
-Research, product contracts and the execution plan are locked. The selected visual direction is
-“Sổ can thiệp lớp học”; product scaffolding and curriculum-edge review are the next gates. No
-implementation result is claimed yet.
+The local-first PWA scaffold and deterministic root-gap core now exist with runnable checks. The
+selected visual direction is “Sổ can thiệp lớp học”. UI/domain wiring, named curriculum review,
+the 30-profile frozen evaluation and deployment remain explicit next gates; no real-learning or
+whole-curriculum result is claimed.
 
 ## Non-negotiables
 

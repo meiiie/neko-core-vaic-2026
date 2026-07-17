@@ -50,12 +50,12 @@ npm run format:check
 npm run lint
 npm run typecheck
 npm run test
+npm run eval
 npm run build
 ```
 
-`npm run eval` and `npm run test:e2e` do not exist yet; add them only when `tests/eval/**`
-(Codex lane) and the Playwright harness are real. Never add a placeholder script that always
-succeeds.
+`npm run test:e2e` does not exist yet; add it only when the Playwright harness is real. Never add a
+placeholder script that always succeeds.
 
 ## Concurrent ownership during initial build
 

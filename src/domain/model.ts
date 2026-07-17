@@ -67,11 +67,7 @@ export const DEFAULT_DOMAIN_CONFIG: DomainConfig = {
   ambiguityMargin: 0.08,
 };
 
-export type DiagnosisStatus =
-  | 'DIAGNOSED'
-  | 'NEEDS_MORE_EVIDENCE'
-  | 'OUT_OF_SCOPE'
-  | 'FAST_PATH';
+export type DiagnosisStatus = 'DIAGNOSED' | 'NEEDS_MORE_EVIDENCE' | 'OUT_OF_SCOPE' | 'FAST_PATH';
 
 export type DiagnosisReasonCode =
   | 'ROOT_GAP_SUPPORTED'

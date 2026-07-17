@@ -41,9 +41,9 @@ describe('graph and event integrity', () => {
   it('deduplicates identical event IDs and rejects conflicting duplicates', () => {
     const event = HERO_EVENTS.an[0]!;
     expect(canonicalizeEvents([event, event])).toEqual([event]);
-    expect(() =>
-      canonicalizeEvents([event, { ...event, correct: !event.correct }]),
-    ).toThrow('Conflicting duplicate event id');
+    expect(() => canonicalizeEvents([event, { ...event, correct: !event.correct }])).toThrow(
+      'Conflicting duplicate event id',
+    );
   });
 
   it('counts distinct items rather than repeated attempts as direct evidence', () => {
@@ -183,10 +183,7 @@ describe('paths and teacher decisions', () => {
         learnerId: 'an',
         sequence: 20 + index,
       }));
-    const mastery = computeMastery(HERO_GRAPH, HERO_ITEMS, [
-      ...HERO_EVENTS.an,
-      ...masteredK08,
-    ]);
+    const mastery = computeMastery(HERO_GRAPH, HERO_ITEMS, [...HERO_EVENTS.an, ...masteredK08]);
     const path = planPracticePath(HERO_GRAPH, 'K02', 'K10', mastery, 0.8);
 
     expect(path.graphPathKcIds).toEqual(['K02', 'K08', 'K09', 'K10']);
@@ -220,8 +217,6 @@ describe('paths and teacher decisions', () => {
     expect(() => groupForTeacher(HERO_GRAPH, [heroDiagnosis('an'), heroDiagnosis('an')])).toThrow(
       'Duplicate diagnosis',
     );
-    expect(() => detectClassWideGaps(groups, 3)).toThrow(
-      'smaller than represented learners',
-    );
+    expect(() => detectClassWideGaps(groups, 3)).toThrow('smaller than represented learners');
   });
 });

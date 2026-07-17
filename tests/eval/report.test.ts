@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './fixtures';
 import { evaluateFrozenCases, type FrozenEvaluationCase } from './report';
 
-const cases: FrozenEvaluationCase[] = [
+const caseDefinitions = [
   { id: 'an', expectedStatus: 'DIAGNOSED', expectedRootKcId: 'K02' },
   { id: 'binh', expectedStatus: 'DIAGNOSED', expectedRootKcId: 'K07' },
   { id: 'chi', expectedStatus: 'NEEDS_MORE_EVIDENCE' },
   { id: 'minh', expectedStatus: 'FAST_PATH' },
-].map((testCase) => ({
+] as const;
+
+const cases: FrozenEvaluationCase[] = caseDefinitions.map((testCase) => ({
   ...testCase,
   input: {
     learnerId: testCase.id,

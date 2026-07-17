@@ -12,9 +12,7 @@ describe('independent noisy response simulator', () => {
       seed: 20260717,
     } as const;
 
-    expect(simulateResponses(profile, HERO_ITEMS)).toEqual(
-      simulateResponses(profile, HERO_ITEMS),
-    );
+    expect(simulateResponses(profile, HERO_ITEMS)).toEqual(simulateResponses(profile, HERO_ITEMS));
   });
 
   it('uses conjunctive item requirements without importing inference parameters', () => {
