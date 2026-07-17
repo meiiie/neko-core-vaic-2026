@@ -1,7 +1,8 @@
 # Caddy edge for NekoPath (docs/IMPLEMENTATION_MASTER_PLAN.md §8/§13).
-# Replace nekopath.example.com with the real domain; Caddy handles TLS.
+# Canonical domain: nekopath.holilihu.online. When the VPS goes live, point
+# this DNS record at the VPS (currently it targets Cloudflare Pages).
 
-nekopath.example.com {
+nekopath.holilihu.online {
 	encode zstd gzip
 
 	# Never let intermediaries cache the SW-critical trio.
