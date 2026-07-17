@@ -26,8 +26,9 @@ answer keys, mastery state, priority, or eval labels.
 - TypeScript first; one deployable web unit; core works without an external API.
 - Keep diagnosis/graph/path logic pure and deterministic for the same event log.
 - Use a small versioned JSON DAG, not Neo4j, RAG, or a vector database.
-- Add no auth, voice, multi-agent runtime, LMS integration, or second backend without a failed
-  representative test proving it necessary.
+- Add no real authentication/JWT, voice, multi-agent runtime, LMS integration, or second backend
+  without a failed representative test proving it necessary. A local one-click role entry is
+  allowed for the event walkthrough, but it must never claim to be a security boundary.
 - Never simplify away input validation, offline data integrity, accessibility, or privacy.
 - No secret, token, PII, raw chain-of-thought, or hidden held-out label in Git or logs.
 - Touch only task-owned files. Do not refactor unrelated work.
@@ -87,7 +88,9 @@ Fable commit `21dad18` completed the first visual pass. Before any further UI co
 - The UX/UI teammate owns token/component/frame proposals and annotations, not domain rules or
   generated results. Every screen state maps to existing adapter data or a named missing contract.
 - Codex owns code integration, behavioral fixes, browser/offline verification and deployment.
-- Do not create login, onboarding, a sixth product surface, a design-system package or Storybook.
-  A new comparison route is admitted only after the existing guided An→Bình flow fails a cold test.
+- The earlier five-surface/no-login limit was superseded by the human MVP decision on 2026-07-17.
+  Read `docs/OPERATIONAL_MVP.md` before changing routes or navigation. Preserve the one-click demo
+  entry, role-specific sidebar and complete student/teacher task flows; do not add real auth,
+  registration, a design-system package or Storybook.
 - CSS variables remain the 48-hour source of truth. Extract a React component only after two real
   uses or to centralize behavior/accessibility.

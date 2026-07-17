@@ -1,42 +1,127 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { useDemoSession } from '../app/demo-session';
+import { useState } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useDemoSession, type DemoRole } from '../app/demo-session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { OnlineStatusBadge } from './OnlineStatusBadge';
 
-/**
- * Shared shell: one mode navigation (student / teacher / quiet system utility).
- * Mode switching is plain navigation — it must never imply login or authorization.
- */
+interface NavItem {
+  readonly to: string;
+  readonly label: string;
+  readonly index: string;
+  readonly end?: boolean;
+}
+
+const NAVIGATION: Record<DemoRole, readonly NavItem[]> = {
+  STUDENT: [
+    { to: '/student', label: 'Tổng quan', index: '01', end: true },
+    { to: '/student/check-in', label: 'Bài kiểm tra', index: '02' },
+    { to: '/student/path', label: 'Lộ trình của tôi', index: '03' },
+  ],
+  TEACHER: [
+    { to: '/teacher', label: 'Tổng quan lớp', index: '01', end: true },
+    { to: '/teacher/class', label: 'Nhóm can thiệp', index: '02' },
+  ],
+};
+
 export function AppLayout() {
-  const { learnerId } = useDemoSession();
+  const { account, signOut } = useDemoSession();
+  const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  if (!account) return null;
+  const home = account.role === 'STUDENT' ? '/student' : '/teacher';
+
+  function exitWorkspace() {
+    signOut();
+    navigate('/login', { replace: true });
+  }
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <NavLink to="/" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>
-          NekoPath
+    <div className="product-shell">
+      <a className="skip-link" href="#main-content">
+        Bỏ qua điều hướng
+      </a>
+
+      <header className="mobile-header">
+        <NavLink className="brand-lockup" to={home}>
+          <img src="/icons/icon-192.png" alt="" width="36" height="36" />
+          <span>NekoPath</span>
         </NavLink>
-        <div className="header-labels">
-          <span
-            className="status-label status-label--review"
-            title="Toàn bộ hồ sơ học sinh là dữ liệu tổng hợp"
-          >
-            Dữ liệu mô phỏng
-          </span>
-          <OnlineStatusBadge />
+        <button
+          className="mobile-menu-button"
+          type="button"
+          aria-expanded={mobileOpen}
+          aria-controls="product-sidebar"
+          onClick={() => setMobileOpen((open) => !open)}
+        >
+          {mobileOpen ? 'Đóng' : 'Menu'}
+        </button>
+      </header>
+
+      <aside id="product-sidebar" className="product-sidebar" data-open={mobileOpen || undefined}>
+        <div className="sidebar-head">
+          <NavLink className="brand-lockup" to={home} onClick={() => setMobileOpen(false)}>
+            <img src="/icons/icon-192.png" alt="" width="40" height="40" />
+            <span>
+              <strong>NekoPath</strong>
+              <small>{account.role === 'STUDENT' ? 'Cổng học sinh' : 'Cổng giáo viên'}</small>
+            </span>
+          </NavLink>
         </div>
-        <nav className="app-nav" aria-label="Điều hướng chính">
-          <NavLink to={`/learn/${learnerId}`}>Học sinh</NavLink>
-          <NavLink to="/teacher">Giáo viên</NavLink>
-          <NavLink to="/system" className="nav-quiet">
-            Hệ thống
+
+        <nav className="sidebar-nav" aria-label="Điều hướng chính">
+          <p className="sidebar-label">Không gian làm việc</p>
+          {NAVIGATION[account.role].map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMobileOpen(false)}>
+              <span className="nav-index" aria-hidden="true">
+                {item.index}
+              </span>
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+
+          <p className="sidebar-label sidebar-label--secondary">Thiết bị</p>
+          <NavLink to="/system" onClick={() => setMobileOpen(false)}>
+            <span className="nav-index" aria-hidden="true">
+              04
+            </span>
+            <span>Dữ liệu &amp; ngoại tuyến</span>
           </NavLink>
         </nav>
-      </header>
-      <UpdatePrompt />
-      <main>
-        <Outlet />
-      </main>
+
+        <div className="sidebar-account">
+          <span className="account-avatar" aria-hidden="true">
+            {account.initials}
+          </span>
+          <span className="account-copy">
+            <strong>{account.shortName}</strong>
+            <span>{account.subtitle}</span>
+          </span>
+          <button type="button" onClick={exitWorkspace}>
+            Đổi
+          </button>
+        </div>
+      </aside>
+
+      {mobileOpen ? (
+        <button
+          className="sidebar-backdrop"
+          type="button"
+          aria-label="Đóng điều hướng"
+          onClick={() => setMobileOpen(false)}
+        />
+      ) : null}
+
+      <div className="product-workspace">
+        <header className="workspace-status">
+          <span className="environment-label">Dữ liệu mẫu</span>
+          <OnlineStatusBadge />
+        </header>
+        <UpdatePrompt />
+        <main id="main-content" tabIndex={-1}>
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

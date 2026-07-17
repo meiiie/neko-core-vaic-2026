@@ -1,61 +1,72 @@
 import 'fake-indexeddb/auto';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from './App';
 
-describe('App shell', () => {
-  it('renders brand, truth labels and the single mode navigation', () => {
+describe('NekoPath MVP entry and shell', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it('opens on a truthful one-click demo login', () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/login']}>
         <App />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: 'NekoPath' })).toBeTruthy();
-    expect(screen.getByText('Dữ liệu mô phỏng')).toBeTruthy();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Đăng nhập bằng tài khoản mẫu' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Nguyễn Minh Chi/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Nguyễn Thu Hà/ })).toBeTruthy();
+    expect(screen.getByText(/không chứa thông tin học sinh thật/i)).toBeTruthy();
+  });
+
+  it('enters the student workspace and shows the role-specific sidebar', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: /Nguyễn Minh Chi/ }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /Chào buổi chiều, Chi/ }),
+    ).toBeTruthy();
     const nav = screen.getByRole('navigation', { name: 'Điều hướng chính' });
     expect(nav).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Học sinh' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Giáo viên' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Hệ thống' })).toBeTruthy();
-    // Duplicate role buttons were removed; navigation is the only mode switch.
-    expect(screen.queryByRole('button', { name: /Vai trò/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Bài kiểm tra/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Nhóm can thiệp/ })).toBeNull();
   });
 
-  it('shows the proof-oriented headline and primary comparison action on /', () => {
+  it('restores the teacher account and renders the operational class overview', async () => {
+    window.localStorage.setItem(
+      'nekopath.demo-session.v2',
+      JSON.stringify({ accountId: 'teacher-7a-ha' }),
+    );
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/teacher']}>
         <App />
       </MemoryRouter>,
     );
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Cùng một lỗi bề mặt — khác lỗ hổng gốc' }),
+      await screen.findByRole('heading', { level: 1, name: /Chào buổi chiều, Cô Hà/ }),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Bắt đầu so sánh: xem An trước/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Mở bảng lớp 40 học sinh/ })).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Nhóm can thiệp/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Bài kiểm tra/ })).toBeNull();
   });
 
-  it('renders the student surface with human-readable label for /learn/:learnerId', async () => {
+  it('redirects protected routes to login when no account is selected', () => {
     render(
-      <MemoryRouter initialEntries={['/learn/an']}>
+      <MemoryRouter initialEntries={['/teacher']}>
         <App />
       </MemoryRouter>,
     );
-
-    expect(await screen.findByRole('heading', { level: 1, name: /Học sinh An/ })).toBeTruthy();
-  });
-
-  it('shows the out-of-demo state for an unknown learner', async () => {
-    render(
-      <MemoryRouter initialEntries={['/learn/unknown-kid']}>
-        <App />
-      </MemoryRouter>,
-    );
-
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Ngoài phạm vi demo' }),
+      screen.getByRole('heading', { level: 2, name: 'Đăng nhập bằng tài khoản mẫu' }),
     ).toBeTruthy();
   });
 });

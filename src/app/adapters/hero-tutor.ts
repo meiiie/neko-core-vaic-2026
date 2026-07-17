@@ -27,21 +27,6 @@ import type { LearnerEventRecord } from '../../storage/db';
 
 export const HERO_TARGET_KC_ID = 'K10';
 
-export const HERO_LEARNERS: ReadonlyArray<{
-  id: HeroSimulationProfileId;
-  label: string;
-  note: string;
-}> = [
-  { id: 'an', label: 'An', note: 'Cùng sai một bài — bằng chứng chỉ về phân số bằng nhau' },
-  { id: 'binh', label: 'Bình', note: 'Cùng sai một bài — bằng chứng chỉ về ý nghĩa tỉ số' },
-  {
-    id: 'chi',
-    label: 'Chi',
-    note: 'Bằng chứng thưa và mâu thuẫn — hệ thống phải trả lời "cần thêm bằng chứng"',
-  },
-  { id: 'minh', label: 'Minh', note: 'Đã nắm vững — nhận thử thách chuyển giao, không học lại' },
-];
-
 export function isHeroLearnerId(value: string | undefined): value is HeroSimulationProfileId {
   return value !== undefined && Object.hasOwn(HERO_EVENTS, value);
 }

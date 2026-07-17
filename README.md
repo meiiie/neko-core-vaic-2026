@@ -17,6 +17,7 @@ path instead of repeating the same fixed lesson sequence.
 - [Implementation master plan and Fable 5 handoff](docs/IMPLEMENTATION_MASTER_PLAN.md)
 - [UX/UI audit and Codex–Fable execution plan](docs/UX_UI_AUDIT_AND_EXECUTION_PLAN.md)
 - [Product and UI constitution](docs/PRODUCT_UI_CONSTITUTION.md)
+- [Operational role-based MVP](docs/OPERATIONAL_MVP.md)
 - [Evaluation status and reproducibility](docs/EVALUATION.md)
 - [AI collaboration log](AI_COLLABORATION_LOG.csv)
 
@@ -27,11 +28,13 @@ statement.
 
 ## Current status
 
-The local-first PWA scaffold, deterministic root-gap core, guarded hero content and reproducible
-40-learner synthetic classroom now exist with runnable checks. The selected visual direction is
-“Sổ can thiệp lớp học”. The student, evidence-path and teacher surfaces are wired to the real domain
-runtime and deployed to Cloudflare Pages. Named curriculum review and six independently owned
-held-out labels remain explicit next gates; no real-learning or whole-curriculum result is claimed.
+The local-first PWA now opens through a one-click role entry and provides separate student and
+teacher workspaces with persistent sidebar navigation. The student can complete an adaptive
+check-in and inspect the resulting path; the teacher can inspect the class-wide gap and ranked
+intervention groups. These surfaces use the deterministic domain runtime and local IndexedDB, not
+hard-coded screen outcomes. The account and class records are sample evaluation data, not real
+authentication or learner PII. Named curriculum review and six independently owned held-out labels
+remain explicit next gates; no real-learning or whole-curriculum result is claimed.
 
 ## Non-negotiables
 

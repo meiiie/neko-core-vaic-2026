@@ -77,7 +77,7 @@ export const HERO_QUESTIONS: readonly HeroQuestion[] = [
       { id: 'c', label: 'x = 16; nhân chéo rồi cộng' },
     ],
     correctChoiceId: 'a',
-    hypothesisLabel: 'Câu hỏi demo chưa được giáo viên duyệt',
+    hypothesisLabel: 'Câu hỏi chẩn đoán chưa được giáo viên duyệt',
   },
   {
     itemId: 'K02-DIAGNOSTIC',
@@ -110,7 +110,7 @@ export const HERO_QUESTIONS: readonly HeroQuestion[] = [
       { id: 'c', label: '72.000 đồng' },
     ],
     correctChoiceId: 'a',
-    hypothesisLabel: 'Câu hỏi chuyển giao demo, chưa được giáo viên duyệt',
+    hypothesisLabel: 'Câu hỏi chuyển giao chưa được giáo viên duyệt',
   },
 ];
 

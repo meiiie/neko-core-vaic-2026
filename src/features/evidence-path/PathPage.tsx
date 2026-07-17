@@ -1,179 +1,137 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useDemoSession } from '../../app/demo-session';
 import {
   diagnoseHero,
-  HERO_LEARNERS,
   HERO_TARGET_KC_ID,
-  isHeroLearnerId,
   kcName,
   REASON_LABELS,
   STATUS_LABELS,
-  UNREVIEWED_LABEL,
 } from '../../app/adapters/hero-tutor';
 import { listEventsByLearner } from '../../storage/event-repository';
 
-/**
- * Evidence & path surface in three levels (§4): decision → action trail →
- * expandable audit detail. Renders the DiagnosisResult contract verbatim.
- */
 export function PathPage() {
-  const { learnerId } = useParams<{ learnerId: string }>();
-
-  const localRecords = useLiveQuery(
-    () => (learnerId ? listEventsByLearner(learnerId) : Promise.resolve([])),
-    [learnerId],
-  );
-
-  if (!isHeroLearnerId(learnerId)) {
-    return (
-      <section className="section">
-        <h1>Ngoài phạm vi demo</h1>
-        <p className="evidence-note">
-          Bản demo này chỉ có bốn hồ sơ mô phỏng: An, Bình, Chi, Minh.
-        </p>
-      </section>
-    );
-  }
+  const { account } = useDemoSession();
+  const learnerId = account?.learnerId ?? 'chi';
+  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
 
   if (localRecords === undefined) {
-    return (
-      <section className="section" aria-busy="true">
-        <p>Đang đọc dữ liệu cục bộ…</p>
-      </section>
-    );
+    return <div className="page-loading" aria-label="Đang tải lộ trình" />;
   }
 
-  const profile = HERO_LEARNERS.find((hero) => hero.id === learnerId);
   const result = diagnoseHero(learnerId, localRecords);
-
-  const decisionTone =
-    result.status === 'DIAGNOSED' || result.status === 'FAST_PATH'
-      ? 'status-label--evidence'
-      : result.status === 'NEEDS_MORE_EVIDENCE'
-        ? 'status-label--review'
-        : 'status-label--neutral';
+  const supported = result.status === 'DIAGNOSED' || result.status === 'FAST_PATH';
 
   return (
-    <>
-      <section className="section">
-        <h1>
-          Bằng chứng &amp; lộ trình — {profile?.label ?? learnerId}{' '}
-          <span className="muted" style={{ fontSize: 'var(--text-base)', fontWeight: 400 }}>
-            (hồ sơ mô phỏng: {learnerId})
-          </span>
-        </h1>
-        <p>
-          <span className={`status-label ${decisionTone}`}>{STATUS_LABELS[result.status]}</span>
-        </p>
-        {result.rootKcId ? (
-          <p style={{ fontSize: 'var(--text-lg)' }}>
-            Lỗ hổng gốc theo bằng chứng: <strong>{kcName(result.rootKcId)}</strong>
-          </p>
-        ) : null}
-        <p className="evidence-note">{UNREVIEWED_LABEL}.</p>
-      </section>
+    <div className="page-stack">
+      <header className="page-heading page-heading--split">
+        <div>
+          <p className="eyebrow">Hồ sơ học tập • Toán 7</p>
+          <h1>Lộ trình của {account?.shortName}</h1>
+          <p>Cập nhật từ các câu trả lời đã lưu trên thiết bị này.</p>
+        </div>
+        <span
+          className={`status-label ${supported ? 'status-label--evidence' : 'status-label--review'}`}
+        >
+          {STATUS_LABELS[result.status]}
+        </span>
+      </header>
 
       {result.status === 'NEEDS_MORE_EVIDENCE' ? (
-        <section className="action-panel action-panel--review">
-          <h2>Chưa kết luận — hai giả thuyết còn cạnh tranh</h2>
-          {result.competingKcIds.length > 0 ? (
-            <ul>
-              {result.competingKcIds.map((id) => (
-                <li key={id}>
-                  <strong>{kcName(id)}</strong> — chưa đủ bằng chứng trực tiếp để khẳng định hay
-                  loại trừ
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <p>Hệ thống không gán nhãn ép buộc. Bước tiếp theo là một câu hỏi phân biệt duy nhất:</p>
-          <p>
-            <Link className="button-primary" to={`/learn/${learnerId}`}>
-              Trả lời câu hỏi kiểm chứng tiếp theo
-            </Link>
-          </p>
+        <section className="decision-panel decision-panel--review">
+          <div>
+            <p className="eyebrow">Quyết định an toàn</p>
+            <h2>Chưa đủ bằng chứng để chọn một lỗ hổng gốc</h2>
+            <p>
+              {result.competingKcIds.length > 0
+                ? result.competingKcIds.length === 1
+                  ? `Còn một giả thuyết cần thêm bằng chứng trực tiếp: ${kcName(result.competingKcIds[0])}.`
+                  : `${result.competingKcIds.length} hướng còn cạnh tranh: ${result.competingKcIds.map((id) => kcName(id)).join(' và ')}.`
+                : 'Cần thêm một câu kiểm tra trực tiếp trước khi mở nội dung bù.'}
+            </p>
+          </div>
+          <Link className="button-primary" to="/student/check-in">
+            Làm câu kiểm tra tiếp theo
+          </Link>
+        </section>
+      ) : null}
+
+      {result.rootKcId ? (
+        <section className="decision-panel">
+          <div>
+            <p className="eyebrow">Trọng tâm được bằng chứng hỗ trợ</p>
+            <h2>{kcName(result.rootKcId)}</h2>
+            <p>
+              NekoPath bỏ qua phần đã vững và chỉ giữ các bước cần thiết để quay lại mục tiêu lớp.
+            </p>
+          </div>
+          <Link className="button-primary" to="/student/check-in">
+            Bắt đầu luyện tập
+          </Link>
+        </section>
+      ) : null}
+
+      {result.status === 'FAST_PATH' ? (
+        <section className="decision-panel">
+          <div>
+            <p className="eyebrow">Sẵn sàng tiến tiếp</p>
+            <h2>Không cần học lại phần đã nắm chắc</h2>
+            <p>Bước tiếp theo là một bài toán chuyển giao thay vì lặp lại bài cơ bản.</p>
+          </div>
+          <Link className="button-primary" to="/student/check-in">
+            Nhận bài thử thách
+          </Link>
         </section>
       ) : null}
 
       {result.pathKcIds.length > 0 ? (
-        <>
-          <section className="section">
-            <h2>Đường bù kiến thức</h2>
-            <ol className="path-steps">
-              {result.pathKcIds.map((kcId, index) => (
-                <li key={kcId}>
-                  <span className="step-role">
+        <section className="path-panel" aria-labelledby="path-heading">
+          <header className="panel-heading">
+            <div>
+              <p className="eyebrow">Đường học được đề xuất</p>
+              <h2 id="path-heading">Từ kiến thức nền đến mục tiêu của lớp</h2>
+            </div>
+            <span>{result.pathKcIds.length} bước</span>
+          </header>
+          <ol className="path-steps">
+            {result.pathKcIds.map((kcId, index) => (
+              <li key={kcId}>
+                <span className="step-index">{String(index + 1).padStart(2, '0')}</span>
+                <span>
+                  <small>
                     {index === 0
-                      ? 'Bắt đầu từ lỗ hổng gốc'
+                      ? 'Bắt đầu ở đây'
                       : kcId === HERO_TARGET_KC_ID
                         ? 'Mục tiêu của lớp'
-                        : `Bước ${index + 1}`}
-                  </span>
-                  <span className="step-name">{kcName(kcId)}</span>
-                </li>
-              ))}
-            </ol>
-            <p className="evidence-note">
-              Các kiến thức đã vững không xuất hiện trong đường bù — học sinh không phải học lại thứ
-              đã nắm chắc.
-            </p>
-          </section>
-          {learnerId === 'an' ? (
-            <section className="action-panel" aria-labelledby="compare-next-heading">
-              <h2 id="compare-next-heading">Cùng bài toán, lỗ hổng gốc khác</h2>
-              <p>
-                An cần bù phân số bằng nhau. Tiếp tục với Bình để xem cùng lỗi bề mặt nhưng bằng
-                chứng dẫn tới một gốc khác.
-              </p>
-              <Link className="button-primary" to="/path/binh">
-                Tiếp: đối chiếu với Bình
-              </Link>
-            </section>
-          ) : null}
-        </>
-      ) : result.status === 'FAST_PATH' ? (
-        <section className="action-panel">
-          <h2>Sẵn sàng tiến tiếp</h2>
-          <p>
-            Bằng chứng cho thấy {profile?.label ?? learnerId} đã vững mục tiêu và các kiến thức nền.
-            Không cần học lại — bước tiếp theo là một bài thử thách chuyển giao.
-          </p>
-          <p>
-            <Link className="button-primary" to={`/learn/${learnerId}`}>
-              Nhận bài thử thách
-            </Link>
-          </p>
+                        : 'Bước nối tiếp'}
+                  </small>
+                  <strong>{kcName(kcId)}</strong>
+                </span>
+              </li>
+            ))}
+          </ol>
         </section>
       ) : null}
 
-      <section className="section">
-        <h2>Chi tiết kiểm chứng</h2>
-        <details className="tech-details">
-          <summary>Căn cứ quyết định ({result.reasonCodes.length})</summary>
-          <ul>
-            {result.reasonCodes.map((code) => (
-              <li key={code}>{REASON_LABELS[code]}</li>
-            ))}
-          </ul>
-        </details>
-        <details className="tech-details">
-          <summary>Sự kiện bằng chứng ({result.evidenceEventIds.length})</summary>
-          <ul>
-            {result.evidenceEventIds.map((id) => (
-              <li key={id}>
-                <code>{id}</code>
-              </li>
-            ))}
-          </ul>
-        </details>
-        <details className="tech-details">
-          <summary>Phiên bản nội dung và thuật toán</summary>
-          <p>
-            Nội dung: <code>{result.contentVersion}</code> — thuật toán:{' '}
-            <code>{result.algorithmVersion}</code>
-          </p>
+      <section className="audit-panel">
+        <details>
+          <summary>Xem căn cứ kỹ thuật của quyết định</summary>
+          <div className="audit-grid">
+            <div>
+              <h3>Quy tắc đã kích hoạt</h3>
+              <ul>
+                {result.reasonCodes.map((code) => (
+                  <li key={code}>{REASON_LABELS[code]}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3>Bằng chứng được sử dụng</h3>
+              <p>{result.evidenceEventIds.length} lượt trả lời theo đúng thứ tự thời gian.</p>
+            </div>
+          </div>
         </details>
       </section>
-    </>
+    </div>
   );
 }

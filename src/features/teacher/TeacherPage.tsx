@@ -1,145 +1,137 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   actionLabel,
   buildHeroClassDashboard,
   GROUP_STATUS_LABELS,
   kcName,
-  UNREVIEWED_LABEL,
 } from '../../app/adapters/hero-tutor';
 
-/**
- * Decision cockpit (§4): first viewport = class facts, the class-wide gap
- * and "help this group first". Groups below as comparable ranked rows.
- * Every number comes from groupForTeacher()/detectClassWideGaps().
- */
 export function TeacherPage() {
   const dashboard = useMemo(() => buildHeroClassDashboard(), []);
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
   const topGroup = groups[0];
+  const gap = dashboard.classWideGaps[0];
   const classSize = dashboard.learners.length;
-  const sufficientTotal = dashboard.groups.reduce(
-    (total, group) => total + group.sufficientEvidenceCount,
-    0,
-  );
+  const sufficientTotal = groups.reduce((total, group) => total + group.sufficientEvidenceCount, 0);
 
   return (
-    <>
-      <section className="section">
-        <h1>Bảng can thiệp lớp học</h1>
-        <p>
-          Lớp mô phỏng <strong>{classSize} học sinh</strong> — {sufficientTotal}/{classSize} hồ sơ
-          có đủ bằng chứng trực tiếp để xếp nhóm.
-        </p>
-        <p className="evidence-note">
-          Toàn bộ học sinh là dữ liệu tổng hợp, không có thông tin cá nhân thật. {UNREVIEWED_LABEL}.
-        </p>
+    <div className="page-stack">
+      <header className="page-heading page-heading--split">
+        <div>
+          <p className="eyebrow">Lớp 7A • Toán</p>
+          <h1>Chào buổi chiều, Cô Hà</h1>
+          <p>Những quyết định cần chú ý trước tiết học tiếp theo.</p>
+        </div>
+        <Link className="button-secondary" to="/teacher/class">
+          Mở nhóm can thiệp
+        </Link>
+      </header>
+
+      <section className="metric-grid" aria-label="Tổng quan lớp học">
+        <article>
+          <span>Quy mô lớp</span>
+          <strong>{classSize}</strong>
+          <small>học sinh</small>
+        </article>
+        <article>
+          <span>Đủ bằng chứng</span>
+          <strong>{sufficientTotal}</strong>
+          <small>trên {classSize} hồ sơ</small>
+        </article>
+        <article>
+          <span>Nhóm cần hành động</span>
+          <strong>{groups.filter((group) => group.priorityScore > 0).length}</strong>
+          <small>xếp theo tác động</small>
+        </article>
+        <article>
+          <span>Cần kiểm tra thêm</span>
+          <strong>
+            {groups.find((group) => group.status === 'QUICK_CHECK')?.totalLearnerCount ?? 0}
+          </strong>
+          <small>chưa bị gán nhãn</small>
+        </article>
       </section>
 
-      {dashboard.classWideGaps.map((gap) => (
-        <section className="action-panel action-panel--review" key={gap.rootKcId}>
-          <h2>Lỗ hổng toàn lớp: {kcName(gap.rootKcId)}</h2>
-          <p style={{ fontSize: 'var(--text-lg)' }}>
-            <strong>
-              {gap.learnerCount}/{gap.classSize}
-            </strong>{' '}
-            học sinh có đủ bằng chứng ({Math.round(gap.rate * 100)}%) — đạt điều kiện chính sách{' '}
-            {Math.round(gap.thresholdRate * 100)}% và tối thiểu {gap.thresholdCount} học sinh.
-          </p>
-          <div
-            className="proportion"
-            role="img"
-            aria-label={`${gap.learnerCount} trên ${gap.classSize} học sinh`}
-          >
-            <span style={{ width: `${Math.round(gap.rate * 100)}%` }} />
-          </div>
-          <p className="group-action">Đề xuất: dạy lại chủ đề này cho cả lớp.</p>
-        </section>
-      ))}
-
-      {topGroup ? (
-        <section className="action-panel">
-          <h2>Ưu tiên trước</h2>
-          <p style={{ fontSize: 'var(--text-lg)' }}>
-            <strong>
-              {GROUP_STATUS_LABELS[topGroup.status] ?? topGroup.status}
-              {topGroup.rootKcId ? ` — ${kcName(topGroup.rootKcId)}` : ''}
-            </strong>{' '}
-            ({topGroup.totalLearnerCount} học sinh)
-          </p>
-          <p>
-            Điểm ưu tiên {topGroup.priorityScore} = {topGroup.sufficientEvidenceCount} học sinh đủ
-            bằng chứng × {topGroup.blockedDescendantCount} kỹ năng phía sau bị chặn.
-          </p>
-          <p className="group-action">{actionLabel(topGroup.suggestedActionId)}</p>
-        </section>
-      ) : null}
-
-      <section className="section">
-        <h2>Các nhóm theo nhu cầu (xếp theo ưu tiên minh bạch)</h2>
-        <ol className="group-rows">
-          {groups.map((group) => (
-            <li className="group-row" key={group.id}>
-              <header>
-                <h3>
-                  {GROUP_STATUS_LABELS[group.status] ?? group.status}
-                  {group.rootKcId ? ` — ${kcName(group.rootKcId)}` : ''}
-                </h3>
-                <span className="status-label status-label--neutral">
-                  Ưu tiên: {group.priorityScore}
-                </span>
-              </header>
-              <ul className="group-facts">
-                <li>
-                  <strong>{group.totalLearnerCount}</strong> học sinh
-                </li>
-                <li>
-                  <strong>
-                    {group.sufficientEvidenceCount}/{group.totalLearnerCount}
-                  </strong>{' '}
-                  đủ bằng chứng
-                </li>
-                <li>
-                  <strong>{group.blockedDescendantCount}</strong> kỹ năng bị chặn phía sau
-                </li>
-              </ul>
+      <section className="teacher-focus-grid">
+        {gap ? (
+          <article className="decision-panel decision-panel--review">
+            <div>
+              <p className="eyebrow">Khoảng trống toàn lớp</p>
+              <h2>{kcName(gap.rootKcId)}</h2>
+              <p>
+                <strong>
+                  {gap.learnerCount}/{gap.classSize}
+                </strong>{' '}
+                học sinh có đủ bằng chứng ({Math.round(gap.rate * 100)}%). Điều kiện dạy lại toàn
+                lớp đã được đáp ứng.
+              </p>
               <div
-                className="proportion"
-                role="img"
-                aria-label={`${group.sufficientEvidenceCount} trên ${group.totalLearnerCount} học sinh đủ bằng chứng`}
+                className="progress-track"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={gap.classSize}
+                aria-valuenow={gap.learnerCount}
               >
-                <span
-                  style={{
-                    width: `${
-                      group.totalLearnerCount > 0
-                        ? Math.round(
-                            (group.sufficientEvidenceCount / group.totalLearnerCount) * 100,
-                          )
-                        : 0
-                    }%`,
-                  }}
-                />
+                <span style={{ width: `${Math.round(gap.rate * 100)}%` }} />
               </div>
-              <p className="group-action">{actionLabel(group.suggestedActionId)}</p>
-              <details className="tech-details">
-                <summary>Danh sách học sinh ({group.learnerIds.length})</summary>
-                <p>{group.learnerIds.join(', ')}</p>
-              </details>
-              {group.representativeEventIds.length > 0 ? (
-                <details className="tech-details">
-                  <summary>Bằng chứng đại diện ({group.representativeEventIds.length})</summary>
-                  <ul>
-                    {group.representativeEventIds.map((id) => (
-                      <li key={id}>
-                        <code>{id}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ) : null}
-            </li>
-          ))}
-        </ol>
+            </div>
+            <Link className="button-primary" to="/teacher/class">
+              Chuẩn bị nhóm can thiệp
+            </Link>
+          </article>
+        ) : null}
+
+        {topGroup ? (
+          <article className="priority-panel">
+            <p className="eyebrow">Ưu tiên số 1</p>
+            <h2>
+              {topGroup.rootKcId ? kcName(topGroup.rootKcId) : GROUP_STATUS_LABELS[topGroup.status]}
+            </h2>
+            <p className="priority-formula">
+              <strong>{topGroup.priorityScore}</strong>
+              <span>
+                = {topGroup.sufficientEvidenceCount} học sinh × {topGroup.blockedDescendantCount} kỹ
+                năng bị chặn
+              </span>
+            </p>
+            <p>{actionLabel(topGroup.suggestedActionId)}</p>
+            <Link className="text-link" to="/teacher/class">
+              Xem danh sách và bằng chứng
+            </Link>
+          </article>
+        ) : null}
       </section>
-    </>
+
+      <section className="summary-panel">
+        <header className="panel-heading">
+          <div>
+            <p className="eyebrow">Bản đồ nhu cầu</p>
+            <h2>Các nhóm đang hình thành trong lớp</h2>
+          </div>
+          <Link className="text-link" to="/teacher/class">
+            Xem tất cả
+          </Link>
+        </header>
+        <div className="group-preview-list">
+          {groups.slice(0, 3).map((group) => (
+            <div key={group.id}>
+              <span>
+                <strong>
+                  {group.rootKcId ? kcName(group.rootKcId) : GROUP_STATUS_LABELS[group.status]}
+                </strong>
+                <small>{GROUP_STATUS_LABELS[group.status]}</small>
+              </span>
+              <span className="group-count">{group.totalLearnerCount} học sinh</span>
+              <span className="priority-chip">Ưu tiên {group.priorityScore}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <p className="data-footnote">
+        Lớp 7A hiện dùng dữ liệu mẫu để đánh giá luồng sản phẩm; không chứa thông tin cá nhân thật.
+      </p>
+    </div>
   );
 }

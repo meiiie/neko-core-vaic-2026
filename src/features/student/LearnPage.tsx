@@ -1,76 +1,52 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useDemoSession } from '../../app/demo-session';
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
-  HERO_LEARNERS,
-  isHeroLearnerId,
   kcName,
   questionForItem,
   STATUS_LABELS,
-  UNREVIEWED_LABEL,
 } from '../../app/adapters/hero-tutor';
 import { appendEvent, listEventsByLearner } from '../../storage/event-repository';
 
-const STATUS_TONE: Record<string, string> = {
-  DIAGNOSED: 'status-label--evidence',
-  NEEDS_MORE_EVIDENCE: 'status-label--review',
-  OUT_OF_SCOPE: 'status-label--neutral',
-  FAST_PATH: 'status-label--evidence',
-};
+const QUESTION_BUDGET = 3;
 
-/**
- * Student surface as one learning interaction: orientation strip, dominant
- * question, evidence state and local-save feedback close together. All
- * pedagogy comes from diagnose(); this component only renders and records.
- */
 export function LearnPage() {
-  const { learnerId } = useParams<{ learnerId: string }>();
+  const { account } = useDemoSession();
+  const learnerId = account?.learnerId ?? 'chi';
+  const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const savingRef = useRef(false);
-
-  const localRecords = useLiveQuery(
-    () => (learnerId ? listEventsByLearner(learnerId) : Promise.resolve([])),
-    [learnerId],
-  );
-
-  if (!isHeroLearnerId(learnerId)) {
-    return (
-      <section className="section">
-        <h1>Ngoài phạm vi demo</h1>
-        <p className="evidence-note">
-          Bản demo này chỉ có bốn hồ sơ mô phỏng: An, Bình, Chi, Minh.
-        </p>
-        <p>
-          <Link to="/">Về trang chính</Link>
-        </p>
-      </section>
-    );
-  }
+  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
 
   if (localRecords === undefined) {
-    return (
-      <section className="section" aria-busy="true">
-        <p>Đang đọc dữ liệu cục bộ…</p>
-      </section>
-    );
+    return <div className="page-loading" aria-label="Đang tải bài kiểm tra" />;
   }
 
-  const profile = HERO_LEARNERS.find((hero) => hero.id === learnerId);
   const result = diagnoseHero(learnerId, localRecords);
-  const targetQuestion = questionForItem('K10-CHECK-1');
   const probeQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
-  const currentStep = probeQuestion ? 2 : 3;
+  const targetQuestion = questionForItem('K10-CHECK-1');
+  const questionNumber = Math.min(localRecords.length + 1, QUESTION_BUDGET);
+  const progress = probeQuestion ? Math.round(((questionNumber - 1) / QUESTION_BUDGET) * 100) : 100;
 
-  async function answer(itemId: string, choiceId: string, correct: boolean) {
-    if (!isHeroLearnerId(learnerId) || localRecords === undefined || savingRef.current) return;
+  async function saveAnswer() {
+    if (!probeQuestion || !selectedChoiceId || localRecords === undefined || savingRef.current)
+      return;
     savingRef.current = true;
     setSaveState('saving');
     try {
       await appendEvent(
-        buildLocalAnswerRecord(learnerId, itemId, choiceId, correct, localRecords.length),
+        buildLocalAnswerRecord(
+          learnerId,
+          probeQuestion.itemId,
+          selectedChoiceId,
+          selectedChoiceId === probeQuestion.correctChoiceId,
+          localRecords.length,
+        ),
       );
+      setSelectedChoiceId(null);
       setSaveState('saved');
     } catch {
       setSaveState('error');
@@ -80,86 +56,136 @@ export function LearnPage() {
   }
 
   return (
-    <>
-      <section className="section">
-        <h1>
-          Học sinh {profile?.label ?? learnerId}{' '}
-          <span className="muted" style={{ fontSize: 'var(--text-base)', fontWeight: 400 }}>
-            (hồ sơ mô phỏng: {learnerId})
-          </span>
-        </h1>
-        <ol className="step-strip" aria-label="Tiến trình chẩn đoán">
-          <li aria-current={undefined}>1. Bài toán mục tiêu</li>
-          <li aria-current={currentStep === 2 ? 'step' : undefined}>2. Câu hỏi kiểm chứng</li>
-          <li aria-current={currentStep === 3 ? 'step' : undefined}>3. Bù kiến thức / tiến tiếp</li>
-        </ol>
-        <p>
-          <span className={`status-label ${STATUS_TONE[result.status] ?? 'status-label--neutral'}`}>
-            {STATUS_LABELS[result.status]}
-          </span>{' '}
-          <Link to={`/path/${learnerId}`}>Xem bằng chứng và lộ trình</Link>
-        </p>
-      </section>
+    <div className="assessment-page">
+      <header className="assessment-header">
+        <div>
+          <p className="eyebrow">Toán 7 • Chủ đề tỉ lệ thức</p>
+          <h1>Bài kiểm tra nền tảng</h1>
+          <p>Hệ thống chọn câu tiếp theo từ câu trả lời trước; tổng số câu có thể thay đổi.</p>
+        </div>
+        <span className="status-label status-label--neutral">Lưu trên thiết bị</span>
+      </header>
+
+      <div className="assessment-progress" aria-label={`Tiến độ ${progress}%`}>
+        <div>
+          <strong>{probeQuestion ? `Câu ${questionNumber}` : 'Hoàn thành'}</strong>
+          <span>{probeQuestion ? `tối đa ${QUESTION_BUDGET} câu` : 'đã đủ bằng chứng'}</span>
+        </div>
+        <div
+          className="progress-track"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+        >
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      </div>
 
       {probeQuestion ? (
-        <section className="action-panel action-panel--review" aria-labelledby="probe-heading">
-          <h2 id="probe-heading">Câu hỏi kiểm chứng tiếp theo</h2>
-          <p className="prompt">{probeQuestion.promptVi}</p>
-          <div className="choice-list" role="group" aria-label="Các lựa chọn trả lời">
-            {probeQuestion.choices.map((choice) => (
+        <div className="assessment-layout">
+          <section className="question-panel" aria-labelledby="question-heading">
+            <header>
+              <span className="question-number" aria-hidden="true">
+                {String(questionNumber).padStart(2, '0')}
+              </span>
+              <div>
+                <p className="eyebrow">Chọn một đáp án</p>
+                <h2 id="question-heading">{probeQuestion.promptVi}</h2>
+              </div>
+            </header>
+
+            <div className="answer-list" role="radiogroup" aria-labelledby="question-heading">
+              {probeQuestion.choices.map((choice, index) => {
+                const selected = selectedChoiceId === choice.id;
+                return (
+                  <button
+                    key={choice.id}
+                    className="answer-choice"
+                    data-selected={selected || undefined}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={saveState === 'saving'}
+                    onClick={() => {
+                      setSelectedChoiceId(choice.id);
+                      setSaveState('idle');
+                    }}
+                  >
+                    <span className="choice-key" aria-hidden="true">
+                      {String.fromCharCode(65 + index)}
+                    </span>
+                    <span>{choice.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <footer className="question-actions">
+              <Link className="button-secondary" to="/student">
+                Lưu và thoát
+              </Link>
               <button
-                key={choice.id}
+                className="button-primary"
                 type="button"
-                disabled={saveState === 'saving'}
-                onClick={() =>
-                  void answer(
-                    probeQuestion.itemId,
-                    choice.id,
-                    choice.id === probeQuestion.correctChoiceId,
-                  )
-                }
+                disabled={!selectedChoiceId || saveState === 'saving'}
+                onClick={() => void saveAnswer()}
               >
-                {choice.label}
+                {saveState === 'saving' ? 'Đang lưu…' : 'Xác nhận và tiếp tục'}
               </button>
-            ))}
-          </div>
-          {saveState === 'saving' && <p role="status">Đang lưu câu trả lời trên thiết bị…</p>}
-          <p className="evidence-note">
-            Vì sao hỏi câu này? Hệ thống đang phân biệt các giả thuyết gốc còn cạnh tranh
-            {result.competingKcIds.length > 0
-              ? `: ${result.competingKcIds.map((id) => kcName(id)).join(' và ')}`
-              : ''}
-            . {probeQuestion.hypothesisLabel}.
-          </p>
-          {saveState === 'saved' && (
-            <p role="status">Đã lưu câu trả lời trên thiết bị này (không gửi lên máy chủ).</p>
-          )}
-          {saveState === 'error' && (
-            <p role="alert" className="danger">
-              Không lưu được câu trả lời — bộ nhớ trình duyệt có thể không khả dụng.
-            </p>
-          )}
-        </section>
+            </footer>
+
+            {saveState === 'saved' ? (
+              <p role="status" className="save-message">
+                Đã lưu. Câu tiếp theo được chọn từ bằng chứng mới.
+              </p>
+            ) : null}
+            {saveState === 'error' ? (
+              <p role="alert" className="error-message">
+                Không lưu được câu trả lời. Hãy thử lại trên thiết bị này.
+              </p>
+            ) : null}
+          </section>
+
+          <aside className="assessment-context" aria-labelledby="context-heading">
+            <p className="eyebrow">Mục tiêu của bài</p>
+            <h2 id="context-heading">Tìm giá trị chưa biết trong tỉ lệ thức</h2>
+            {targetQuestion ? <p>{targetQuestion.promptVi}</p> : null}
+            <dl>
+              <div>
+                <dt>Trạng thái</dt>
+                <dd>{STATUS_LABELS[result.status]}</dd>
+              </div>
+              <div>
+                <dt>Đang phân biệt</dt>
+                <dd>
+                  {result.competingKcIds.length > 0
+                    ? result.competingKcIds.map((id) => kcName(id)).join(' / ')
+                    : 'Kiến thức nền liên quan'}
+                </dd>
+              </div>
+            </dl>
+            <details>
+              <summary>Vì sao hệ thống hỏi câu này?</summary>
+              <p>{probeQuestion.hypothesisLabel}.</p>
+            </details>
+          </aside>
+        </div>
       ) : (
-        <section className="action-panel" aria-labelledby="next-heading">
-          <h2 id="next-heading">Không cần thêm câu hỏi kiểm chứng</h2>
+        <section className="completion-panel">
+          <span className="completion-mark" aria-hidden="true">
+            ✓
+          </span>
+          <p className="eyebrow">Đã hoàn thành phiên kiểm tra</p>
+          <h2>NekoPath đã có đủ bằng chứng cho bước tiếp theo</h2>
           <p>
-            Hệ thống đã đủ bằng chứng để kết luận hoặc đề xuất bước tiếp theo cho{' '}
-            {profile?.label ?? learnerId}.
+            Bạn có thể xem kiến thức nền cần củng cố và đường học ngắn nhất đến mục tiêu của lớp.
           </p>
-          <p>
-            <Link className="button-primary" to={`/path/${learnerId}`}>
-              Xem lộ trình đề xuất
-            </Link>
-          </p>
+          <Link className="button-primary" to="/student/path">
+            Xem lộ trình của tôi
+          </Link>
         </section>
       )}
-
-      <section className="section">
-        <h2>Bài toán mục tiêu của lớp</h2>
-        {targetQuestion ? <p className="prompt">{targetQuestion.promptVi}</p> : null}
-        <p className="evidence-note">{UNREVIEWED_LABEL}.</p>
-      </section>
-    </>
+    </div>
   );
 }

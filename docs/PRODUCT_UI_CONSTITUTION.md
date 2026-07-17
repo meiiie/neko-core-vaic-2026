@@ -1,6 +1,7 @@
 # NekoPath product and UI constitution
 
-Status: binding handoff for product, UX/UI and implementation review  
+Status: geometry, accessibility and evidence rules remain binding; route and entry-flow rules in
+sections 2–5 are superseded by `OPERATIONAL_MVP.md` following the human decision on 2026-07-17.
 Evidence cutoff: 2026-07-15  
 Product: Vietnam AI Innovation Challenge 2026 — Adaptive tutor for the mixed-ability classroom
 

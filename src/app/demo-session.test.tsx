@@ -4,37 +4,33 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DemoSessionProvider, useDemoSession } from './demo-session';
 
 function Probe() {
-  const { role, learnerId, setRole, setLearnerId } = useDemoSession();
+  const { account, signIn, signOut } = useDemoSession();
   return (
     <div>
-      <output data-testid="role">{role}</output>
-      <output data-testid="learner">{learnerId}</output>
-      <button type="button" onClick={() => setRole('TEACHER')}>
-        to-teacher
+      <output data-testid="account">{account?.id ?? 'signed-out'}</output>
+      <button type="button" onClick={() => signIn('teacher-7a-ha')}>
+        Sign in teacher
       </button>
-      <button type="button" onClick={() => setLearnerId('binh')}>
-        to-binh
+      <button type="button" onClick={signOut}>
+        Sign out
       </button>
     </div>
   );
 }
 
 describe('DemoSession', () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
+  beforeEach(() => window.localStorage.clear());
 
-  it('defaults to STUDENT role with learner an', () => {
+  it('starts signed out instead of silently choosing a role', () => {
     render(
       <DemoSessionProvider>
         <Probe />
       </DemoSessionProvider>,
     );
-    expect(screen.getByTestId('role').textContent).toBe('STUDENT');
-    expect(screen.getByTestId('learner').textContent).toBe('an');
+    expect(screen.getByTestId('account').textContent).toBe('signed-out');
   });
 
-  it('switches role and learner and persists the choice', async () => {
+  it('enters a named demo account, persists it and signs out', async () => {
     const user = userEvent.setup();
     render(
       <DemoSessionProvider>
@@ -42,15 +38,14 @@ describe('DemoSession', () => {
       </DemoSessionProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'to-teacher' }));
-    await user.click(screen.getByRole('button', { name: 'to-binh' }));
+    await user.click(screen.getByRole('button', { name: 'Sign in teacher' }));
+    expect(screen.getByTestId('account').textContent).toBe('teacher-7a-ha');
+    expect(JSON.parse(window.localStorage.getItem('nekopath.demo-session.v2') ?? 'null')).toEqual({
+      accountId: 'teacher-7a-ha',
+    });
 
-    expect(screen.getByTestId('role').textContent).toBe('TEACHER');
-    expect(screen.getByTestId('learner').textContent).toBe('binh');
-
-    const persisted = JSON.parse(
-      window.localStorage.getItem('nekopath.demo-session.v1') ?? 'null',
-    ) as { role: string; learnerId: string } | null;
-    expect(persisted).toEqual({ role: 'TEACHER', learnerId: 'binh' });
+    await user.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(screen.getByTestId('account').textContent).toBe('signed-out');
+    expect(window.localStorage.getItem('nekopath.demo-session.v2')).toBeNull();
   });
 });

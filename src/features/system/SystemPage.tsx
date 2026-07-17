@@ -9,15 +9,11 @@ interface StorageEstimateState {
 }
 
 function formatBytes(bytes?: number): string {
-  if (bytes === undefined) return 'không rõ';
+  if (bytes === undefined) return 'Không xác định';
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-/**
- * Quiet utility surface (§4): human-readable status first, technical
- * versions in expandable detail, reset explicit but never visually primary.
- */
 export function SystemPage() {
   const [eventCount, setEventCount] = useState<number | null>(null);
   const [estimate, setEstimate] = useState<StorageEstimateState>({});
@@ -40,7 +36,7 @@ export function SystemPage() {
             : undefined;
           if (!cancelled) setEstimate({ usage, quota, persisted });
         } catch {
-          // Leave estimate unknown; the UI already says "không rõ".
+          // Unknown is an explicit UI state below.
         }
       }
     })();
@@ -59,65 +55,91 @@ export function SystemPage() {
   }
 
   return (
-    <>
-      <section className="section">
-        <h1>Hệ thống</h1>
-        <ul>
-          <li>Chế độ dữ liệu: mô phỏng, lưu trên thiết bị này — không gửi lên máy chủ.</li>
-          <li>Số sự kiện học tập đã ghi cục bộ: {eventCount ?? 'không đọc được'}.</li>
-          <li>
-            Dung lượng lưu trữ (ước tính của trình duyệt): {formatBytes(estimate.usage)} /{' '}
-            {formatBytes(estimate.quota)}.
-          </li>
-          <li>
-            Lưu trữ bền vững:{' '}
-            {estimate.persisted === undefined
-              ? 'không rõ'
-              : estimate.persisted
-                ? 'đã được cấp'
-                : 'chưa được cấp'}
-            .
-          </li>
-        </ul>
-        <details className="tech-details">
-          <summary>Chi tiết kỹ thuật</summary>
-          <ul>
+    <div className="page-stack">
+      <header className="page-heading">
+        <p className="eyebrow">Thiết bị hiện tại</p>
+        <h1>Dữ liệu &amp; ngoại tuyến</h1>
+        <p>Kiểm tra dữ liệu đã lưu và khả năng tiếp tục học khi kết nối không ổn định.</p>
+      </header>
+
+      <section className="system-grid">
+        <article className="summary-panel">
+          <p className="eyebrow">Trạng thái</p>
+          <h2>Sẵn sàng học ngoại tuyến</h2>
+          <ul className="status-list">
             <li>
-              Phiên bản schema cơ sở dữ liệu cục bộ: <code>v{DB_SCHEMA_VERSION}</code>
+              <span>Sự kiện học tập</span>
+              <strong>{eventCount ?? 'Không đọc được'}</strong>
+            </li>
+            <li>
+              <span>Dung lượng đang dùng</span>
+              <strong>{formatBytes(estimate.usage)}</strong>
+            </li>
+            <li>
+              <span>Hạn mức trình duyệt</span>
+              <strong>{formatBytes(estimate.quota)}</strong>
+            </li>
+            <li>
+              <span>Lưu trữ bền vững</span>
+              <strong>
+                {estimate.persisted === undefined
+                  ? 'Chưa rõ'
+                  : estimate.persisted
+                    ? 'Đã cấp'
+                    : 'Chưa cấp'}
+              </strong>
             </li>
           </ul>
-        </details>
-      </section>
+          <details>
+            <summary>Thông tin phiên bản</summary>
+            <p>
+              Schema dữ liệu cục bộ: <code>v{DB_SCHEMA_VERSION}</code>
+            </p>
+          </details>
+        </article>
 
-      <section className="section">
-        <h2>Đặt lại dữ liệu mô phỏng</h2>
-        <p>
-          Xóa toàn bộ sự kiện học tập, ghi đè của giáo viên và hàng đợi đồng bộ trên thiết bị này.
-          Chỉ ảnh hưởng dữ liệu mô phỏng của NekoPath.
-        </p>
-        {resetState === 'idle' && (
-          <button type="button" onClick={() => setResetState('confirm')}>
-            Đặt lại dữ liệu demo…
-          </button>
-        )}
-        {resetState === 'confirm' && (
-          <>
-            <p className="evidence-note">Bạn chắc chắn muốn xóa dữ liệu demo cục bộ?</p>
-            <button type="button" className="danger" onClick={() => void handleReset()}>
-              Xác nhận xóa
-            </button>{' '}
-            <button type="button" onClick={() => setResetState('idle')}>
-              Hủy
+        <article className="summary-panel danger-zone">
+          <p className="eyebrow">Khôi phục môi trường dùng thử</p>
+          <h2>Xóa tiến độ trên thiết bị này</h2>
+          <p>Thao tác xóa các câu trả lời, ghi đè của giáo viên và hàng đợi đồng bộ cục bộ.</p>
+          {resetState === 'idle' ? (
+            <button
+              className="button-secondary"
+              type="button"
+              onClick={() => setResetState('confirm')}
+            >
+              Đặt lại dữ liệu…
             </button>
-          </>
-        )}
-        {resetState === 'done' && <p role="status">Đã đặt lại dữ liệu demo.</p>}
-        {resetState === 'error' && (
-          <p role="alert" className="danger">
-            Không đặt lại được dữ liệu. Bộ nhớ trình duyệt có thể không khả dụng.
-          </p>
-        )}
+          ) : null}
+          {resetState === 'confirm' ? (
+            <div className="confirm-panel">
+              <p>Bạn chắc chắn muốn xóa toàn bộ tiến độ dùng thử trên thiết bị này?</p>
+              <div>
+                <button className="button-danger" type="button" onClick={() => void handleReset()}>
+                  Xác nhận xóa
+                </button>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  onClick={() => setResetState('idle')}
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {resetState === 'done' ? (
+            <p role="status" className="save-message">
+              Đã đặt lại dữ liệu trên thiết bị.
+            </p>
+          ) : null}
+          {resetState === 'error' ? (
+            <p role="alert" className="error-message">
+              Không thể đặt lại dữ liệu. Hãy thử lại.
+            </p>
+          ) : null}
+        </article>
       </section>
-    </>
+    </div>
   );
 }

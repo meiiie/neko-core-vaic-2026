@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "NekoPath — local-first adaptive tutoring PWA for mixed-ability classrooms (synthetic demo data only)",
+  "description": "NekoPath — local-first adaptive tutoring PWA for mixed-ability classrooms (sample evaluation data only)",
   "engines": {
     "node": ">=24.18.0 <25"
   },
