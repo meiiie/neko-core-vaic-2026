@@ -12,6 +12,7 @@ path instead of repeating the same fixed lesson sequence.
 - [Problem analysis](docs/PROBLEM_ANALYSIS.md)
 - [48-hour product contract](docs/PRODUCT_CONTRACT.md)
 - [Curriculum and hero-profile draft](docs/CONTENT_MODEL_DRAFT.md)
+- [Implementation master plan and Fable 5 handoff](docs/IMPLEMENTATION_MASTER_PLAN.md)
 - [AI collaboration log](AI_COLLABORATION_LOG.csv)
 
 The official problem text is intentionally short. Anything not stated there is an internal
@@ -21,8 +22,9 @@ statement.
 
 ## Current status
 
-Research and product contracts are locked. Product scaffolding waits for the first visual
-direction and the curriculum-edge review; no implementation result is claimed yet.
+Research, product contracts and the execution plan are locked. The selected visual direction is
+“Sổ can thiệp lớp học”; product scaffolding and curriculum-edge review are the next gates. No
+implementation result is claimed yet.
 
 ## Non-negotiables
 

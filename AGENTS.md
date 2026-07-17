@@ -1,6 +1,7 @@
 # NekoPath agent contract
 
-Read `docs/PROBLEM_ANALYSIS.md` and `docs/PRODUCT_CONTRACT.md` before changing product code.
+Read `docs/PROBLEM_ANALYSIS.md`, `docs/PRODUCT_CONTRACT.md` and
+`docs/IMPLEMENTATION_MASTER_PLAN.md` before changing product code.
 
 ## Authority
 
@@ -40,3 +41,12 @@ rules/parameters from inference, and another owner controls held-out labels.
 Until implementation commands exist, the only valid state is “contract complete; product not
 built.” Add actual install/dev/typecheck/test/eval/build commands here immediately after the
 minimal scaffold is chosen.
+
+## Concurrent ownership during initial build
+
+- Fable 5 owns scaffold/config, `src/app/**`, `src/components/**`, `src/features/**`,
+  `src/storage/**`, `src/services/**`, `tests/e2e/**`, `server/**`, `ops/**` and deployment.
+- Codex owns `src/domain/**`, `src/content/**` schema/fixtures and `tests/eval/**`.
+- Only the Fable/integrator lane changes shared package/build/CI configuration. Other lanes submit
+  a dependency or config request instead of racing on shared files.
+- Human curriculum review owns acceptance of edges, items, hints and intervention wording.
