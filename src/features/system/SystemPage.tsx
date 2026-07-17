@@ -152,6 +152,9 @@ export function SystemPage() {
           <details>
             <summary>Thông tin phiên bản</summary>
             <p>
+              Ứng dụng: <code>v{__APP_VERSION__}</code> — bản dựng: <code>{__BUILD_COMMIT__}</code>
+            </p>
+            <p>
               Schema dữ liệu cục bộ: <code>v{DB_SCHEMA_VERSION}</code>
             </p>
           </details>

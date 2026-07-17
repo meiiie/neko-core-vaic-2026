@@ -99,3 +99,27 @@ If the VPS cannot be recovered before judging:
 3. wait for the Pages domain to become active and smoke test the local-first recovery artifact.
 
 To return to full-stack, deploy the reviewed `main` Worker configuration from `edge/wrangler.jsonc`, then verify the canonical health endpoint and secure login flow.
+
+## Versioning & releases
+
+- **Semver + Conventional Commits.** `feat:` bumps minor, `fix:` bumps patch,
+  breaking changes bump major (none expected during the event).
+- **Single branch `main`**; short-lived PR branches are deleted after merge.
+- **Tags mark judgeable snapshots only**: `v0.x.y` for internal milestones,
+  `checkpoint-1`, `checkpoint-2`, `v1.0.0-vaic-final` per the master plan.
+  Tag only commits whose CI gate is green and that are (or will be) deployed.
+- The running build shows `v<version> + <commit>` in "Dữ liệu & ngoại tuyến"
+  → "Thông tin phiên bản" (injected at build time), so any screenshot or bug
+  report identifies its exact source commit.
+
+## CI/CD
+
+- `ci.yml` gates every PR and main push: format, lint, typecheck, tests,
+  deterministic eval, production build + PWA artifact integrity; uploads
+  `dist` for 7 days. Actions pinned to full commit SHAs; `contents: read`.
+- `deploy.yml` is **manual** (`workflow_dispatch`): auths to GCP with the
+  `GCP_SA_KEY` repository secret, then runs the exact RUNBOOK deploy over IAP
+  SSH and smokes the canonical URL. To enable it once: create a service
+  account with Compute OS Login + IAP-secured tunnel access, download its
+  JSON key, and add it as the `GCP_SA_KEY` secret. Until that secret exists,
+  deploys stay manual per the section above (identical commands).

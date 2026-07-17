@@ -1,0 +1,38 @@
+name: Deploy production VM
+
+# Manual-only (workflow_dispatch): a human decides when main goes to the VM.
+# The Docker build on the VM is the release gate (typecheck + tests + build
+# run inside the image build), mirroring ops/RUNBOOK.md exactly.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Requires repository secret GCP_SA_KEY (service-account JSON with
+    # compute.instances.* + IAP tunnel access). Never exposed to PRs:
+    # workflow_dispatch only runs from branches in this repo.
+    steps:
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Pull main and rebuild app container on the VM
+        run: |
+          gcloud compute ssh nekopath-production \
+            --zone=asia-southeast1-c \
+            --tunnel-through-iap \
+            --command="cd /opt/nekopath && sudo git fetch origin && sudo git reset --hard origin/main && sudo docker compose -f ops/compose.yml up -d --build app"
+
+      - name: Smoke canonical URL
+        run: |
+          sleep 20
+          curl -fsS https://nekopath.holilihu.online/api/healthz
+          curl -fsS -o /dev/null -w '%{http_code}\n' https://nekopath.holilihu.online/

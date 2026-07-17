@@ -1,12 +1,27 @@
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
+import pkg from './package.json';
+
+function buildCommit(): string {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7);
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim();
+  } catch {
+    return 'dev';
+  }
+}
 
 // PWA policy (docs/IMPLEMENTATION_MASTER_PLAN.md §8):
 // - generateSW with prompt-for-update; never autoUpdate during an active diagnostic.
 // - Precache the hashed app shell only. No runtime caching of /api/**.
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_COMMIT__: JSON.stringify(buildCommit()),
+  },
   plugins: [
     react(),
     VitePWA({
