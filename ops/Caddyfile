@@ -1,8 +1,8 @@
-# Caddy edge for NekoPath (docs/IMPLEMENTATION_MASTER_PLAN.md §8/§13).
-# Canonical domain: nekopath.holilihu.online. When the VPS goes live, point
-# this DNS record at the VPS (currently it targets Cloudflare Pages).
+# Caddy origin for NekoPath (docs/IMPLEMENTATION_MASTER_PLAN.md §8/§13).
+# The canonical hostname is served by a Cloudflare Worker custom domain. The
+# sslip.io hostname gives that Worker an independently verifiable HTTPS origin.
 
-nekopath.holilihu.online {
+nekopath.holilihu.online, nekopath-origin.34-142-197-144.sslip.io {
 	encode zstd gzip
 
 	# Never let intermediaries cache the SW-critical trio.
