@@ -1,6 +1,6 @@
 # NekoPath deployment status
 
-Ngày xác minh: 2026-07-17 · Trạng thái: **production full-stack đang live**.
+Ngày xác minh: 2026-07-18 · Trạng thái: **production full-stack đang live**.
 
 ## Canonical production route
 
@@ -28,7 +28,8 @@ Browser
 | IP tĩnh | `34.142.197.144` (`nekopath-production-ip`) |
 | Ứng dụng | `/opt/nekopath` · Docker Compose (`app`, `caddy`) |
 | Lưu trữ | 20 GB persistent disk; SQLite và Caddy state dùng Docker named volumes |
-| Network | Firewall chỉ mở TCP 80/443 và UDP 443 với tag `nekopath-web` |
+| Network | Public TCP 80/443 + UDP 443; SSH chỉ đi qua IAP tới đúng VM |
+| CD identity | GitHub OIDC → Workload Identity Federation; không có GCP JSON key |
 | Backup trước cutover | `/var/backups/nekopath/data-pre-cutover-20260717.tgz` |
 
 Không copy FPT/API key hoặc `.env` cá nhân lên host. Bản hiện tại chạy deterministic core và mock LLM profile; chỉ bật inference server-side sau gate đánh giá riêng.
