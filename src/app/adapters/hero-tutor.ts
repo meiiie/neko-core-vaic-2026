@@ -5,6 +5,7 @@ import {
   HERO_GRAPH,
   HERO_ITEMS,
   HERO_QUESTIONS,
+  PRACTICE_QUESTIONS,
   heroMisconceptionName,
   type HeroQuestion,
   type HeroSimulationProfileId,
@@ -54,7 +55,21 @@ export function kcName(kcId: string): string {
 export const misconceptionName = heroMisconceptionName;
 
 export function questionForItem(itemId: string): HeroQuestion | undefined {
-  return HERO_QUESTIONS.find((question) => question.itemId === itemId);
+  const diagnosticQuestion = HERO_QUESTIONS.find((question) => question.itemId === itemId);
+  if (diagnosticQuestion) return diagnosticQuestion;
+  const practiceQuestion = PRACTICE_QUESTIONS.find((question) => question.itemId === itemId);
+  if (!practiceQuestion) return undefined;
+  return {
+    itemId: practiceQuestion.itemId,
+    promptVi: practiceQuestion.promptVi,
+    choices: practiceQuestion.choices.map((choice) => ({
+      id: choice.id,
+      label: choice.label,
+      ...(choice.misconceptionTag ? { misconceptionId: choice.misconceptionTag } : {}),
+    })),
+    correctChoiceId: practiceQuestion.correctChoiceId,
+    hypothesisLabel: practiceQuestion.hypothesisLabel,
+  };
 }
 
 /** Resolve a persisted direct or teacher-bank ID to a known diagnosis item. */
@@ -259,17 +274,31 @@ export function diagnoseHero(
   localRecords: readonly LearnerEventRecord[] = [],
 ): DiagnosisResult {
   const context = normalizeStudentContext(reference);
-  const localEvents = toDomainEvents(localRecords).filter(
-    (event) => event.learnerId === context.learnerId,
-  );
   return diagnose({
     learnerId: context.learnerId,
     targetKcId: HERO_TARGET_KC_ID,
     graph: HERO_GRAPH,
     items: HERO_ITEMS,
-    events: [...seededEvents(context), ...localEvents],
+    events: studentDomainEvents(context, localRecords),
     config: HERO_DEMO_CONFIG,
   });
+}
+
+/** Complete account-owned evidence used by diagnosis, in deterministic order. */
+export function studentDomainEvents(
+  reference: StudentDiagnosisReference,
+  localRecords: readonly LearnerEventRecord[],
+): LearnerEvent[] {
+  const context = normalizeStudentContext(reference);
+  const localEvents = toDomainEvents(localRecords).filter(
+    (event) => event.learnerId === context.learnerId,
+  );
+  return [...seededEvents(context), ...localEvents].sort(
+    (left, right) =>
+      left.sequence - right.sequence ||
+      left.occurredAt.localeCompare(right.occurredAt) ||
+      left.id.localeCompare(right.id),
+  );
 }
 
 export { buildHeroClassDashboard };

@@ -2,7 +2,7 @@ import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { CheckCircleIcon } from '@phosphor-icons/react/CheckCircle';
 import { InfoIcon } from '@phosphor-icons/react/Info';
 import { useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useSession } from '../../app/session';
 import {
   buildLocalAnswerRecord,
@@ -10,6 +10,7 @@ import {
   kcName,
   questionForItem,
 } from '../../app/adapters/hero-tutor';
+import { reviewRecommendation, REVIEW_REASON_LABELS } from '../../app/adapters/review-selection';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { recordAnswer } from '../../services/sync';
@@ -18,9 +19,12 @@ const QUESTION_BUDGET = 3;
 
 export function LearnPage() {
   const { account } = useSession();
+  const [searchParams] = useSearchParams();
   const learnerContext = studentContextForAccount(account);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [answeredThisRound, setAnsweredThisRound] = useState(0);
+  const [reassessment, setReassessment] = useState(() => searchParams.get('mode') === 'review');
   const savingRef = useRef(false);
   const {
     records: localRecords,
@@ -38,8 +42,16 @@ export function LearnPage() {
 
   const activeLearnerContext = learnerContext;
   const result = diagnoseHero(activeLearnerContext, localRecords);
-  const probeQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
-  const questionNumber = Math.min(localRecords.length + 1, QUESTION_BUDGET);
+  const recommendedQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
+  const review = reassessment
+    ? reviewRecommendation(activeLearnerContext, result, localRecords)
+    : undefined;
+  const candidateQuestion = recommendedQuestion ?? review?.question;
+  const roundComplete = answeredThisRound >= QUESTION_BUDGET;
+  const probeQuestion = roundComplete ? undefined : candidateQuestion;
+  const questionNumber = answeredThisRound + 1;
+  const canContinueAssessment =
+    result.status === 'NEEDS_MORE_EVIDENCE' && candidateQuestion !== undefined;
 
   async function saveAnswer() {
     if (!probeQuestion || !selectedChoiceId || localRecords === undefined || savingRef.current)
@@ -57,6 +69,7 @@ export function LearnPage() {
       await recordAnswer(record);
       setSelectedChoiceId(null);
       setSaveState('saved');
+      setAnsweredThisRound((count) => count + 1);
     } catch {
       setSaveState('error');
     } finally {
@@ -154,13 +167,17 @@ export function LearnPage() {
             <div className="assessment-skill">
               <span>Kỹ năng đang đánh giá</span>
               <strong>
-                {result.competingKcIds.length > 0
-                  ? result.competingKcIds.map((id) => kcName(id)).join(' · ')
-                  : 'Kiến thức nền liên quan'}
+                {review
+                  ? kcName(review.kcId)
+                  : result.competingKcIds.length > 0
+                    ? result.competingKcIds.map((id) => kcName(id)).join(' · ')
+                    : 'Kiến thức nền liên quan'}
               </strong>
             </div>
             <p className="assessment-context-note">
-              Hệ thống cần thêm câu trả lời để đánh giá chính xác.
+              {review
+                ? REVIEW_REASON_LABELS[review.reason]
+                : 'Hệ thống cần thêm câu trả lời để đánh giá chính xác.'}
             </p>
             <details>
               <summary>
@@ -186,7 +203,11 @@ export function LearnPage() {
           {result.status === 'NEEDS_MORE_EVIDENCE' ? (
             <>
               <h2>Đã lưu câu trả lời của em</h2>
-              <p>Hệ thống cần thêm câu trả lời trước khi đưa ra đánh giá chính xác.</p>
+              <p>
+                {canContinueAssessment
+                  ? 'Hệ thống vẫn cần thêm bằng chứng. Câu tiếp theo sẽ được chọn từ kết quả của lượt này.'
+                  : 'Chưa đủ bằng chứng để tạo lộ trình. Kết quả đã được chuyển cho giáo viên xem xét.'}
+              </p>
             </>
           ) : (
             <>
@@ -194,9 +215,37 @@ export function LearnPage() {
               <p>Em có thể xem kỹ năng cần củng cố và bước học phù hợp với kết quả vừa rồi.</p>
             </>
           )}
-          <Link className="button-primary" to="/student/path">
-            Xem lộ trình của tôi
-          </Link>
+          {canContinueAssessment ? (
+            <button
+              className="button-primary"
+              type="button"
+              onClick={() => {
+                setAnsweredThisRound(0);
+                setSaveState('idle');
+              }}
+            >
+              Làm tiếp lượt cần bằng chứng
+            </button>
+          ) : (
+            <Link className="button-primary" to="/student/path">
+              {result.status === 'NEEDS_MORE_EVIDENCE'
+                ? 'Xem trạng thái bằng chứng'
+                : 'Xem lộ trình của tôi'}
+            </Link>
+          )}
+          {result.status === 'DIAGNOSED' || result.status === 'FAST_PATH' ? (
+            <button
+              className="button-secondary"
+              type="button"
+              onClick={() => {
+                setReassessment(true);
+                setAnsweredThisRound(0);
+                setSaveState('idle');
+              }}
+            >
+              Kiểm tra lại để cập nhật lộ trình
+            </button>
+          ) : null}
         </section>
       )}
     </div>

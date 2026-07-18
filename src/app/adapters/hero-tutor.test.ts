@@ -8,6 +8,7 @@ import {
   buildLocalAnswerRecord,
   diagnoseHero,
   isHeroLearnerId,
+  questionForItem,
   toDomainEvents,
   toHeroClassObservedEvents,
 } from './hero-tutor';
@@ -73,6 +74,26 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     });
     expect(result.evidenceEventIds).toEqual([]);
     expect(record).toMatchObject({ learnerId: 'user-student-7a-01', sequence: 1 });
+    expect(result.nextItemId).toBe('K01-CHECK-1');
+    expect(questionForItem(result.nextItemId ?? '')?.promptVi).toBeTruthy();
+  });
+
+  it('keeps the adaptive check-in actionable after Chi answers the first probe', () => {
+    for (const choiceId of ['a', 'b', 'c']) {
+      const first = buildLocalAnswerRecord(
+        CHI_CONTEXT,
+        'K02-DIAGNOSTIC',
+        choiceId,
+        choiceId === 'a',
+        0,
+      );
+      const result = diagnoseHero(CHI_CONTEXT, [first]);
+      expect(
+        result.status === 'DIAGNOSED' ||
+          result.status === 'FAST_PATH' ||
+          result.nextItemId !== undefined,
+      ).toBe(true);
+    }
   });
 
   it('maps account-owned demo events only at the synthetic teacher boundary', () => {

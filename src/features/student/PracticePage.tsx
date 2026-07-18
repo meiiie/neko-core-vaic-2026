@@ -245,8 +245,13 @@ export function PracticePage() {
               </button>
             </section>
           ) : null}
+          {!transferQuestion || phase === 'feedback' ? (
+            <Link className="button-primary" to="/student/check-in?mode=review">
+              Bắt đầu lượt ôn thông minh tiếp theo
+            </Link>
+          ) : null}
           <Link className="button-secondary" to="/student/path">
-            Xem lại lộ trình
+            Xem kế hoạch học tiếp theo
           </Link>
         </section>
       </div>
