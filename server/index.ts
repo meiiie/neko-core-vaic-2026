@@ -1,6 +1,6 @@
 import fastifyStatic from '@fastify/static';
 import { mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { buildApp } from './app.ts';
 import { openDb } from './db.ts';
 import { seed } from './seed.ts';
@@ -19,7 +19,8 @@ mkdirSync('server/data', { recursive: true });
 const db = openDb(DB_PATH);
 seed(db);
 
-const app = buildApp(db);
+// Uploaded learning resources persist beside the database on the same volume.
+const app = buildApp(db, { resourcesDir: join(dirname(DB_PATH), 'resources') });
 
 if (process.env.NODE_ENV === 'production') {
   await app.register(fastifyStatic, {

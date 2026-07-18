@@ -2,7 +2,9 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyMultipart from '@fastify/multipart';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { createHash, randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { createReadStream, createWriteStream, mkdirSync, statSync, unlinkSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { HERO_GRAPH, HERO_ITEMS } from '../src/content/hero-demo.ts';
@@ -31,6 +33,17 @@ import {
 } from './question-import.ts';
 
 const LESSON_KC_IDS = new Set(LESSON_SUMMARIES.map((lesson) => lesson.kcId));
+
+/**
+ * Learning-resource limits. Videos must arrive pre-compressed ("đã tối ưu
+ * dung lượng"): the ceiling forces micro-learning clips, not raw recordings.
+ */
+const RESOURCE_MAX_BYTES = 60 * 1024 * 1024;
+const RESOURCE_MIME_ALLOW: Record<string, 'PDF' | 'VIDEO'> = {
+  'application/pdf': 'PDF',
+  'video/mp4': 'VIDEO',
+  'video/webm': 'VIDEO',
+};
 
 /**
  * NekoPath API — one Fastify unit (master plan §9). The server owns identity,
@@ -185,13 +198,19 @@ export interface AppOptions {
   readonly openAiApiKey?: string;
   readonly openAiModel?: string;
   readonly codexManager?: CodexManagerPort;
+  readonly resourcesDir?: string;
 }
 
 export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyInstance {
+  const resourcesDir = options.resourcesDir ?? 'server/data/resources';
+  mkdirSync(resourcesDir, { recursive: true });
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 });
   void app.register(fastifyCookie);
+  // Shared multipart config: question-file import (small) and learning
+  // resources (up to RESOURCE_MAX_BYTES) both stream through this plugin;
+  // per-route validation enforces the tighter domain rules.
   void app.register(fastifyMultipart, {
-    limits: { files: 1, fileSize: 5 * 1024 * 1024, fields: 4, parts: 5 },
+    limits: { files: 1, fields: 8, parts: 10, fileSize: RESOURCE_MAX_BYTES },
   });
   app.addHook('onRequest', (_request, reply, done) => {
     void reply.header('Origin-Agent-Cluster', '?1');
@@ -1225,6 +1244,152 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       user.id,
       new Date().toISOString(),
     );
+    return { ok: true };
+  });
+
+  /**
+   * Learning resources (PDF summaries, micro-learning videos) attached to a
+   * KC — the multimedia layer of the recovery path. Files live on the same
+   * persistent volume as the database; the client caches them per-device for
+   * offline reading/watching (LMS_hohulili course-download pattern).
+   */
+  const resourceDto = (row: {
+    id: string;
+    kc_id: string;
+    kind: string;
+    title: string;
+    file_name: string;
+    mime_type: string;
+    byte_size: number;
+    sha256: string;
+    created_at: string;
+    uploaded_by_name: string | null;
+  }) => ({
+    id: row.id,
+    kcId: row.kc_id,
+    kind: row.kind,
+    title: row.title,
+    fileName: row.file_name,
+    mimeType: row.mime_type,
+    byteSize: row.byte_size,
+    sha256: row.sha256,
+    createdAt: row.created_at,
+    uploadedByName: row.uploaded_by_name,
+  });
+
+  app.get('/api/resources', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    const rows = db
+      .prepare(
+        `SELECT r.*, u.name AS uploaded_by_name
+         FROM resources r LEFT JOIN users u ON u.id = r.uploaded_by
+         ORDER BY r.kc_id, r.created_at`,
+      )
+      .all() as Parameters<typeof resourceDto>[0][];
+    return { resources: rows.map(resourceDto) };
+  });
+
+  app.post(
+    '/api/resources',
+    { bodyLimit: RESOURCE_MAX_BYTES + 1024 * 1024 },
+    async (request, reply) => {
+      const user = requireTeacher(request, reply);
+      if (!user) return;
+      const part = await request.file();
+      if (!part) return reply.code(400).send({ error: 'NO_FILE' });
+
+      const fieldValue = (name: string): string => {
+        const field = part.fields[name];
+        return field && 'value' in field ? String(field.value) : '';
+      };
+      const kcId = fieldValue('kcId');
+      const title = fieldValue('title').trim() || part.filename;
+      const kind = RESOURCE_MIME_ALLOW[part.mimetype];
+
+      if (!LESSON_KC_IDS.has(kcId)) return reply.code(400).send({ error: 'UNKNOWN_KC' });
+      if (!kind) return reply.code(415).send({ error: 'UNSUPPORTED_TYPE' });
+      if (title.length < 3 || title.length > 120) {
+        return reply.code(400).send({ error: 'INVALID_TITLE' });
+      }
+
+      const id = `res-${randomUUID()}`;
+      const filePath = join(resourcesDir, id);
+      const hash = createHash('sha256');
+      part.file.on('data', (chunk: Buffer) => hash.update(chunk));
+      await pipeline(part.file, createWriteStream(filePath));
+      if (part.file.truncated) {
+        unlinkSync(filePath);
+        return reply.code(413).send({ error: 'FILE_TOO_LARGE' });
+      }
+      const byteSize = statSync(filePath).size;
+      db.prepare(
+        `INSERT INTO resources
+         (id, kc_id, kind, title, file_name, mime_type, byte_size, sha256, uploaded_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id,
+        kcId,
+        kind,
+        title,
+        part.filename,
+        part.mimetype,
+        byteSize,
+        hash.digest('hex'),
+        user.id,
+        new Date().toISOString(),
+      );
+      return reply.code(201).send({ id, byteSize });
+    },
+  );
+
+  /** Streams the file with Range support so video seeking works offline-poor networks. */
+  app.get('/api/resources/:id/file', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    const { id } = request.params as { id: string };
+    const row = db
+      .prepare('SELECT mime_type, byte_size, file_name FROM resources WHERE id = ?')
+      .get(id) as { mime_type: string; byte_size: number; file_name: string } | undefined;
+    if (!row) return reply.code(404).send({ error: 'NOT_FOUND' });
+    const filePath = join(resourcesDir, id);
+
+    void reply.header('accept-ranges', 'bytes');
+    void reply.header('content-type', row.mime_type);
+    void reply.header(
+      'content-disposition',
+      `inline; filename*=UTF-8''${encodeURIComponent(row.file_name)}`,
+    );
+
+    const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range ?? '');
+    if (range && (range[1] !== '' || range[2] !== '')) {
+      const start =
+        range[1] === '' ? Math.max(0, row.byte_size - Number(range[2])) : Number(range[1]);
+      const end = range[1] !== '' && range[2] !== '' ? Number(range[2]) : row.byte_size - 1;
+      if (start > end || end >= row.byte_size) {
+        return reply.code(416).header('content-range', `bytes */${row.byte_size}`).send();
+      }
+      void reply.code(206);
+      void reply.header('content-range', `bytes ${start}-${end}/${row.byte_size}`);
+      void reply.header('content-length', end - start + 1);
+      return reply.send(createReadStream(filePath, { start, end }));
+    }
+
+    void reply.header('content-length', row.byte_size);
+    return reply.send(createReadStream(filePath));
+  });
+
+  app.delete('/api/resources/:id', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    const { id } = request.params as { id: string };
+    const existed = db.prepare('DELETE FROM resources WHERE id = ?').run(id);
+    if (Number(existed.changes) === 0) return reply.code(404).send({ error: 'NOT_FOUND' });
+    try {
+      unlinkSync(join(resourcesDir, id));
+    } catch {
+      // Row removal is authoritative; a missing file is already the end state.
+    }
     return { ok: true };
   });
 

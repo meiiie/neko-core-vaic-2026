@@ -37,12 +37,12 @@ describe('Dexie schema v3', () => {
     }
   });
 
-  it('opens with the lesson mirror and scoped agent sessions', async () => {
+  it('opens at v4 with lesson/resource mirrors and scoped agent sessions', async () => {
     const database = makeDb();
     dbs.push(database);
     await database.open();
 
-    expect(database.verno).toBe(3);
+    expect(database.verno).toBe(4);
     expect(database.tables.map((t) => t.name).sort()).toEqual([
       'agentSessions',
       'events',
@@ -50,6 +50,7 @@ describe('Dexie schema v3', () => {
       'meta',
       'outbox',
       'overrides',
+      'resources',
     ]);
   });
 

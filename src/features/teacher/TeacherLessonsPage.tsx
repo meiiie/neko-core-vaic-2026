@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { refreshLessons, saveLesson, useLessonList } from '../../services/lessons';
+import { TeacherResourcePanel } from './TeacherResourcePanel';
 import type { LessonRecord } from '../../storage/db';
 
 /**
@@ -178,7 +179,10 @@ export function TeacherLessonsPage() {
           </nav>
 
           {selected ? (
-            <LessonForm key={`${selected.kcId}:${selected.updatedAt}`} lesson={selected} />
+            <div className="lesson-admin-detail">
+              <LessonForm key={`${selected.kcId}:${selected.updatedAt}`} lesson={selected} />
+              <TeacherResourcePanel kcId={selected.kcId} />
+            </div>
           ) : null}
         </section>
       )}

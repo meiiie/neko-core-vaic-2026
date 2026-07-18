@@ -113,6 +113,19 @@ export function openDb(path: string): DatabaseSync {
       updated_by TEXT,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS resources (
+      id TEXT PRIMARY KEY,
+      kc_id TEXT NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN ('PDF','VIDEO')),
+      title TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      byte_size INTEGER NOT NULL,
+      sha256 TEXT NOT NULL,
+      uploaded_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_resources_kc ON resources(kc_id);
     CREATE TABLE IF NOT EXISTS sync_conflicts (
       event_id TEXT NOT NULL,
       learner_id TEXT NOT NULL,

@@ -70,8 +70,22 @@ export interface LessonRecord {
   updatedByName: string | null;
 }
 
+/** Metadata mirror of a server-owned learning resource (PDF / short video). */
+export interface ResourceRecord {
+  id: string;
+  kcId: string;
+  kind: 'PDF' | 'VIDEO';
+  title: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  sha256: string;
+  createdAt: string;
+  uploadedByName: string | null;
+}
+
 export const DB_NAME = 'nekopath';
-export const DB_SCHEMA_VERSION = 3;
+export const DB_SCHEMA_VERSION = 4;
 
 export class NekoPathDb extends Dexie {
   meta!: Table<MetaRecord, string>;
@@ -80,6 +94,7 @@ export class NekoPathDb extends Dexie {
   outbox!: Table<OutboxRecord, string>;
   agentSessions!: Table<AgentSessionRecord, string>;
   lessons!: Table<LessonRecord, string>;
+  resources!: Table<ResourceRecord, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
@@ -92,9 +107,13 @@ export class NekoPathDb extends Dexie {
     this.version(2).stores({
       lessons: 'kcId',
     });
-    this.version(DB_SCHEMA_VERSION).stores({
+    this.version(3).stores({
       agentSessions: 'id, accountId, providerId, updatedAt',
-      lessons: 'kcId',
+    });
+    // v4: devices that already opened v3 (agent sessions only) still gain the
+    // resource mirror through a separate upgrade step.
+    this.version(DB_SCHEMA_VERSION).stores({
+      resources: 'id, kcId',
     });
   }
 }

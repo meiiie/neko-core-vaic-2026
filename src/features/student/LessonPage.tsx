@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { refreshLessons, useLesson } from '../../services/lessons';
+import { LessonResources } from './LessonResources';
 
 /**
  * EXPLAIN step of the learning loop (Explain → Practice → Post-check). The
@@ -78,6 +79,8 @@ export function LessonPage() {
         <h2 id="lesson-mistake">Lỗi thường gặp</h2>
         <p>{lesson.commonMistake}</p>
       </section>
+
+      <LessonResources kcId={lesson.kcId} />
 
       <div className="lesson-actions">
         <Link className="button-primary" to="/student/practice">

@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { CodexManagerPort } from './ai/codex-routes.ts';
 import { buildApp, type AppOptions } from './app.ts';
@@ -8,9 +11,37 @@ import { DEMO_PASSWORD, seed } from './seed.ts';
 async function makeApp(options?: AppOptions) {
   const db = openDb(':memory:');
   seed(db);
-  const app = buildApp(db, options);
+  const app = buildApp(db, {
+    resourcesDir: mkdtempSync(join(tmpdir(), 'neko-res-')),
+    ...options,
+  });
   await app.ready();
   return app;
+}
+
+/** Hand-rolled multipart body so upload tests need no extra dependency. */
+function multipartUpload(fields: Record<string, string>, fileName: string, fileBody: Buffer) {
+  const boundary = 'X-NEKOPATH-TEST-BOUNDARY';
+  const parts: Buffer[] = [];
+  for (const [name, value] of Object.entries(fields)) {
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+      ),
+    );
+  }
+  parts.push(
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
+        `Content-Type: application/pdf\r\n\r\n`,
+    ),
+    fileBody,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  );
+  return {
+    payload: Buffer.concat(parts),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  };
 }
 
 const TEACHER_EMAIL = 'co.ha@nekopath.edu.vn';
@@ -1175,6 +1206,84 @@ describe('NekoPath API', () => {
       status: 'PUBLISHED',
       updatedByName: 'Nguyễn Thu Hà',
     });
+    await app.close();
+  });
+
+  it('lets a teacher attach a PDF resource that students can stream, with ranges', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const pdfBytes = Buffer.from('%PDF-1.4 NekoPath resource test payload for K02');
+
+    const upload = multipartUpload(
+      { kcId: 'K02', title: 'Tóm tắt PDF: Phân số bằng nhau' },
+      'k02.pdf',
+      pdfBytes,
+    );
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/resources',
+      cookies: teacher,
+      headers: upload.headers,
+      payload: upload.payload,
+    });
+    expect(created.statusCode).toBe(201);
+    const resourceId = (created.json() as { id: string }).id;
+    expect((created.json() as { byteSize: number }).byteSize).toBe(pdfBytes.length);
+
+    // Students cannot upload, but they can list and stream.
+    const student = await loginCookie(app, STUDENT_EMAIL);
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/api/resources',
+      cookies: student,
+      headers: upload.headers,
+      payload: upload.payload,
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const listed = await app.inject({ method: 'GET', url: '/api/resources', cookies: student });
+    const resource = (
+      listed.json() as { resources: { id: string; kcId: string; kind: string }[] }
+    ).resources.find((r) => r.id === resourceId);
+    expect(resource).toMatchObject({ kcId: 'K02', kind: 'PDF' });
+
+    const full = await app.inject({
+      method: 'GET',
+      url: `/api/resources/${resourceId}/file`,
+      cookies: student,
+    });
+    expect(full.statusCode).toBe(200);
+    expect(full.rawPayload.equals(pdfBytes)).toBe(true);
+
+    const partial = await app.inject({
+      method: 'GET',
+      url: `/api/resources/${resourceId}/file`,
+      cookies: student,
+      headers: { range: 'bytes=0-3' },
+    });
+    expect(partial.statusCode).toBe(206);
+    expect(partial.headers['content-range']).toBe(`bytes 0-3/${pdfBytes.length}`);
+    expect(partial.rawPayload.toString()).toBe('%PDF');
+
+    // Teacher can remove it; the stream then 404s.
+    const removedByStudent = await app.inject({
+      method: 'DELETE',
+      url: `/api/resources/${resourceId}`,
+      cookies: student,
+    });
+    expect(removedByStudent.statusCode).toBe(403);
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: `/api/resources/${resourceId}`,
+      cookies: teacher,
+    });
+    expect(removed.statusCode).toBe(200);
+    const gone = await app.inject({
+      method: 'GET',
+      url: `/api/resources/${resourceId}/file`,
+      cookies: student,
+    });
+    expect(gone.statusCode).toBe(404);
     await app.close();
   });
 

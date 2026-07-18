@@ -62,15 +62,16 @@ security boundary.
 ## Product capabilities
 
 **Student workspace** — adaptive check-in that spends a bounded question budget, an evidence-based
-learning path with explicit reasons per step, per-skill lesson summaries that open offline from
-the device mirror, mastery-driven practice with a three-level hint ladder, and teacher-assigned
+learning path with explicit reasons per step, per-skill lesson summaries plus teacher-attached micro-videos and PDF
+summaries that open offline once pinned to the device, mastery-driven practice with a three-level hint ladder, and teacher-assigned
 homework with due dates and retake policy. Evidence follows the account: a student's append-only
 history rehydrates on any device they sign into.
 
 **Teacher workspace** — class overview grouped by need over real synced records, per-learner
 evidence tracing (every decision opens down to the answers behind it), misconception verification
 queue, question authoring, **lesson-material authoring** (team-seeded drafts the teacher edits and
-publishes under their own name, distributed to student devices for offline reading), and
+publishes under their own name) with **PDF and micro-video attachments** (up to 60 MB,
+streamed with range support and pinnable offline per device), and
 assignment creation and monitoring — all computed from the same deterministic domain core the
 student surfaces use.
 

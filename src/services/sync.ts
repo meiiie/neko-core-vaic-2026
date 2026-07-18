@@ -5,6 +5,7 @@ import { learnerEventSchema, type AppendResult } from '../storage/event-reposito
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { refreshLessons } from './lessons';
 import { reviewSchedulePayloadSchema } from '../storage/review-schedule-repository';
+import { refreshResources } from './resources';
 import { readBoundProfileId, SIGNED_OUT_PROFILE } from './profile-binding';
 import {
   duePendingOutbox,
@@ -271,12 +272,14 @@ export function registerSyncTriggers(): void {
   window.addEventListener('online', () => {
     void flushOutbox();
     void refreshLessons();
+    void refreshResources();
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void flushOutbox();
   });
   void flushOutbox();
   void refreshLessons();
+  void refreshResources();
 }
 
 export interface SyncStatus {

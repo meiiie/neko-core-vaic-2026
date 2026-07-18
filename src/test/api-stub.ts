@@ -279,6 +279,7 @@ export function installApiStub(
           })),
         });
       }
+      if (url.endsWith('/api/resources')) return json({ resources: [] });
       return json({ error: 'NOT_FOUND' }, 404);
     }),
   );
