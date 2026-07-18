@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BrandMark } from '../../components/BrandMark';
+import { fetchWithDeadline } from '../../services/fetch-with-deadline';
 import { useSession } from '../session';
 
 /**
@@ -14,6 +15,9 @@ import { useSession } from '../session';
 
 const LAST_EMAIL_KEY = 'nekopath.last-email.v1';
 const CLASS_PASSWORD = 'Nekopath@2026';
+const DIRECTORY_DEADLINE_MS = 3_000;
+
+type DirectoryState = 'loading' | 'retrying' | 'ready' | 'error';
 
 interface DirectoryAccount {
   email: string;
@@ -37,7 +41,8 @@ export function LoginPage() {
   const navigate = useNavigate();
 
   const [directory, setDirectory] = useState<DirectoryAccount[] | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [directoryState, setDirectoryState] = useState<DirectoryState>('loading');
+  const [directoryAttempt, setDirectoryAttempt] = useState(0);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string>(
@@ -57,22 +62,27 @@ export function LoginPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void fetch('/api/auth/directory')
+    const lifecycle = new AbortController();
+    void fetchWithDeadline('/api/auth/directory', {
+      deadlineMs: DIRECTORY_DEADLINE_MS,
+      signal: lifecycle.signal,
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error(String(response.status));
         const body = (await response.json()) as { accounts: DirectoryAccount[] };
         if (!cancelled) {
           setDirectory(body.accounts);
-          setLoadError(false);
+          setDirectoryState('ready');
         }
       })
       .catch(() => {
-        if (!cancelled) setLoadError(true);
+        if (!cancelled) setDirectoryState('error');
       });
     return () => {
       cancelled = true;
+      lifecycle.abort();
     };
-  }, []);
+  }, [directoryAttempt]);
 
   // Close when tapping anywhere outside the combobox (spatial consistency:
   // the panel folds back into the field it grew from).
@@ -99,6 +109,12 @@ export function LoginPage() {
     setQuery('');
     setOpen(false);
     setActiveIndex(-1);
+  }
+
+  function retryDirectory() {
+    if (directoryState === 'retrying') return;
+    setDirectoryState('retrying');
+    setDirectoryAttempt((attempt) => attempt + 1);
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
@@ -201,20 +217,29 @@ export function LoginPage() {
         <h1 className="auth-title">Đăng nhập</h1>
         <p className="auth-subtitle">Chọn tên của bạn trong lớp để bắt đầu.</p>
 
-        {loadError ? (
-          <p className="auth-error" role="alert">
-            Không tải được danh sách lớp — lần đăng nhập đầu cần có mạng.{' '}
-            <button type="button" className="auth-retry" onClick={() => window.location.reload()}>
-              Thử lại
+        {directoryState === 'error' || directoryState === 'retrying' ? (
+          <div className="auth-error" role={directoryState === 'error' ? 'alert' : 'status'}>
+            <span>
+              {directoryState === 'error'
+                ? 'Không tải được danh sách lớp — lần đăng nhập đầu cần có mạng.'
+                : 'Đang thử tải lại danh sách lớp…'}{' '}
+            </span>
+            <button
+              type="button"
+              className="auth-retry"
+              disabled={directoryState === 'retrying'}
+              onClick={retryDirectory}
+            >
+              {directoryState === 'retrying' ? 'Đang thử lại…' : 'Thử lại'}
             </button>
-          </p>
+          </div>
         ) : null}
 
-        {directory === null && !loadError ? (
+        {directoryState === 'loading' ? (
           <p className="auth-loading">Đang tải danh sách lớp…</p>
         ) : null}
 
-        {directory !== null ? (
+        {directoryState === 'ready' && directory !== null ? (
           <div className="auth-combobox" ref={boxRef}>
             <label className="auth-field">
               <span>Bạn là ai?</span>

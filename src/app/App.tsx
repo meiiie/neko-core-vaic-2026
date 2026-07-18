@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
+import { BrandMark } from '../components/BrandMark';
 import { SessionProvider, useSession, type Role } from './session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { LoginPage } from './pages/LoginPage';
@@ -53,15 +54,30 @@ const TeacherQuestionsPage = lazy(() =>
   })),
 );
 
+function SessionStartup() {
+  return (
+    <main className="auth">
+      <div className="auth-card session-startup" role="status" aria-live="polite">
+        <div className="auth-brand">
+          <BrandMark size={40} />
+          <span>NekoPath</span>
+        </div>
+        <p className="session-startup__message">Đang mở không gian học tập…</p>
+        <span className="session-startup__progress" aria-hidden="true" />
+      </div>
+    </main>
+  );
+}
+
 function RequireSession() {
   const { account, ready } = useSession();
-  if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
+  if (!ready) return <SessionStartup />;
   return account ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 function RequireRole({ role }: { role: Role }) {
   const { account, ready } = useSession();
-  if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
+  if (!ready) return <SessionStartup />;
   if (!account) return <Navigate to="/login" replace />;
   if (account.role !== role) {
     return <Navigate to={account.role === 'STUDENT' ? '/student' : '/teacher'} replace />;
@@ -71,7 +87,7 @@ function RequireRole({ role }: { role: Role }) {
 
 function WorkspaceHome() {
   const { account, ready } = useSession();
-  if (!ready) return <div className="page-loading" aria-label="Đang khôi phục phiên làm việc" />;
+  if (!ready) return <SessionStartup />;
   if (!account) return <Navigate to="/login" replace />;
   return <Navigate to={account.role === 'STUDENT' ? '/student' : '/teacher'} replace />;
 }
@@ -91,10 +107,12 @@ function NotFoundPage() {
   );
 }
 
-export function App() {
+function AppContent() {
+  const { account, ready } = useSession();
+
   return (
-    <SessionProvider>
-      <UpdatePrompt />
+    <>
+      <UpdatePrompt preWorkspace={!ready || account === null} />
       <Suspense
         fallback={<div className="page-loading" aria-label="Đang tải không gian làm việc" />}
       >
@@ -123,6 +141,14 @@ export function App() {
           </Route>
         </Routes>
       </Suspense>
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <SessionProvider>
+      <AppContent />
     </SessionProvider>
   );
 }
