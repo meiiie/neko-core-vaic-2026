@@ -75,7 +75,8 @@ Use a known-good immutable commit. Database migrations must remain backward comp
 cd /opt/nekopath
 sudo -u Admin git -C /opt/nekopath fetch origin
 sudo -u Admin git -C /opt/nekopath checkout --detach <known-good-commit>
-sudo docker compose -f ops/compose.yml up -d --build app
+export GITHUB_SHA=$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD)
+sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app
 sudo docker compose -f ops/compose.yml ps
 ```
 
