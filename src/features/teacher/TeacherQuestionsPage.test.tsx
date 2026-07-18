@@ -85,7 +85,7 @@ describe('Teacher question bank workflow', () => {
     expect(firstRow?.textContent).not.toContain('2 phương án');
     expect(firstRow?.textContent).not.toContain('Chưa phân loại');
 
-    await user.click(screen.getByRole('button', { name: 'Tạo câu hỏi' }));
+    await user.click(screen.getByRole('button', { name: 'Tạo từng câu' }));
     const promptInput = screen.getByLabelText('Câu hỏi');
     await waitFor(() => expect(document.activeElement).toBe(promptInput));
     await user.click(screen.getByText('Đóng phần tạo'));
@@ -177,5 +177,87 @@ describe('Teacher question bank workflow', () => {
     await user.click(screen.getByRole('button', { name: 'Xem 1 câu trong gói Phân số bằng nhau' }));
     expect(screen.getByText(QUESTIONS[0].prompt)).toBeTruthy();
     expect(screen.queryByText(QUESTIONS[1].prompt)).toBeNull();
+  });
+
+  it('previews a file, excludes invalid questions and imports reviewed questions into a package', async () => {
+    let importBody: { kcId?: string; questions?: unknown[] } = {};
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/questions/import/preview') {
+        return json({
+          fileName: 'phan-so.xlsx',
+          format: 'XLSX',
+          totalCount: 2,
+          validCount: 1,
+          invalidCount: 1,
+          questions: [
+            {
+              sourceIndex: 2,
+              prompt: 'Phân số nào bằng 2/3?',
+              choices: [
+                { id: 'a', label: '4/6' },
+                { id: 'b', label: '4/5' },
+              ],
+              correctChoiceId: 'a',
+              hints: [],
+              explanation: '',
+              difficulty: 'MEDIUM',
+              valid: true,
+              issues: [],
+            },
+            {
+              sourceIndex: 3,
+              prompt: 'Câu chưa có đáp án',
+              choices: [
+                { id: 'a', label: '1/2' },
+                { id: 'b', label: '2/3' },
+              ],
+              correctChoiceId: '',
+              hints: [],
+              explanation: '',
+              difficulty: 'MEDIUM',
+              valid: false,
+              issues: ['Chưa xác định được đáp án đúng.'],
+            },
+          ],
+        });
+      }
+      if (url === '/api/questions/import') {
+        importBody = JSON.parse(String(init?.body)) as typeof importBody;
+        return json({ importedCount: 1, questionIds: ['imported-1'] });
+      }
+      return json({ questions: QUESTIONS });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <TeacherQuestionsPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText(QUESTIONS[0].prompt);
+    await user.click(screen.getByRole('button', { name: 'Thêm từ file' }));
+    expect(screen.getByRole('heading', { name: 'Nhập câu hỏi từ Word hoặc Excel' })).toBeTruthy();
+
+    const fileInput = screen.getByLabelText(/Chọn file Word hoặc Excel/) as HTMLInputElement;
+    await user.upload(
+      fileInput,
+      new File(['question data'], 'phan-so.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Đọc và xem trước' }));
+
+    expect(await screen.findByText('1 câu sẵn sàng')).toBeTruthy();
+    expect(screen.getByText('Chưa xác định được đáp án đúng.')).toBeTruthy();
+    expect(
+      (screen.getByRole('checkbox', { name: /Chọn câu 3/ }) as HTMLInputElement).disabled,
+    ).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Thêm 1 câu vào gói' }));
+    expect(await screen.findByRole('heading', { name: 'Đã thêm 1 câu vào gói' })).toBeTruthy();
+    expect(importBody).toMatchObject({ kcId: 'K02' });
+    expect(importBody?.questions).toHaveLength(1);
   });
 });

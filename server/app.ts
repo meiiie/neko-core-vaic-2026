@@ -1,4 +1,5 @@
 import fastifyCookie from '@fastify/cookie';
+import fastifyMultipart from '@fastify/multipart';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
@@ -23,6 +24,11 @@ import {
 import { LESSON_SUMMARIES } from '../src/content/lessons.v1.ts';
 import { CLASS_7A_ID } from './seed.ts';
 import { buildTeacherDashboard } from './teacher-dashboard.ts';
+import {
+  parseQuestionFile,
+  QuestionImportError,
+  type ImportedDifficulty,
+} from './question-import.ts';
 
 const LESSON_KC_IDS = new Set(LESSON_SUMMARIES.map((lesson) => lesson.kcId));
 
@@ -58,6 +64,11 @@ const questionSchema = z.object({
   correctChoiceId: z.string().min(1),
   hints: z.array(z.string().max(300)).max(3).default([]),
   explanation: z.string().max(500).default(''),
+});
+
+const questionImportSchema = z.object({
+  kcId: z.string().min(1),
+  questions: z.array(questionSchema).min(1).max(100),
 });
 
 const assignmentSchema = z.object({
@@ -178,6 +189,9 @@ export interface AppOptions {
 export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 });
   void app.register(fastifyCookie);
+  void app.register(fastifyMultipart, {
+    limits: { files: 1, fileSize: 5 * 1024 * 1024, fields: 4, parts: 5 },
+  });
   app.addHook('onRequest', (_request, reply, done) => {
     void reply.header('Origin-Agent-Cluster', '?1');
     void reply.header('Permissions-Policy', 'tools=(self)');
@@ -409,6 +423,153 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       new Date().toISOString(),
     );
     return reply.code(201).send({ id });
+  });
+
+  app.post('/api/questions/import/preview', async (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    if (!request.isMultipart()) return reply.code(400).send({ error: 'MULTIPART_REQUIRED' });
+
+    let fileName = '';
+    let fileBuffer: Buffer | null = null;
+    let kcId = '';
+    let difficulty: ImportedDifficulty = 'UNSPECIFIED';
+    try {
+      for await (const part of request.parts()) {
+        if (part.type === 'file') {
+          fileName = part.filename;
+          fileBuffer = await part.toBuffer();
+          continue;
+        }
+        const value = String(part.value ?? '');
+        if (part.fieldname === 'kcId') kcId = value;
+        if (
+          part.fieldname === 'difficulty' &&
+          ['UNSPECIFIED', 'EASY', 'MEDIUM', 'HARD'].includes(value)
+        ) {
+          difficulty = value as ImportedDifficulty;
+        }
+      }
+    } catch (error) {
+      if ((error as { code?: string }).code === 'FST_REQ_FILE_TOO_LARGE') {
+        return reply.code(413).send({ error: 'FILE_TOO_LARGE' });
+      }
+      return reply.code(400).send({ error: 'UNREADABLE_UPLOAD' });
+    }
+
+    if (!fileBuffer || !fileName) return reply.code(400).send({ error: 'FILE_REQUIRED' });
+    if (!HERO_GRAPH.nodes.some((node) => node.id === kcId)) {
+      return reply.code(400).send({ error: 'UNKNOWN_KC' });
+    }
+
+    try {
+      const preview = await parseQuestionFile(fileName, fileBuffer, difficulty);
+      const existingPrompts = new Set(
+        (
+          db.prepare('SELECT prompt FROM questions WHERE kc_id = ?').all(kcId) as {
+            prompt: string;
+          }[]
+        ).map((row) => row.prompt.trim().toLocaleLowerCase('vi')),
+      );
+      const seenPrompts = new Set<string>();
+      const questions = preview.questions.map((question) => {
+        const normalizedPrompt = question.prompt.trim().toLocaleLowerCase('vi');
+        let duplicateIssue = '';
+        if (existingPrompts.has(normalizedPrompt)) duplicateIssue = 'Câu hỏi này đã có trong gói.';
+        else if (seenPrompts.has(normalizedPrompt))
+          duplicateIssue = 'Câu hỏi này bị lặp trong file.';
+        if (normalizedPrompt) seenPrompts.add(normalizedPrompt);
+        if (!duplicateIssue) return question;
+        return { ...question, valid: false, issues: [...question.issues, duplicateIssue] };
+      });
+      const validCount = questions.filter((question) => question.valid).length;
+      return {
+        ...preview,
+        validCount,
+        invalidCount: questions.length - validCount,
+        questions,
+      };
+    } catch (error) {
+      if (error instanceof QuestionImportError) {
+        return reply.code(400).send({ error: error.code, message: error.message });
+      }
+      return reply.code(400).send({ error: 'UNREADABLE_FILE' });
+    }
+  });
+
+  app.post('/api/questions/import', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    const parsed = questionImportSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', detail: parsed.error.issues });
+    }
+    const { kcId, questions } = parsed.data;
+    if (!HERO_GRAPH.nodes.some((node) => node.id === kcId)) {
+      return reply.code(400).send({ error: 'UNKNOWN_KC' });
+    }
+    if (
+      questions.some(
+        (question) => !question.choices.some((choice) => choice.id === question.correctChoiceId),
+      )
+    ) {
+      return reply.code(400).send({ error: 'CORRECT_CHOICE_NOT_IN_CHOICES' });
+    }
+
+    const normalizedPrompts = questions.map((question) =>
+      question.prompt.trim().toLocaleLowerCase('vi'),
+    );
+    if (new Set(normalizedPrompts).size !== normalizedPrompts.length) {
+      return reply.code(409).send({
+        error: 'DUPLICATE_QUESTION_IN_FILE',
+        message: 'File có câu hỏi bị lặp. Hãy quay lại bước xem trước và bỏ câu trùng.',
+      });
+    }
+    const existingPrompts = new Set(
+      (
+        db.prepare('SELECT prompt FROM questions WHERE kc_id = ?').all(kcId) as {
+          prompt: string;
+        }[]
+      ).map((row) => row.prompt.trim().toLocaleLowerCase('vi')),
+    );
+    if (normalizedPrompts.some((prompt) => existingPrompts.has(prompt))) {
+      return reply.code(409).send({
+        error: 'QUESTION_ALREADY_EXISTS',
+        message: 'Có câu hỏi đã tồn tại trong gói. Hãy đọc lại file để cập nhật danh sách.',
+      });
+    }
+
+    const insert = db.prepare(
+      `INSERT INTO questions
+       (id, owner_id, kc_id, prompt, choices_json, correct_choice_id, hints_json, explanation,
+        difficulty, review_state, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNREVIEWED', ?)`,
+    );
+    const ids: string[] = [];
+    db.exec('BEGIN IMMEDIATE;');
+    try {
+      for (const question of questions) {
+        const id = `q-${randomUUID()}`;
+        insert.run(
+          id,
+          user.id,
+          kcId,
+          question.prompt.trim(),
+          JSON.stringify(question.choices),
+          question.correctChoiceId,
+          JSON.stringify(question.hints),
+          question.explanation,
+          question.difficulty,
+          new Date().toISOString(),
+        );
+        ids.push(id);
+      }
+      db.exec('COMMIT;');
+    } catch {
+      db.exec('ROLLBACK;');
+      return reply.code(500).send({ error: 'IMPORT_FAILED' });
+    }
+    return reply.code(201).send({ importedCount: ids.length, ids });
   });
 
   app.patch('/api/questions/:id', (request, reply) => {

@@ -676,6 +676,93 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('imports only reviewed questions into the selected lesson package', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const payload = {
+      kcId: 'K02',
+      questions: [
+        {
+          kcId: 'K02',
+          difficulty: 'EASY',
+          prompt: 'Phân số nào dưới đây bằng với phân số 3/4?',
+          choices: [
+            { id: 'a', label: '6/8' },
+            { id: 'b', label: '6/7' },
+          ],
+          correctChoiceId: 'a',
+          hints: [],
+          explanation: 'Nhân cả tử và mẫu với 2.',
+        },
+      ],
+    };
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/questions/import',
+      cookies: teacher,
+      payload,
+    });
+    expect(imported.statusCode).toBe(201);
+    expect(imported.json()).toMatchObject({ importedCount: 1 });
+
+    const list = await app.inject({ method: 'GET', url: '/api/questions', cookies: teacher });
+    expect(
+      (list.json() as { questions: { prompt: string; reviewState: string }[] }).questions,
+    ).toContainEqual(
+      expect.objectContaining({
+        prompt: 'Phân số nào dưới đây bằng với phân số 3/4?',
+        reviewState: 'UNREVIEWED',
+      }),
+    );
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/questions/import',
+      cookies: teacher,
+      payload,
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({ error: 'QUESTION_ALREADY_EXISTS' });
+    await app.close();
+  });
+
+  it('checks the selected package and file type before previewing an import', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const boundary = 'nekopath-import-boundary';
+    const body = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="kcId"',
+        '',
+        'K02',
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="difficulty"',
+        '',
+        'MEDIUM',
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="file"; filename="questions.txt"',
+        'Content-Type: text/plain',
+        '',
+        '1. Phân số nào bằng 2/3?',
+        `--${boundary}--`,
+        '',
+      ].join('\r\n'),
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/questions/import/preview',
+      cookies: teacher,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'UNSUPPORTED_FILE' });
+    await app.close();
+  });
+
   it('delivers a targeted review assignment only to its selected learners', async () => {
     const app = await makeApp();
     const teacher = await loginCookie(app, TEACHER_EMAIL);

@@ -3,6 +3,7 @@ import { CopySimpleIcon } from '@phosphor-icons/react/CopySimple';
 import { PencilSimpleIcon } from '@phosphor-icons/react/PencilSimple';
 import { useNavigate } from 'react-router-dom';
 import { HERO_GRAPH } from '../../content';
+import { QuestionImportPanel } from './QuestionImportPanel';
 import { DIFFICULTY_LABELS } from './teacher-presentation';
 
 interface ApiChoice {
@@ -66,6 +67,7 @@ export function TeacherQuestionsPage() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<ApiQuestion | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const createPanelRef = useRef<HTMLDetailsElement>(null);
   const questionPromptRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -108,9 +110,9 @@ export function TeacherQuestionsPage() {
   }, [difficulty, questions, search, sortOrder, topic]);
   const questionPackages = useMemo(
     () =>
-      HERO_GRAPH.nodes.flatMap((node) => {
+      HERO_GRAPH.nodes.map((node) => {
         const count = (questions ?? []).filter((question) => question.kcId === node.id).length;
-        return count > 0 ? [{ kcId: node.id, name: node.name, count }] : [];
+        return { kcId: node.id, name: node.name, count };
       }),
     [questions],
   );
@@ -247,6 +249,7 @@ export function TeacherQuestionsPage() {
   }
 
   function openQuestionForm() {
+    setImportOpen(false);
     if (createPanelRef.current) createPanelRef.current.open = true;
     window.requestAnimationFrame(() => questionPromptRef.current?.focus());
   }
@@ -283,12 +286,36 @@ export function TeacherQuestionsPage() {
           <p>Tìm câu phù hợp, xem trước rồi chọn nhiều câu để tạo bài tập cho lớp.</p>
         </div>
         <div className="page-heading-actions">
-          <span className="status-label status-label--review">Nội dung mẫu</span>
+          <button
+            className="button-primary"
+            type="button"
+            onClick={() => {
+              if (createPanelRef.current) createPanelRef.current.open = false;
+              setImportOpen(true);
+            }}
+          >
+            Thêm từ file
+          </button>
           <button className="button-secondary" type="button" onClick={openQuestionForm}>
-            Tạo câu hỏi
+            Tạo từng câu
           </button>
         </div>
       </header>
+
+      {importOpen ? (
+        <QuestionImportPanel
+          initialKcId={topic}
+          onClose={() => setImportOpen(false)}
+          onImported={async (importedKcId, count) => {
+            await reload();
+            setTopic(importedKcId);
+            setDifficulty('ALL');
+            setSearch('');
+            setPage(1);
+            setActionMessage(`Đã thêm ${count} câu mới vào gói ${kcLabel(importedKcId)}.`);
+          }}
+        />
+      ) : null}
 
       <details ref={createPanelRef} className="summary-panel question-create-panel">
         <summary className="question-create-summary">
