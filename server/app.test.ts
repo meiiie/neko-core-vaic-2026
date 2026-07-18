@@ -359,6 +359,60 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('returns an empty class list instead of failing when a teacher has no class', async () => {
+    const db = openDb(':memory:');
+    seed(db);
+    db.prepare('UPDATE classes SET teacher_id = NULL').run();
+    const app = buildApp(db);
+    await app.ready();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+
+    const classes = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/classes',
+      cookies: teacher,
+    });
+    expect(classes.statusCode).toBe(200);
+    expect(classes.json()).toEqual({ classes: [] });
+
+    const legacyDashboard = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+    expect(legacyDashboard.statusCode).toBe(404);
+    expect(legacyDashboard.json()).toEqual({ error: 'NO_CLASS' });
+    await app.close();
+  });
+
+  it('does not expose the postponed class and student mutation routes', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+
+    const createClass = await app.inject({
+      method: 'POST',
+      url: '/api/teacher/classes',
+      cookies: teacher,
+      payload: { name: 'Lớp 8B' },
+    });
+    const addStudent = await app.inject({
+      method: 'POST',
+      url: '/api/teacher/classes/class-7a/students',
+      cookies: teacher,
+      payload: { name: 'Học sinh mới', email: 'new@example.edu.vn' },
+    });
+    const removeStudent = await app.inject({
+      method: 'DELETE',
+      url: '/api/teacher/classes/class-7a/students/user-student-an',
+      cookies: teacher,
+    });
+
+    expect(createClass.statusCode).toBe(404);
+    expect(addStudent.statusCode).toBe(404);
+    expect(removeStudent.statusCode).toBe(404);
+    await app.close();
+  });
+
   it('rejects wrong credentials and unauthenticated access', async () => {
     const app = await makeApp();
     const bad = await app.inject({
@@ -401,6 +455,57 @@ describe('NekoPath API', () => {
       evaluatedLearnerCount: 0,
       answerEventCount: 0,
       groups: [],
+    });
+    await app.close();
+  });
+
+  it('keeps the dashboard available when an old event has an unsupported misconception tag', async () => {
+    const db = openDb(':memory:');
+    seed(db);
+    const question = db
+      .prepare('SELECT choices_json FROM questions WHERE id = ?')
+      .get('bank-K07-CHECK-2') as { choices_json: string };
+    const choices = (
+      JSON.parse(question.choices_json) as { id: string; misconceptionTag?: string }[]
+    ).map((choice) =>
+      choice.id === 'b' ? { ...choice, misconceptionTag: 'ADDITIVE_COMPARISON' } : choice,
+    );
+    db.prepare('UPDATE questions SET choices_json = ? WHERE id = ?').run(
+      JSON.stringify(choices),
+      'bank-K07-CHECK-2',
+    );
+    db.prepare(
+      `INSERT INTO events
+       (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
+       VALUES (?, ?, ?, NULL, ?, ?, 'ANSWER', ?, ?)`,
+    ).run(
+      'chi-local-invalid-misconception',
+      'user-student-chi',
+      'bank-K07-CHECK-2',
+      1,
+      '2026-07-18T03:05:47.191Z',
+      JSON.stringify({
+        choiceId: 'b',
+        correct: false,
+        misconceptionId: 'RATIO_ORDER_REVERSED',
+        methodValidity: 'INVALID',
+      }),
+      '2026-07-18T03:05:48.191Z',
+    );
+    const app = buildApp(db);
+    await app.ready();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      classId: 'class-7a',
+      answerEventCount: 1,
     });
     await app.close();
   });
@@ -674,6 +779,93 @@ describe('NekoPath API', () => {
       allowRetake: true,
       shuffleAnswers: true,
     });
+    await app.close();
+  });
+
+  it('imports only reviewed questions into the selected lesson package', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const payload = {
+      kcId: 'K02',
+      questions: [
+        {
+          kcId: 'K02',
+          difficulty: 'EASY',
+          prompt: 'Phân số nào dưới đây bằng với phân số 3/4?',
+          choices: [
+            { id: 'a', label: '6/8' },
+            { id: 'b', label: '6/7' },
+          ],
+          correctChoiceId: 'a',
+          hints: [],
+          explanation: 'Nhân cả tử và mẫu với 2.',
+        },
+      ],
+    };
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/questions/import',
+      cookies: teacher,
+      payload,
+    });
+    expect(imported.statusCode).toBe(201);
+    expect(imported.json()).toMatchObject({ importedCount: 1 });
+
+    const list = await app.inject({ method: 'GET', url: '/api/questions', cookies: teacher });
+    expect(
+      (list.json() as { questions: { prompt: string; reviewState: string }[] }).questions,
+    ).toContainEqual(
+      expect.objectContaining({
+        prompt: 'Phân số nào dưới đây bằng với phân số 3/4?',
+        reviewState: 'UNREVIEWED',
+      }),
+    );
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/questions/import',
+      cookies: teacher,
+      payload,
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({ error: 'QUESTION_ALREADY_EXISTS' });
+    await app.close();
+  });
+
+  it('checks the selected package and file type before previewing an import', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const boundary = 'nekopath-import-boundary';
+    const body = Buffer.from(
+      [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="kcId"',
+        '',
+        'K02',
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="difficulty"',
+        '',
+        'MEDIUM',
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="file"; filename="questions.txt"',
+        'Content-Type: text/plain',
+        '',
+        '1. Phân số nào bằng 2/3?',
+        `--${boundary}--`,
+        '',
+      ].join('\r\n'),
+    );
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/questions/import/preview',
+      cookies: teacher,
+      headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'UNSUPPORTED_FILE' });
     await app.close();
   });
 

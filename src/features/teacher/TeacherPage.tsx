@@ -1,9 +1,11 @@
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { kcName } from '../../app/adapters/hero-tutor';
 import { useSession } from '../../app/session';
 import { greetingVi, todayVi } from '../../app/vietnamese-time';
 import { TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
 import { useTeacherDashboard } from './useTeacherDashboard';
+import { fetchTeacherClasses, type TeacherClassDto } from './teacher-api';
 
 interface MetricCardProps {
   readonly id: string;
@@ -42,7 +44,33 @@ function MetricCard({ id, label, value, supportingText, hint, emphasis }: Metric
 
 export function TeacherPage() {
   const { account } = useSession();
-  const { dashboard, loading, error, refresh } = useTeacherDashboard();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [classes, setClasses] = useState<readonly TeacherClassDto[]>([]);
+  const [classesLoading, setClassesLoading] = useState(true);
+  const [classesError, setClassesError] = useState(false);
+  const [classesAttempt, setClassesAttempt] = useState(0);
+  const requestedClassId = searchParams.get('classId');
+  const selectedClassId =
+    classes.find((classroom) => classroom.id === requestedClassId)?.id ?? classes[0]?.id ?? null;
+  const { dashboard, loading, error, refresh } = useTeacherDashboard(
+    classesLoading ? null : selectedClassId,
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchTeacherClasses(controller.signal)
+      .then((next) => {
+        setClasses(next);
+        setClassesError(false);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setClassesError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setClassesLoading(false);
+      });
+    return () => controller.abort();
+  }, [classesAttempt]);
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
   const topGroup = groups[0];
   const gap = dashboard.classWideGaps[0];
@@ -51,9 +79,14 @@ export function TeacherPage() {
   const needsMoreQuestions = Math.max(0, classSize - evaluatedTotal);
   const supportGroups = groups.filter((group) => group.priorityScore > 0);
   const now = new Date();
-  const groupPath = (groupId: string) => `/teacher/class/${encodeURIComponent(groupId)}`;
+  const groupPath = (groupId: string) =>
+    `/teacher/class/${encodeURIComponent(groupId)}?classId=${encodeURIComponent(selectedClassId ?? '')}`;
 
-  if (loading) {
+  if (
+    classesLoading ||
+    loading ||
+    (selectedClassId !== null && dashboard.classId !== selectedClassId)
+  ) {
     return (
       <section className="empty-state" role="status">
         <h1>Đang lấy tình hình lớp</h1>
@@ -62,12 +95,41 @@ export function TeacherPage() {
     );
   }
 
-  if (error) {
+  if (classesError || error) {
     return (
       <section className="empty-state" role="alert">
         <h1>Chưa tải được tình hình lớp</h1>
-        <p>{error}</p>
-        <button className="button-secondary" type="button" onClick={() => void refresh()}>
+        <p>{error ?? 'Không tải được danh sách lớp từ máy chủ.'}</p>
+        <button
+          className="button-secondary"
+          type="button"
+          onClick={() => {
+            if (classesError) {
+              setClassesLoading(true);
+              setClassesAttempt((attempt) => attempt + 1);
+            } else void refresh();
+          }}
+        >
+          Thử tải lại
+        </button>
+      </section>
+    );
+  }
+
+  if (classes.length === 0) {
+    return (
+      <section className="empty-state" role="status">
+        <p className="eyebrow">Dữ liệu lớp từ máy chủ</p>
+        <h1>Chưa tìm thấy lớp được gắn với tài khoản giáo viên</h1>
+        <p>Hãy kiểm tra dữ liệu lớp trên hệ thống hoặc thử tải lại sau khi dữ liệu được đồng bộ.</p>
+        <button
+          className="button-secondary"
+          type="button"
+          onClick={() => {
+            setClassesLoading(true);
+            setClassesAttempt((attempt) => attempt + 1);
+          }}
+        >
           Thử tải lại
         </button>
       </section>
@@ -77,12 +139,29 @@ export function TeacherPage() {
   return (
     <div className="page-stack teacher-page">
       <header className="page-heading">
-        <h1>
-          {greetingVi(now.getHours())}, {account?.shortName}
-        </h1>
-        <p className="page-meta">
-          {todayVi(now)} · Toán 7 · {dashboard.className} · {classSize} học sinh
-        </p>
+        <div className="teacher-heading-row">
+          <div>
+            <h1>
+              {greetingVi(now.getHours())}, {account?.shortName}
+            </h1>
+            <p className="page-meta">
+              {todayVi(now)} · {dashboard.className} · {classSize} học sinh
+            </p>
+          </div>
+          <label className="class-picker">
+            <span>Đang xem lớp</span>
+            <select
+              value={selectedClassId ?? ''}
+              onChange={(event) => setSearchParams({ classId: event.target.value })}
+            >
+              {classes.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>
+                  {classroom.name} · {classroom.studentCount} học sinh
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </header>
 
       <section className="metric-grid metric-grid--teacher" aria-label="Tình hình lớp học">
@@ -108,7 +187,10 @@ export function TeacherPage() {
           <p className="eyebrow">Dữ liệu từ máy chủ</p>
           <h2>Chưa có bài làm để phân nhóm học sinh</h2>
           <p>Giao một bài kiểm tra nhanh để hệ thống có căn cứ tạo nhóm cần hỗ trợ.</p>
-          <Link className="button-primary" to="/teacher/assignments">
+          <Link
+            className="button-primary"
+            to={`/teacher/assignments?classId=${encodeURIComponent(selectedClassId ?? '')}`}
+          >
             Giao bài kiểm tra nhanh
           </Link>
         </section>

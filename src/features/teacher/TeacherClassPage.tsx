@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { kcName } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH } from '../../content';
 import { priorityBand, TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
 import { useTeacherDashboard } from './useTeacherDashboard';
 
 export function TeacherClassPage() {
-  const { dashboard, loading, error, refresh } = useTeacherDashboard();
+  const [searchParams] = useSearchParams();
+  const classId = searchParams.get('classId');
+  const { dashboard, loading, error, refresh } = useTeacherDashboard(classId ?? undefined);
   const [topic, setTopic] = useState('ALL');
   const [priority, setPriority] = useState('ALL');
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
@@ -81,7 +83,10 @@ export function TeacherClassPage() {
           <p>
             Khi học sinh hoàn thành bài kiểm tra, hệ thống sẽ dùng câu trả lời thật để tạo nhóm.
           </p>
-          <Link className="button-primary" to="/teacher/assignments">
+          <Link
+            className="button-primary"
+            to={`/teacher/assignments${classId ? `?classId=${encodeURIComponent(classId)}` : ''}`}
+          >
             Giao bài kiểm tra nhanh
           </Link>
         </section>
@@ -122,7 +127,7 @@ export function TeacherClassPage() {
               <article className="intervention-row" key={group.id}>
                 <Link
                   className="intervention-summary"
-                  to={`/teacher/class/${encodeURIComponent(group.id)}`}
+                  to={`/teacher/class/${encodeURIComponent(group.id)}${classId ? `?classId=${encodeURIComponent(classId)}` : ''}`}
                   aria-label={`Xem học sinh và gợi ý ôn bài ${groupName}`}
                 >
                   <span className="rank-cell" aria-label={`Thứ tự ${index + 1}`}>

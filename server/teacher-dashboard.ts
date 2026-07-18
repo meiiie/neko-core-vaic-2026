@@ -204,10 +204,15 @@ export function buildTeacherDashboard(
     const payload = parseAnswerPayload(row.payload);
     const question = questionsByEventItemId.get(row.item_id);
     if (!payload || !question) return [];
-    const selectedChoice = (JSON.parse(question.choices_json) as Choice[]).find(
-      (choice) => choice.id === payload.choiceId,
+    const choices = JSON.parse(question.choices_json) as Choice[];
+    const selectedChoice = choices.find((choice) => choice.id === payload.choiceId);
+    const allowedMisconceptions = new Set(
+      choices.flatMap((choice) => (choice.misconceptionTag ? [choice.misconceptionTag] : [])),
     );
-    const misconceptionId = payload.misconceptionId ?? selectedChoice?.misconceptionTag;
+    const misconceptionId =
+      payload.misconceptionId && allowedMisconceptions.has(payload.misconceptionId)
+        ? payload.misconceptionId
+        : selectedChoice?.misconceptionTag;
     const event: LearnerEvent = {
       id: row.id,
       learnerId: row.learner_id,

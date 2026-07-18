@@ -56,6 +56,16 @@ const TeacherGroupDetailPage = lazy(() =>
 const TeacherPage = lazy(() =>
   import('../features/teacher/TeacherPage').then(({ TeacherPage }) => ({ default: TeacherPage })),
 );
+const TeacherStudentsPage = lazy(() =>
+  import('../features/teacher/TeacherStudentsPage').then(({ TeacherStudentsPage }) => ({
+    default: TeacherStudentsPage,
+  })),
+);
+const TeacherStudentDetailPage = lazy(() =>
+  import('../features/teacher/TeacherStudentDetailPage').then(({ TeacherStudentDetailPage }) => ({
+    default: TeacherStudentDetailPage,
+  })),
+);
 const TeacherLessonsPage = lazy(() =>
   import('../features/teacher/TeacherLessonsPage').then(({ TeacherLessonsPage }) => ({
     default: TeacherLessonsPage,
@@ -145,6 +155,8 @@ function AppContent() {
               </Route>
               <Route element={<RequireRole role="TEACHER" />}>
                 <Route path="teacher" element={<TeacherPage />} />
+                <Route path="teacher/students" element={<TeacherStudentsPage />} />
+                <Route path="teacher/students/:studentId" element={<TeacherStudentDetailPage />} />
                 <Route path="teacher/class" element={<TeacherClassPage />} />
                 <Route path="teacher/class/:groupId" element={<TeacherGroupDetailPage />} />
                 <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
