@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CopySimpleIcon } from '@phosphor-icons/react/CopySimple';
+import { PencilSimpleIcon } from '@phosphor-icons/react/PencilSimple';
 import { useNavigate } from 'react-router-dom';
 import { HERO_GRAPH } from '../../content';
 import { DIFFICULTY_LABELS } from './teacher-presentation';
@@ -32,7 +34,10 @@ const EMPTY_FORM = {
   explanation: '',
 };
 
+const PAGE_SIZE = 10;
+
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type SortOrder = 'NEWEST' | 'ALPHABETICAL';
 
 function questionPayload(question: ApiQuestion) {
   return {
@@ -57,8 +62,14 @@ export function TeacherQuestionsPage() {
   const [search, setSearch] = useState('');
   const [topic, setTopic] = useState('ALL');
   const [difficulty, setDifficulty] = useState('ALL');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('NEWEST');
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<ApiQuestion | null>(null);
+  const createPanelRef = useRef<HTMLDetailsElement>(null);
+  const questionPromptRef = useRef<HTMLTextAreaElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -79,7 +90,7 @@ export function TeacherQuestionsPage() {
 
   const filteredQuestions = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase('vi');
-    return (questions ?? []).filter((question) => {
+    const filtered = (questions ?? []).filter((question) => {
       if (topic !== 'ALL' && question.kcId !== topic) return false;
       if (difficulty !== 'ALL' && question.difficulty !== difficulty) return false;
       if (!normalized) return true;
@@ -88,7 +99,45 @@ export function TeacherQuestionsPage() {
         question.choices.some((choice) => choice.label.toLocaleLowerCase('vi').includes(normalized))
       );
     });
-  }, [difficulty, questions, search, topic]);
+
+    if (sortOrder === 'ALPHABETICAL') {
+      return [...filtered].sort((left, right) => left.prompt.localeCompare(right.prompt, 'vi'));
+    }
+
+    return filtered;
+  }, [difficulty, questions, search, sortOrder, topic]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedQuestions = filteredQuestions.slice(pageStart, pageStart + PAGE_SIZE);
+  const selectedFilteredCount = filteredQuestions.filter((question) =>
+    selected.has(question.id),
+  ).length;
+  const selectedPageCount = paginatedQuestions.filter((question) =>
+    selected.has(question.id),
+  ).length;
+  const allPageSelected =
+    paginatedQuestions.length > 0 && selectedPageCount === paginatedQuestions.length;
+  const paginationPages = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+
+    const visible = [1, currentPage - 1, currentPage, currentPage + 1, totalPages]
+      .filter((value) => value >= 1 && value <= totalPages)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .sort((left, right) => left - right);
+
+    return visible.flatMap((value, index) => {
+      const previous = visible[index - 1];
+      return previous && value - previous > 1 ? [`ellipsis-${value}`, value] : [value];
+    });
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (!selectAllRef.current) return;
+    selectAllRef.current.indeterminate =
+      selectedPageCount > 0 && selectedPageCount < paginatedQuestions.length;
+  }, [paginatedQuestions.length, selectedPageCount]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -176,17 +225,41 @@ export function TeacherQuestionsPage() {
     });
   }
 
-  function toggleAllFiltered() {
-    const filteredIds = filteredQuestions.map((question) => question.id);
-    const everySelected = filteredIds.every((id) => selected.has(id));
+  function toggleAllPage() {
+    const pageIds = paginatedQuestions.map((question) => question.id);
+    const everySelected = pageIds.every((id) => selected.has(id));
     setSelected((previous) => {
       const next = new Set(previous);
-      for (const id of filteredIds) {
+      for (const id of pageIds) {
         if (everySelected) next.delete(id);
         else next.add(id);
       }
       return next;
     });
+  }
+
+  function openQuestionForm() {
+    if (createPanelRef.current) createPanelRef.current.open = true;
+    window.requestAnimationFrame(() => questionPromptRef.current?.focus());
+  }
+
+  function resetFilters() {
+    setSearch('');
+    setTopic('ALL');
+    setDifficulty('ALL');
+    setSortOrder('NEWEST');
+    setPage(1);
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }
+
+  function reviewStateLabel(reviewState: string): string {
+    const labels: Record<string, string> = {
+      UNREVIEWED: 'Bản nháp',
+      ACCEPTED: 'Đã duyệt',
+      REVISE: 'Cần chỉnh sửa',
+      REJECTED: 'Không sử dụng',
+    };
+    return labels[reviewState] ?? 'Chưa xác định';
   }
 
   function kcLabel(kcId: string): string {
@@ -201,16 +274,21 @@ export function TeacherQuestionsPage() {
           <h1>Soạn và chọn câu hỏi</h1>
           <p>Tìm câu phù hợp, xem trước rồi chọn nhiều câu để tạo bài tập cho lớp.</p>
         </div>
-        <span className="status-label status-label--review">Nội dung mẫu · Bản nháp</span>
+        <div className="page-heading-actions">
+          <span className="status-label status-label--review">Nội dung mẫu</span>
+          <button className="button-secondary" type="button" onClick={openQuestionForm}>
+            Tạo câu hỏi
+          </button>
+        </div>
       </header>
 
-      <details className="summary-panel question-create-panel">
+      <details ref={createPanelRef} className="summary-panel question-create-panel">
         <summary className="question-create-summary">
           <span>
-            <small>Tạo nội dung</small>
+            <small>Soạn nội dung</small>
             <strong>Tạo câu hỏi mới</strong>
           </span>
-          <span className="text-link">Mở biểu mẫu</span>
+          <span className="text-link">Đóng phần tạo</span>
         </summary>
         <form className="question-form" onSubmit={(event) => void submit(event)}>
           <div className="form-row">
@@ -244,6 +322,7 @@ export function TeacherQuestionsPage() {
           <label>
             Câu hỏi
             <textarea
+              ref={questionPromptRef}
               required
               minLength={8}
               maxLength={500}
@@ -302,31 +381,36 @@ export function TeacherQuestionsPage() {
             <p className="eyebrow">Danh sách câu hỏi</p>
             <h2>{questions ? `${questions.length} câu trong ngân hàng` : 'Đang tải ngân hàng'}</h2>
           </div>
-          <button
-            className="button-primary"
-            type="button"
-            disabled={selected.size === 0}
-            onClick={() =>
-              navigate('/teacher/assignments', { state: { questionIds: [...selected] } })
-            }
-          >
-            Giao {selected.size || ''} câu đã chọn
-          </button>
+          {questions && filteredQuestions.length !== questions.length ? (
+            <span className="status-label status-label--neutral">
+              {filteredQuestions.length} đang hiển thị
+            </span>
+          ) : null}
         </header>
 
         <div className="question-filter-bar" aria-label="Tìm và lọc câu hỏi">
           <label className="question-search">
             Tìm kiếm
             <input
+              ref={searchInputRef}
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder="Nhập nội dung câu hỏi hoặc đáp án"
             />
           </label>
           <label>
             Chủ đề
-            <select value={topic} onChange={(event) => setTopic(event.target.value)}>
+            <select
+              value={topic}
+              onChange={(event) => {
+                setTopic(event.target.value);
+                setPage(1);
+              }}
+            >
               <option value="ALL">Tất cả chủ đề</option>
               {HERO_GRAPH.nodes.map((node) => (
                 <option key={node.id} value={node.id}>
@@ -337,7 +421,13 @@ export function TeacherQuestionsPage() {
           </label>
           <label>
             Độ khó
-            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
+            <select
+              value={difficulty}
+              onChange={(event) => {
+                setDifficulty(event.target.value);
+                setPage(1);
+              }}
+            >
               <option value="ALL">Tất cả độ khó</option>
               {Object.entries(DIFFICULTY_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -346,22 +436,65 @@ export function TeacherQuestionsPage() {
               ))}
             </select>
           </label>
+          <label>
+            Sắp xếp
+            <select
+              value={sortOrder}
+              onChange={(event) => {
+                setSortOrder(event.target.value as SortOrder);
+                setPage(1);
+              }}
+            >
+              <option value="NEWEST">Mới tạo</option>
+              <option value="ALPHABETICAL">Câu hỏi A–Z</option>
+            </select>
+          </label>
         </div>
 
         <div className="question-selection-bar">
           <label>
             <input
+              ref={selectAllRef}
               type="checkbox"
-              checked={
-                filteredQuestions.length > 0 &&
-                filteredQuestions.every((question) => selected.has(question.id))
-              }
-              onChange={toggleAllFiltered}
+              checked={allPageSelected}
+              disabled={paginatedQuestions.length === 0}
+              onChange={toggleAllPage}
             />
-            Chọn tất cả {filteredQuestions.length} kết quả
+            Chọn tất cả {paginatedQuestions.length} câu trên trang
           </label>
-          <span role="status">Đã chọn {selected.size} câu</span>
+          <span role="status">
+            Đã chọn {selected.size} câu
+            {selected.size > selectedFilteredCount
+              ? ` • ${selected.size - selectedFilteredCount} ngoài bộ lọc`
+              : selected.size > selectedPageCount
+                ? ` • ${selected.size - selectedPageCount} ở trang khác`
+                : ''}
+          </span>
         </div>
+
+        {selected.size > 0 ? (
+          <div className="question-selection-actions" aria-label="Hành động với câu đã chọn">
+            <strong>Đã chọn {selected.size} câu</strong>
+            <div className="inline-actions">
+              <button
+                className="button-primary"
+                type="button"
+                onClick={() =>
+                  navigate('/teacher/assignments', { state: { questionIds: [...selected] } })
+                }
+              >
+                Tạo bài tập với {selected.size} câu
+              </button>
+              <button
+                className="button-secondary"
+                type="button"
+                onClick={() => setSelected(new Set())}
+              >
+                Bỏ chọn
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {loadError ? (
           <p role="alert" className="error-message">
@@ -372,7 +505,7 @@ export function TeacherQuestionsPage() {
         {actionMessage ? <p role="status">{actionMessage}</p> : null}
 
         <ul className="question-bank-list question-bank-list--managed">
-          {filteredQuestions.map((question) => (
+          {paginatedQuestions.map((question) => (
             <li key={question.id}>
               {editing?.id === question.id ? (
                 <form className="quick-edit-form" onSubmit={(event) => void saveQuickEdit(event)}>
@@ -439,60 +572,125 @@ export function TeacherQuestionsPage() {
                       />
                       <span className="visually-hidden">Chọn câu hỏi: {question.prompt}</span>
                     </label>
-                    <div>
-                      <strong>{question.prompt}</strong>
-                      <span>
-                        {kcLabel(question.kcId)} · {DIFFICULTY_LABELS[question.difficulty]} •{' '}
-                        {question.choices.length} phương án •{' '}
-                        {question.reviewState === 'UNREVIEWED' ? 'Bản nháp' : question.reviewState}
-                      </span>
+                    <div className="question-item-copy">
+                      <strong className="question-prompt">{question.prompt}</strong>
+                      <div className="question-metadata">
+                        <span>{kcLabel(question.kcId)}</span>
+                        {question.difficulty !== 'UNSPECIFIED' ? (
+                          <span className="status-label status-label--neutral">
+                            {DIFFICULTY_LABELS[question.difficulty] ?? 'Chưa phân loại'}
+                          </span>
+                        ) : null}
+                        <span className="status-label status-label--review">
+                          {reviewStateLabel(question.reviewState)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="question-row-actions" aria-label="Thao tác câu hỏi">
+                      <button
+                        className="question-icon-action"
+                        type="button"
+                        aria-label={`Chỉnh sửa nhanh: ${question.prompt}`}
+                        title="Chỉnh sửa nhanh"
+                        onClick={() => setEditing(question)}
+                      >
+                        <PencilSimpleIcon aria-hidden="true" size={20} weight="regular" />
+                      </button>
+                      <button
+                        className="question-icon-action"
+                        type="button"
+                        aria-label={`Nhân bản: ${question.prompt}`}
+                        title="Nhân bản"
+                        onClick={() => void duplicate(question)}
+                      >
+                        <CopySimpleIcon aria-hidden="true" size={20} weight="regular" />
+                      </button>
                     </div>
                   </div>
                   <details className="question-preview">
-                    <summary>Xem trước câu hỏi</summary>
-                    <ol type="A">
-                      {question.choices.map((choice) => (
-                        <li
-                          key={choice.id}
-                          data-correct={choice.id === question.correctChoiceId || undefined}
-                        >
-                          {choice.label}
-                          {choice.id === question.correctChoiceId ? ' — đáp án đúng' : ''}
-                        </li>
-                      ))}
-                    </ol>
-                    {question.explanation ? (
-                      <p>
-                        <strong>Giải thích đáp án:</strong> {question.explanation}
-                      </p>
-                    ) : null}
+                    <summary>Xem trước</summary>
+                    <div className="question-preview-content">
+                      <ol type="A">
+                        {question.choices.map((choice) => (
+                          <li
+                            key={choice.id}
+                            data-correct={choice.id === question.correctChoiceId || undefined}
+                          >
+                            {choice.label}
+                            {choice.id === question.correctChoiceId ? ' — đáp án đúng' : ''}
+                          </li>
+                        ))}
+                      </ol>
+                      {question.explanation ? (
+                        <p>
+                          <strong>Giải thích đáp án:</strong> {question.explanation}
+                        </p>
+                      ) : null}
+                    </div>
                   </details>
-                  <div className="inline-actions">
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => setEditing(question)}
-                    >
-                      Chỉnh sửa nhanh
-                    </button>
-                    <button
-                      className="button-secondary"
-                      type="button"
-                      onClick={() => void duplicate(question)}
-                    >
-                      Nhân bản
-                    </button>
-                  </div>
                 </>
               )}
             </li>
           ))}
         </ul>
 
+        {filteredQuestions.length > PAGE_SIZE ? (
+          <nav className="question-pagination" aria-label="Phân trang danh sách câu hỏi">
+            <p className="question-pagination-summary">
+              {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredQuestions.length)} /{' '}
+              {filteredQuestions.length} câu
+            </p>
+            <div className="question-pagination-controls">
+              <button
+                className="question-page-button question-page-button--wide"
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setPage(currentPage - 1)}
+              >
+                Trước
+              </button>
+              {paginationPages.map((item) =>
+                typeof item === 'string' ? (
+                  <span key={item} className="question-page-ellipsis" aria-hidden="true">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    className="question-page-button"
+                    type="button"
+                    aria-label={`Trang ${item}`}
+                    aria-current={item === currentPage ? 'page' : undefined}
+                    onClick={() => setPage(item)}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
+              <button
+                className="question-page-button question-page-button--wide"
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setPage(currentPage + 1)}
+              >
+                Sau
+              </button>
+            </div>
+          </nav>
+        ) : null}
+
         {questions !== null && filteredQuestions.length === 0 ? (
           <div className="empty-state" role="status">
             <h3>Không tìm thấy câu hỏi</h3>
             <p>Thử thay từ khóa hoặc bỏ bớt bộ lọc.</p>
+            <div className="inline-actions">
+              <button className="button-primary" type="button" onClick={resetFilters}>
+                Xóa bộ lọc
+              </button>
+              <button className="button-secondary" type="button" onClick={openQuestionForm}>
+                Tạo câu hỏi
+              </button>
+            </div>
           </div>
         ) : null}
       </section>

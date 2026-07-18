@@ -62,3 +62,41 @@ Reference và bản render desktop đã được mở trong cùng một lượt 
 - Không có P3 cần chặn release này.
 
 final result: passed
+
+---
+
+# Design QA — tinh gọn ngân hàng câu hỏi
+
+- Source visual truth: `C:/Users/Admin/AppData/Local/Temp/codex-clipboard-d0007916-7ec0-46d7-b82c-a9d700d25ddf.png`.
+- Combined comparison: `C:/Users/Admin/.codex/visualizations/2026/07/18/019f7394-ad11-71c2-a74f-5d3d0c95acd9/teacher-questions-icon-refinement/source-vs-implementation-passed.png`.
+- Implementation screenshots: `desktop-page-passed.png`, `desktop-row-preview-passed.png`, `mobile-page-passed.png`, `mobile-row-preview-passed.png` trong cùng thư mục bằng chứng.
+- Viewports: desktop 1440 × 900; mobile 390 × 844; DPR 1.
+- State: giáo viên ở `/teacher/questions`; câu thứ hai mở phần xem trước.
+
+## Full-view and focused comparison
+
+- Typography: giữ font, hierarchy và token hiện hữu; prompt mobile dùng 16/24 để hai icon cùng hàng không làm câu hỏi dài quá mức.
+- Spacing/layout: chỉnh sửa và nhân bản nằm trực tiếp cuối hàng câu hỏi; mỗi icon có vùng chạm 44 × 44 px. Danh sách không tràn ngang ở cả hai viewport.
+- Colors: icon trung tính ở trạng thái nghỉ, dùng semantic primary/surface tokens cho hover, active và focus-visible.
+- Images/assets/icons: dùng Phosphor Icons thật; không dùng emoji, text glyph, CSS art hay SVG tự vẽ.
+- Copy/content: bỏ “N phương án”, “Chưa phân loại” và disclosure “Thao tác”; giữ chủ đề và trạng thái duyệt vì chúng hỗ trợ quyết định chọn câu.
+- Expanded preview: giữ đáp án đúng và giải thích; trên mobile phần nội dung mở rộng lấy lại toàn bộ bề rộng hàng để tránh cột đọc quá hẹp.
+
+## Findings and comparison history
+
+1. Ảnh tham chiếu có ba tín hiệu thừa: số phương án, nhãn chưa phân loại và một bước disclosure trước hai hành động chính.
+   - Fix: bỏ ba tín hiệu đó; đưa sửa nhanh/nhân bản thành icon cùng hàng, có `title`, accessible name theo từng câu và SVG thật.
+2. Lượt triển khai đầu làm prompt dài trên mobile cao 318 px vì hai icon thu hẹp cột chữ.
+   - Fix: dùng typography 16/24 ở breakpoint mobile và cho nội dung xem trước mở rộng về toàn bề rộng hàng.
+   - Post-fix: hàng dài còn 294 px; phần xem trước câu thứ hai còn 517 px; không tràn ngang.
+3. So sánh cuối không còn finding P0, P1 hoặc P2. Console và page error đều sạch.
+
+## Primary interactions tested
+
+- Mở/đóng phần xem trước.
+- Mở biểu mẫu chỉnh sửa nhanh bằng icon và hủy để trở về hàng câu hỏi.
+- Điều hướng bàn phím từ checkbox sang icon; icon nhận `:focus-visible`.
+- Xác nhận cả hai icon có vùng chạm 44 × 44 px, SVG, `title` và accessible name đầy đủ.
+- Xác nhận “phương án”, “Thao tác” và “Chưa phân loại” không còn xuất hiện trong hàng đại diện.
+
+final result: passed
