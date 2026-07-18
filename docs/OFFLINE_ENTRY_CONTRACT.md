@@ -49,6 +49,40 @@ boundary. A school pilot with real children must additionally provide:
 
 Those controls are deliberately not simulated in the 48-hour MVP.
 
+## Research rationale
+
+The narrow boundary above matches current platform and field practice:
+
+- OWASP says browser LocalStorage/IndexedDB must not be treated as an authentication boundary and
+  session identifiers should remain in HttpOnly cookies. NekoPath therefore stores only display
+  identity and local learner keys, and validates them again before use.
+- web.dev separates Cache Storage for URL resources from IndexedDB for structured, user-specific
+  data. NekoPath follows that split and keeps auth APIs out of Workbox.
+- WebAuthn Level 3 still requires a fresh, server-generated cryptographic challenge. It can improve
+  the next online sign-in, but it is not a drop-in solution for a fully disconnected login.
+- Kolibri treats initial facility/device provisioning as a distinct operation, after which learning
+  can continue without Internet. Moodle likewise requires an initial site login and then exposes
+  downloaded activities plus deferred synchronization. NekoPath's “confirm once, reopen locally”
+  flow is the smallest honest version of that pattern for this event.
+
+For a real pilot, the next design experiment should be a teacher-facing **Prepare this device**
+flow: select permitted learners, download the reviewed content pack, record its version, and make
+the offline window explicit. If the school requires offline authorization rather than simple
+continuity, the server can issue a short-lived asymmetric signed grant containing issuer, subject,
+audience, expiry, facility and content-version claims; the PWA would verify it with a pinned public
+key. This is an architectural inference from JWT BCP and Web Crypto—not a feature to improvise in
+the competition build—because revocation is necessarily delayed until reconnect.
+
+References:
+
+- [OWASP HTML5 Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html)
+- [web.dev: Offline data](https://web.dev/learn/pwa/offline-data)
+- [W3C WebAuthn Level 3](https://www.w3.org/TR/webauthn-3/)
+- [W3C Web Cryptography Level 2](https://www.w3.org/TR/WebCryptoAPI/)
+- [IETF RFC 8725: JWT Best Current Practices](https://www.rfc-editor.org/rfc/rfc8725.html)
+- [Kolibri facilities and offline sync](https://kolibri.readthedocs.io/en/latest/manage/facilities.html)
+- [Moodle app offline features](https://docs.moodle.org/310/en/Moodle_app_offline_features)
+
 ## Acceptance checks
 
 1. Confirm a profile online, switch out, make the directory unavailable and reopen it without an
