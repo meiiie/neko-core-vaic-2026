@@ -585,8 +585,9 @@ button:disabled,
   }
 }
 
-/* Sidebar foot: one quiet answer to "is my work safe?" plus the honest
-   environment note. Replaces the former three-badge status bar. */
+/* Sidebar foot: one quiet answer to "is my work safe?". Replaces the former
+   three-badge status bar. Sample-data disclosure lives next to the data it
+   describes (teacher aggregate footnotes), not on the product chrome. */
 
 .sidebar-foot {
   display: grid;
@@ -630,13 +631,6 @@ button:disabled,
   background: none;
   cursor: pointer;
   text-align: left;
-}
-
-.sidebar-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.125rem;
 }
 
 .product-workspace {

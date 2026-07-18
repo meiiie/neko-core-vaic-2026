@@ -233,7 +233,6 @@ export function AppLayout() {
 
         <div className="sidebar-foot">
           <ConnectionStatus />
-          <p className="sidebar-note">Môi trường trình diễn · dữ liệu mẫu</p>
         </div>
 
         <div className="sidebar-account">
