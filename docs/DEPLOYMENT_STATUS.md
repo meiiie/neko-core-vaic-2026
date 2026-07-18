@@ -1,6 +1,11 @@
 # NekoPath deployment status
 
-Ngày xác minh: 2026-07-18 · Trạng thái: **production full-stack đang live**.
+Ngày xác minh: 2026-07-18 (v0.8.0) · Trạng thái: **production full-stack đang live, release
+qua pipeline**.
+
+Từ v0.8.0, mọi release đi qua GitHub Actions (`gh workflow run deploy.yml` — keyless WIF,
+IAP tunnel, tuần tự hoá, smoke test tự động); SSH tay chỉ còn là break-glass có báo cáo. Xem
+`docs/ENGINEERING_STANDARDS.md`.
 
 ## Canonical production route
 
@@ -45,7 +50,9 @@ Smoke test trực tiếp trên canonical domain đã đạt:
 - cookie có `HttpOnly`, `Secure`, `SameSite=Lax`;
 - phiên `/api/auth/me` và `POST /api/auth/logout` hoạt động (`200`).
 
-Trước khi deploy, gate local đã đạt lint, typecheck, 69 tests, 23 deterministic eval và Wrangler dry-run.
+Gate tại v0.8.0: lint, format, typecheck, 167 application/integration tests, 29 deterministic
+eval tests và production build đều đạt (`npm run verify`); CI Linux xanh trên đúng SHA release;
+deploy v0.8.0 chạy trọn qua pipeline với smoke test canonical URL tự động.
 
 ## Quy ước vận hành
 

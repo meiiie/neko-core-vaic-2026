@@ -62,12 +62,17 @@ security boundary.
 ## Product capabilities
 
 **Student workspace** — adaptive check-in that spends a bounded question budget, an evidence-based
-learning path with explicit reasons per step, mastery-driven practice, and teacher-assigned
-homework with due dates and retake policy.
+learning path with explicit reasons per step, per-skill lesson summaries that open offline from
+the device mirror, mastery-driven practice with a three-level hint ladder, and teacher-assigned
+homework with due dates and retake policy. Evidence follows the account: a student's append-only
+history rehydrates on any device they sign into.
 
-**Teacher workspace** — class overview grouped by need, misconception verification queue,
-question authoring, assignment creation and monitoring, all computed from the same deterministic
-domain core the student surfaces use.
+**Teacher workspace** — class overview grouped by need over real synced records, per-learner
+evidence tracing (every decision opens down to the answers behind it), misconception verification
+queue, question authoring, **lesson-material authoring** (team-seeded drafts the teacher edits and
+publishes under their own name, distributed to student devices for offline reading), and
+assignment creation and monitoring — all computed from the same deterministic domain core the
+student surfaces use.
 
 **Neko assistant** — an agentic console docked on the right, built on one provider port with
 three interchangeable brains: a deterministic rule agent (always available, offline), a local
@@ -83,7 +88,7 @@ flowchart LR
   subgraph Device["Learner / teacher device"]
     UI["React 19 PWA<br/>Vite, TypeScript strict"]
     SW["Service worker<br/>precache + runtime cache"]
-    IDB[("IndexedDB (Dexie)<br/>events · overrides · outbox")]
+    IDB[("IndexedDB (Dexie)<br/>events · overrides · outbox · lesson mirror")]
     Agent["Neko agent harness<br/>rule · Ollama · WebLLM Gemma"]
     UI --- SW
     UI --- IDB
@@ -97,7 +102,7 @@ flowchart LR
   subgraph Origin["GCP VM · Docker Compose"]
     Caddy["Caddy (TLS)"]
     API["Fastify 5<br/>session cookies, scrypt"]
-    DB[("SQLite (node:sqlite)<br/>users · questions · assignments · events")]
+    DB[("SQLite (node:sqlite)<br/>users · questions · assignments · lessons · events")]
     Caddy --> API --> DB
   end
 
@@ -169,10 +174,12 @@ steps and additionally validates operations scripts and the generated PWA artifa
 
 - **CI** (`.github/workflows/ci.yml`): SHA-pinned actions, least-privilege permissions, the
   complete gate on every push and pull request.
-- **Deploy** (`.github/workflows/deploy.yml`): manual `workflow_dispatch` to the production VM;
-  keyless GitHub OIDC/Google Workload Identity Federation replaces stored cloud credentials, and
-  the Docker build is the release gate. The in-product version surface reports the immutable Git
-  SHA; `/api/healthz` reports liveness and server time.
+- **Deploy** (`.github/workflows/deploy.yml`): the pipeline is the **only** sanctioned release
+  path (`gh workflow run deploy.yml`) — keyless GitHub OIDC/Google Workload Identity Federation,
+  IAP-tunneled from GitHub's runners, serialized, smoke-tested; the Docker build is the release
+  gate. Hand SSH is reported break-glass only (see
+  [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md)). The in-product version surface
+  reports the immutable Git SHA; `/api/healthz` reports liveness and server time.
 - **Versioning**: semantic versions, annotated tags, and published
   [GitHub Releases](https://github.com/meiiie/neko-core-vaic-2026/releases); history in
   [CHANGELOG.md](CHANGELOG.md).
@@ -229,8 +236,11 @@ hypothesis and is labeled as such throughout the documentation.
 NekoPath là trợ giảng thích ứng cho lớp học đa trình độ: lần theo lỗi hiện tại của học sinh về
 đúng lỗ hổng kiến thức gốc sớm nhất có thể can thiệp, chủ động **hỏi thêm khi chưa đủ bằng
 chứng** thay vì gán nhãn sai, và trao cho giáo viên một kế hoạch can thiệp xếp ưu tiên trong
-ngân sách 15 phút. Ứng dụng là PWA **cục bộ trước**: chẩn đoán, lộ trình và luyện tập cốt lõi
-tiếp tục khi mất mạng rồi tự đồng bộ sự kiện khi có kết nối; các thao tác do máy chủ sở hữu vẫn
+ngân sách 15 phút. Giáo viên tự soạn câu hỏi, giao bài và **biên soạn học liệu tóm tắt theo từng
+kỹ năng** — tài liệu xuất bản dưới tên giáo viên và được phát tới thiết bị học sinh để đọc cả
+khi mất mạng. Ứng dụng là PWA **cục bộ trước**: chẩn đoán, lộ trình và luyện tập cốt lõi tiếp
+tục khi mất mạng rồi tự đồng bộ sự kiện khi có kết nối (chống trùng lặp, cách ly xung đột); lịch
+sử học theo tài khoản nên đổi thiết bị vẫn khôi phục được. Các thao tác do máy chủ sở hữu vẫn
 cần mạng. Lát cắt Toán 7 được biên soạn theo định hướng GDPT 2018 nhưng còn chờ giáo viên được
 nêu tên duyệt chính thức. Đăng nhập trình diễn bằng cách chọn tên trong danh sách lớp, không cần
 gõ mật khẩu và không được xem là ranh giới định danh bảo mật cho triển khai trường học thật.
