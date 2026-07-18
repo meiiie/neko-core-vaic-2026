@@ -3,12 +3,16 @@ import { Link, useParams } from 'react-router-dom';
 import {
   buildConfirmedAssignmentRecord,
   buildConfirmedReviewScheduleRecord,
+  diagnoseHero,
+  kcName,
   type ConfirmedAssignmentEvent,
   type ConfirmedReviewScheduleEvent,
 } from '../../app/adapters/hero-tutor';
+import { deriveStudentLearningPlan } from '../../app/adapters/student-learning-plan';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
+import { curriculumCatalogDraft } from '../../content';
 import { recordConfirmedAnswerWithReview } from '../../services/sync';
 
 interface ApiAssignment {
@@ -28,7 +32,20 @@ interface ApiAssignmentDetail {
   id: string;
   title: string;
   teacherMessage: string;
+  result: ApiAssignmentResult;
   questions: { id: string; kcId: string; prompt: string; choices: ApiChoice[] }[];
+}
+
+interface ApiAssignmentResult {
+  answeredCount: number;
+  correctCount: number;
+  questionCount: number;
+  knowledgeAreas: { kcId: string; answeredCount: number; incorrectCount: number }[];
+}
+
+interface SubmittedAnswerSummary {
+  kcId: string;
+  correct: boolean;
 }
 
 interface GradeResult {
@@ -77,23 +94,30 @@ export function AssignmentsPage() {
       ) : null}
       {assignments === null && !error ? <p>Đang tải…</p> : null}
       <ul className="question-bank-list">
-        {(assignments ?? []).map((assignment) => (
-          <li key={assignment.id}>
-            <strong>{assignment.title}</strong>
-            <span>
-              {assignment.questionCount} câu · em đã trả lời {assignment.myAnswerCount} lần
-            </span>
-            {assignment.teacherMessage ? (
-              <div className="student-assignment-message">
-                <strong>Lời nhắn của giáo viên</strong>
-                <p>{assignment.teacherMessage}</p>
-              </div>
-            ) : null}
-            <Link className="button-primary" to={`/student/assignments/${assignment.id}`}>
-              {assignment.myAnswerCount > 0 ? 'Làm tiếp' : 'Bắt đầu làm'}
-            </Link>
-          </li>
-        ))}
+        {(assignments ?? []).map((assignment) => {
+          const completed = assignment.myAnswerCount >= assignment.questionCount;
+          return (
+            <li key={assignment.id}>
+              <strong>{assignment.title}</strong>
+              <span>
+                {assignment.questionCount} câu · em đã trả lời {assignment.myAnswerCount} lần
+              </span>
+              {assignment.teacherMessage ? (
+                <div className="student-assignment-message">
+                  <strong>Lời nhắn của giáo viên</strong>
+                  <p>{assignment.teacherMessage}</p>
+                </div>
+              ) : null}
+              <Link className="button-primary" to={`/student/assignments/${assignment.id}`}>
+                {completed
+                  ? 'Xem kết quả'
+                  : assignment.myAnswerCount > 0
+                    ? 'Làm tiếp'
+                    : 'Bắt đầu làm'}
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -114,6 +138,7 @@ export function AssignmentTakePage() {
   const [index, setIndex] = useState(0);
   const [choiceId, setChoiceId] = useState<string | null>(null);
   const [grade, setGrade] = useState<GradeResult | null>(null);
+  const [submittedAnswers, setSubmittedAnswers] = useState<SubmittedAnswerSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [evidenceSaveError, setEvidenceSaveError] = useState(false);
 
@@ -165,6 +190,43 @@ export function AssignmentTakePage() {
 
   const question = detail.questions[index];
   const finished = index >= detail.questions.length;
+  const diagnosis = diagnoseHero(activeLearnerContext, activeLocalRecords);
+  const plan = deriveStudentLearningPlan({
+    diagnosis,
+    catalog: curriculumCatalogDraft,
+    records: activeLocalRecords,
+  });
+  const currentStep =
+    plan.currentStepIndex === undefined ? undefined : plan.steps[plan.currentStepIndex];
+  const knowledgeAreas = new Map(
+    detail.result.knowledgeAreas.map((area) => [area.kcId, { ...area }]),
+  );
+  for (const answer of submittedAnswers) {
+    const area = knowledgeAreas.get(answer.kcId) ?? {
+      kcId: answer.kcId,
+      answeredCount: 0,
+      incorrectCount: 0,
+    };
+    area.answeredCount += 1;
+    if (!answer.correct) area.incorrectCount += 1;
+    knowledgeAreas.set(answer.kcId, area);
+  }
+  const answeredCount = detail.result.answeredCount + submittedAnswers.length;
+  const correctCount =
+    detail.result.correctCount + submittedAnswers.filter((answer) => answer.correct).length;
+  const incorrectCount = answeredCount - correctCount;
+  const priorityArea = [...knowledgeAreas.values()].sort(
+    (left, right) =>
+      right.incorrectCount - left.incorrectCount || left.kcId.localeCompare(right.kcId),
+  )[0];
+  const nextLearningAction = currentStep
+    ? { href: currentStep.nextHref, label: currentStep.nextActionVi }
+    : plan.status === 'NEEDS_CHECK_IN'
+      ? {
+          href: '/student/check-in',
+          label: 'Kiểm tra kiến thức nền để nhận lộ trình',
+        }
+      : { href: '/student/path', label: 'Xem nhận xét và lộ trình của em' };
 
   async function submit() {
     if (!question || !choiceId || busy) return;
@@ -197,6 +259,10 @@ export function AssignmentTakePage() {
         // but never pretend the local diagnosis evidence was saved.
         setEvidenceSaveError(true);
       }
+      setSubmittedAnswers((answers) => [
+        ...answers,
+        { kcId: question.kcId, correct: result.correct },
+      ]);
       setGrade(result);
     } catch {
       setGrade(null);
@@ -221,7 +287,9 @@ export function AssignmentTakePage() {
           <p>Máy chủ chấm từng câu và lưu bài làm của em cho giáo viên.</p>
         </div>
         <span className="status-label status-label--neutral">
-          Câu {Math.min(index + 1, detail.questions.length)}/{detail.questions.length}
+          {finished
+            ? `Đã trả lời ${answeredCount}/${detail.result.questionCount} câu`
+            : `Câu ${Math.min(detail.result.answeredCount + submittedAnswers.length + 1, detail.result.questionCount)}/${detail.result.questionCount}`}
         </span>
       </header>
 
@@ -237,12 +305,45 @@ export function AssignmentTakePage() {
           <span className="completion-mark" aria-hidden="true">
             ✓
           </span>
-          <p className="eyebrow">Đã nộp toàn bộ</p>
-          <h2>Em đã hoàn thành «{detail.title}»</h2>
-          <p>Kết quả đã được ghi nhận trên máy chủ — giáo viên nhìn thấy tiến độ của em.</p>
-          <Link className="button-primary" to="/student/assignments">
-            Về danh sách bài
-          </Link>
+          <p className="eyebrow">Đã nộp toàn bộ · {detail.title}</p>
+          <h2>Kết quả bài vừa làm</h2>
+          <p className="assignment-score">
+            <strong>
+              {correctCount}/{answeredCount} câu đúng
+            </strong>
+          </p>
+          {incorrectCount > 0 ? (
+            <div className="assignment-result-feedback" role="status">
+              <h3>Nhận xét dành cho em</h3>
+              <p>
+                {correctCount === 0
+                  ? 'Em chưa làm đúng câu nào trong lượt này. Kết quả này dùng để tìm phần cần hỗ trợ, không dùng để gắn nhãn năng lực của em.'
+                  : `Em còn ${incorrectCount} câu chưa đúng. Hệ thống sẽ dùng các câu này để chọn bước học tiếp theo.`}
+              </p>
+              {priorityArea && priorityArea.incorrectCount > 0 ? (
+                <p>
+                  Phần cần xem lại trước: <strong>{kcName(priorityArea.kcId)}</strong> · sai{' '}
+                  {priorityArea.incorrectCount}/{priorityArea.answeredCount} câu.
+                </p>
+              ) : null}
+              <p>
+                NekoPath sẽ kiểm tra ngắn kiến thức tiên quyết trước khi kết luận nguyên nhân gốc và
+                tạo lộ trình phục hồi.
+              </p>
+            </div>
+          ) : (
+            <p>
+              Em đã làm đúng toàn bộ phần này. Hệ thống sẽ chuyển em tới bước phù hợp tiếp theo.
+            </p>
+          )}
+          <div className="completion-actions">
+            <Link className="button-primary" to={nextLearningAction.href}>
+              {nextLearningAction.label}
+            </Link>
+            <Link className="button-secondary" to="/student/assignments">
+              Về danh sách bài
+            </Link>
+          </div>
         </section>
       ) : (
         <section className="question-panel" aria-labelledby="assignment-question">

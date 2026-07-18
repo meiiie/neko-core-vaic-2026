@@ -779,6 +779,20 @@ describe('NekoPath API', () => {
       intervalDays: 1,
       reason: 'REMEDIATE_SOON',
     });
+
+    const completedDetail = await app.inject({
+      method: 'GET',
+      url: `/api/assignments/${assignmentId}`,
+      cookies: student,
+    });
+    expect(completedDetail.json()).toMatchObject({
+      result: {
+        answeredCount: 1,
+        correctCount: 0,
+        questionCount: 1,
+        knowledgeAreas: [{ kcId: 'K08', answeredCount: 1, incorrectCount: 1 }],
+      },
+    });
     const history = await app.inject({ method: 'GET', url: '/api/events', cookies: student });
     expect((history.json() as { events: { id: string }[] }).events).toEqual(
       expect.arrayContaining([

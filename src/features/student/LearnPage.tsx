@@ -53,6 +53,7 @@ export function LearnPage() {
   const currentStep =
     plan.currentStepIndex === undefined ? undefined : plan.steps[plan.currentStepIndex];
   const recommendedQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
+  const recommendedKcId = result.nextItemId ? kcIdForItem(result.nextItemId) : undefined;
   const review = reassessment
     ? reviewRecommendation(activeLearnerContext, result, localRecords, new Date().toISOString())
     : undefined;
@@ -189,9 +190,11 @@ export function LearnPage() {
               <strong>
                 {review
                   ? kcName(review.kcId)
-                  : result.competingKcIds.length > 0
-                    ? result.competingKcIds.map((id) => kcName(id)).join(' · ')
-                    : 'Kiến thức nền liên quan'}
+                  : recommendedKcId
+                    ? kcName(recommendedKcId)
+                    : result.competingKcIds.length > 0
+                      ? result.competingKcIds.map((id) => kcName(id)).join(' · ')
+                      : 'Kiến thức nền liên quan'}
               </strong>
             </div>
             <p className="assessment-context-note">

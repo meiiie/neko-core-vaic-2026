@@ -444,6 +444,53 @@ function selectProbe(
     .sort((left, right) => right.gain - left.gain || compareIds(left.id, right.id))[0]?.id;
 }
 
+/**
+ * When the observed gap itself has no unused question, walk toward its
+ * unverified prerequisites instead of ending the learner flow. This gathers
+ * evidence only; it never promotes the observed skill to a root gap.
+ */
+function selectUpstreamProbe(
+  candidateKcIds: readonly string[],
+  graph: CurriculumGraph,
+  items: readonly Item[],
+  events: readonly LearnerEvent[],
+  mastery: ReadonlyMap<string, MasteryState>,
+  config: DomainConfig,
+): string | undefined {
+  const { incoming } = buildAdjacency(graph);
+  const visited = new Set(candidateKcIds);
+  let frontier = sortedUnique(candidateKcIds.flatMap((kcId) => incoming.get(kcId) ?? []));
+
+  while (frontier.length > 0) {
+    const unresolved = frontier.filter(
+      (kcId) => !isSufficientlyMastered(mastery.get(kcId)!, config),
+    );
+    const nextItemId = selectProbe(unresolved, items, events, mastery, config);
+    if (nextItemId) return nextItemId;
+
+    unresolved.forEach((kcId) => visited.add(kcId));
+    frontier = sortedUnique(
+      unresolved.flatMap((kcId) => incoming.get(kcId) ?? []).filter((kcId) => !visited.has(kcId)),
+    );
+  }
+
+  return undefined;
+}
+
+function selectProbeOrUpstream(
+  candidateKcIds: readonly string[],
+  graph: CurriculumGraph,
+  items: readonly Item[],
+  events: readonly LearnerEvent[],
+  mastery: ReadonlyMap<string, MasteryState>,
+  config: DomainConfig,
+): string | undefined {
+  return (
+    selectProbe(candidateKcIds, items, events, mastery, config) ??
+    selectUpstreamProbe(candidateKcIds, graph, items, events, mastery, config)
+  );
+}
+
 export function planPracticePath(
   graph: CurriculumGraph,
   rootKcId: string,
@@ -578,7 +625,14 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
       const competingKcIds = [best, second];
       const nextItemId =
         diagnosticsUsed < config.maxDiagnosticItems
-          ? selectProbe(competingKcIds, input.items, learnerEvents, mastery, config)
+          ? selectProbeOrUpstream(
+              competingKcIds,
+              input.graph,
+              input.items,
+              learnerEvents,
+              mastery,
+              config,
+            )
           : undefined;
       return {
         ...emptyResult(input, 'NEEDS_MORE_EVIDENCE', misconceptionHypotheses),
@@ -635,7 +689,14 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
     .slice(0, 2);
   const budgetAvailable = diagnosticsUsed < config.maxDiagnosticItems;
   const nextItemId = budgetAvailable
-    ? selectProbe(uncertainCandidates, input.items, learnerEvents, mastery, config)
+    ? selectProbeOrUpstream(
+        uncertainCandidates,
+        input.graph,
+        input.items,
+        learnerEvents,
+        mastery,
+        config,
+      )
     : undefined;
   return {
     ...emptyResult(input, 'NEEDS_MORE_EVIDENCE', misconceptionHypotheses),

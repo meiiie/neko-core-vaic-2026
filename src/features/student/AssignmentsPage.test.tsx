@@ -37,6 +37,37 @@ describe('student assignments', () => {
     expect(await screen.findByText('Lời nhắn của giáo viên')).toBeTruthy();
     expect(screen.getByText('Cô gửi em bài ôn này. Em làm kỹ từng câu nhé.')).toBeTruthy();
   });
+
+  it('labels a fully answered assignment as a result instead of more work', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              assignments: [
+                {
+                  id: 'assignment-complete',
+                  title: 'Bài đã hoàn thành',
+                  questionCount: 3,
+                  myAnswerCount: 3,
+                  teacherMessage: '',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+    );
+
+    render(
+      <MemoryRouter>
+        <AssignmentsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('link', { name: 'Xem kết quả' })).toBeTruthy();
+  });
 });
 
 const { recordConfirmedAnswerWithReview } = vi.hoisted(() => ({
@@ -112,6 +143,12 @@ describe('assigned-answer evidence loop', () => {
           JSON.stringify({
             id: 'assignment-seed-k02',
             title: 'Ôn tập phân số bằng nhau',
+            result: {
+              answeredCount: 0,
+              correctCount: 0,
+              questionCount: 1,
+              knowledgeAreas: [],
+            },
             questions: [
               {
                 id: 'bank-K02-CHECK-1',
@@ -160,5 +197,29 @@ describe('assigned-answer evidence loop', () => {
       }),
     );
     expect(await screen.findByRole('heading', { name: 'Chưa đúng' })).toBeTruthy();
+  });
+
+  it('shows a result summary and sends an incorrect learner to the adaptive check-in', async () => {
+    render(
+      <MemoryRouter initialEntries={['/student/assignments/assignment-seed-k02']}>
+        <Routes>
+          <Route path="/student/assignments/:assignmentId" element={<AssignmentTakePage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('radio', { name: /4\/5/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Nộp câu trả lời/ }));
+    await screen.findByRole('heading', { name: 'Chưa đúng' });
+    fireEvent.click(screen.getByRole('button', { name: 'Hoàn tất' }));
+
+    expect(await screen.findByRole('heading', { name: 'Kết quả bài vừa làm' })).toBeTruthy();
+    expect(screen.getByText('0/1 câu đúng')).toBeTruthy();
+    expect(screen.getByText(/Phân số bằng nhau/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Kiểm tra kiến thức nền để nhận lộ trình' })
+        .getAttribute('href'),
+    ).toBe('/student/check-in');
   });
 });

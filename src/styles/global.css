@@ -1205,6 +1205,38 @@ details li {
   text-align: center;
 }
 
+.assignment-score {
+  margin-block: var(--s-4);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.assignment-result-feedback {
+  margin-block: var(--s-5);
+  padding: var(--s-4);
+  border-left: 0.25rem solid var(--review);
+  border-radius: var(--radius-sm);
+  background: var(--review-soft);
+  text-align: left;
+}
+
+.assignment-result-feedback h3,
+.assignment-result-feedback p {
+  margin-top: 0;
+}
+
+.assignment-result-feedback p:last-child {
+  margin-bottom: 0;
+}
+
+.completion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+}
+
 .completion-mark {
   display: grid;
   width: 3.5rem;

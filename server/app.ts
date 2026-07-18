@@ -954,6 +954,58 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         );
         return { ...dto, choices };
       });
+    const result =
+      user.role === 'STUDENT'
+        ? (() => {
+            const latestByItem = new Map<string, { correct: boolean; kcId: string }>();
+            const answerRows = db
+              .prepare(
+                `SELECT item_id AS itemId, payload FROM events
+                 WHERE assignment_id = ? AND learner_id = ? AND kind = 'ASSIGNMENT_ANSWER'
+                 ORDER BY rowid ASC`,
+              )
+              .all(id, user.id) as { itemId: string; payload: string }[];
+            for (const answer of answerRows) {
+              try {
+                const payload = JSON.parse(answer.payload) as { correct?: unknown };
+                if (typeof payload.correct !== 'boolean') continue;
+                const question = db
+                  .prepare('SELECT kc_id FROM questions WHERE id = ?')
+                  .get(answer.itemId) as { kc_id: string } | undefined;
+                if (!question) continue;
+                latestByItem.set(answer.itemId, {
+                  correct: payload.correct,
+                  kcId: question.kc_id,
+                });
+              } catch {
+                // Ignore malformed historical rows rather than inventing a score.
+              }
+            }
+            const knowledgeAreaMap = new Map<
+              string,
+              { kcId: string; answeredCount: number; incorrectCount: number }
+            >();
+            for (const answer of latestByItem.values()) {
+              const area = knowledgeAreaMap.get(answer.kcId) ?? {
+                kcId: answer.kcId,
+                answeredCount: 0,
+                incorrectCount: 0,
+              };
+              area.answeredCount += 1;
+              if (!answer.correct) area.incorrectCount += 1;
+              knowledgeAreaMap.set(answer.kcId, area);
+            }
+            const answers = [...latestByItem.values()];
+            return {
+              answeredCount: answers.length,
+              correctCount: answers.filter((answer) => answer.correct).length,
+              questionCount: questionIds.length,
+              knowledgeAreas: [...knowledgeAreaMap.values()].sort((left, right) =>
+                left.kcId.localeCompare(right.kcId),
+              ),
+            };
+          })()
+        : undefined;
     return {
       id: row.id,
       title: row.title,
@@ -961,6 +1013,7 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       allowRetake: Boolean(row.allow_retake),
       shuffleAnswers: Boolean(row.shuffle_answers),
       questions,
+      ...(result ? { result } : {}),
     };
   });
 
