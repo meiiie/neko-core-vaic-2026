@@ -146,6 +146,25 @@ export function buildConfirmedAssignmentRecord(
   };
 }
 
+/**
+ * Give a complete server history deterministic local ordering after the
+ * synthetic seed evidence. Any cross-account row rejects the whole batch.
+ */
+export function buildHydratedEventRecords(
+  context: StudentDiagnosisContext,
+  events: readonly LearnerEventRecord[],
+): LearnerEventRecord[] | null {
+  if (events.some((event) => event.learnerId !== context.learnerId)) return null;
+  const ordered = [...events].sort(
+    (left, right) =>
+      left.occurredAt.localeCompare(right.occurredAt) ||
+      left.sequence - right.sequence ||
+      left.id.localeCompare(right.id),
+  );
+  const seedSequence = seededMaxSequence(context);
+  return ordered.map((event, index) => ({ ...event, sequence: seedSequence + index + 1 }));
+}
+
 /** Build the Dexie record for a locally answered hero question. */
 export function buildLocalAnswerRecord(
   context: StudentDiagnosisContext,

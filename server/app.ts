@@ -65,6 +65,12 @@ const eventSchema = z.object({
   payload: z.string(),
 });
 
+const eventPageQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+
+const EVENT_PAGE_SIZE = 200;
+
 interface QuestionRow {
   id: string;
   owner_id: string;
@@ -558,6 +564,49 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
         kind: 'ASSIGNMENT_ANSWER',
         payload,
       },
+    };
+  });
+
+  /**
+   * Paginated, account-scoped event history for restoring a student's
+   * append-only evidence log on another device.
+   */
+  app.get('/api/events', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
+    const query = eventPageQuerySchema.safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: 'INVALID_QUERY' });
+    const rows = db
+      .prepare(
+        `SELECT id, learner_id, item_id, sequence, occurred_at, kind, payload
+         FROM events
+         WHERE learner_id = ?
+         ORDER BY rowid ASC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(user.id, EVENT_PAGE_SIZE + 1, query.data.offset) as {
+      id: string;
+      learner_id: string;
+      item_id: string;
+      sequence: number;
+      occurred_at: string;
+      kind: string;
+      payload: string;
+    }[];
+    const hasMore = rows.length > EVENT_PAGE_SIZE;
+    const events = rows.slice(0, EVENT_PAGE_SIZE).map((row) => ({
+      id: row.id,
+      learnerId: row.learner_id,
+      itemId: row.item_id,
+      sequence: row.sequence,
+      occurredAt: row.occurred_at,
+      kind: row.kind,
+      payload: row.payload,
+    }));
+    return {
+      events,
+      nextOffset: hasMore ? query.data.offset + EVENT_PAGE_SIZE : null,
     };
   });
 

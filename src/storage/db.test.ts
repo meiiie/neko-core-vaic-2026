@@ -5,6 +5,7 @@ import {
   appendEvent,
   countEvents,
   listEventsByLearner,
+  mergeServerEvents,
   migrateLearnerEvents,
   resetDemoData,
 } from './event-repository';
@@ -82,6 +83,41 @@ describe('Dexie schema v1', () => {
       expect.objectContaining({ id: 'legacy-event', learnerId: 'user-student-an' }),
     ]);
     expect(await database.outbox.get('legacy-event')).toMatchObject({ eventId: 'legacy-event' });
+  });
+
+  it('merges account-owned server history without overwriting local rows', async () => {
+    const database = makeDb();
+    dbs.push(database);
+    const learnerId = 'user-student-an';
+    await appendEvent(makeEvent({ id: 'evt-local', learnerId, sequence: 8 }), database);
+
+    expect(
+      await mergeServerEvents(
+        learnerId,
+        [
+          makeEvent({ id: 'evt-local', learnerId, sequence: 99 }),
+          makeEvent({ id: 'evt-server', learnerId, sequence: 9 }),
+        ],
+        database,
+      ),
+    ).toBe(1);
+    expect(await database.events.get('evt-local')).toMatchObject({ sequence: 8 });
+    expect(await database.events.get('evt-server')).toMatchObject({ sequence: 9 });
+    expect(await database.outbox.count()).toBe(0);
+    expect(await database.meta.get(`lastServerHydratedAt:${learnerId}`)).toBeTruthy();
+  });
+
+  it('rejects a mixed-account server history before writing any row', async () => {
+    const database = makeDb();
+    dbs.push(database);
+    await expect(
+      mergeServerEvents(
+        'user-student-an',
+        [makeEvent({ id: 'evt-chi', learnerId: 'user-student-chi' })],
+        database,
+      ),
+    ).rejects.toThrow('EVENT_ACCOUNT_MISMATCH');
+    expect(await database.events.count()).toBe(0);
   });
 
   it('resetDemoData clears events, overrides and outbox', async () => {

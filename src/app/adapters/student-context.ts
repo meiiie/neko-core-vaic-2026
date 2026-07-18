@@ -2,8 +2,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { liveQuery } from 'dexie';
 import type { Account } from '../session';
 import type { LearnerEventRecord } from '../../storage/db';
-import { listEventsByLearner, migrateLearnerEvents } from '../../storage/event-repository';
-import { isHeroLearnerId, type StudentDiagnosisContext } from './hero-tutor';
+import {
+  listEventsByLearner,
+  mergeServerEvents,
+  migrateLearnerEvents,
+} from '../../storage/event-repository';
+import { fetchServerEvidence } from '../../services/evidence-hydration';
+import {
+  buildHydratedEventRecords,
+  isHeroLearnerId,
+  type StudentDiagnosisContext,
+} from './hero-tutor';
 
 export function studentContextForAccount(account: Account | null): StudentDiagnosisContext | null {
   if (!account || account.role !== 'STUDENT' || !account.learnerId) return null;
@@ -44,6 +53,10 @@ export function useStudentEvents(context: StudentDiagnosisContext | null): Stude
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     if (!learnerId || !scopeKey) return;
+    const activeContext: StudentDiagnosisContext = {
+      learnerId,
+      ...(simulationProfileId ? { simulationProfileId } : {}),
+    };
     void (async () => {
       try {
         if (simulationProfileId) {
@@ -59,6 +72,14 @@ export function useStudentEvents(context: StudentDiagnosisContext | null): Stude
           },
         );
         unsubscribe = () => subscription.unsubscribe();
+        void fetchServerEvidence(learnerId)
+          .then(async (result) => {
+            if (cancelled || !('events' in result)) return;
+            const records = buildHydratedEventRecords(activeContext, result.events);
+            if (!records) return;
+            await mergeServerEvents(learnerId, records);
+          })
+          .catch(() => undefined);
       } catch {
         if (!cancelled) setPreparation({ key: scopeKey, status: 'error' });
       }
