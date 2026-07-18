@@ -67,6 +67,36 @@ const READ_ONLY_TOOL = {
   timeoutMs: 8_000,
 } as const;
 
+const ASSIGNMENT_OPERATION_TTL_MS = 15 * 60_000;
+const MAX_PENDING_ASSIGNMENT_OPERATIONS = 100;
+const pendingAssignmentOperations = new Map<
+  string,
+  { readonly id: string; readonly createdAt: number }
+>();
+
+function assignmentOperation(key: string): string {
+  const now = Date.now();
+  for (const [pendingKey, operation] of pendingAssignmentOperations) {
+    if (now - operation.createdAt > ASSIGNMENT_OPERATION_TTL_MS) {
+      pendingAssignmentOperations.delete(pendingKey);
+    }
+  }
+  const pending = pendingAssignmentOperations.get(key);
+  if (pending) return pending.id;
+  while (pendingAssignmentOperations.size >= MAX_PENDING_ASSIGNMENT_OPERATIONS) {
+    const oldestKey = pendingAssignmentOperations.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    pendingAssignmentOperations.delete(oldestKey);
+  }
+  const id = globalThis.crypto.randomUUID();
+  pendingAssignmentOperations.set(key, { id, createdAt: now });
+  return id;
+}
+
+function finishAssignmentOperation(key: string, id: string): void {
+  if (pendingAssignmentOperations.get(key)?.id === id) pendingAssignmentOperations.delete(key);
+}
+
 function normalizedLearnerQuery(value: string): string {
   return value
     .normalize('NFD')
@@ -439,28 +469,35 @@ const giaoBai: AgentTool = {
   parallelSafe: false,
   timeoutMs: 10_000,
   async run(args, context) {
+    const assignment = {
+      title: args.title,
+      questionIds: args.question_ids,
+      dueAt: args.due_at ?? null,
+      allowRetake: args.allow_retake ?? false,
+      shuffleAnswers: args.shuffle_answers ?? true,
+    };
+    const operationKey = JSON.stringify(assignment);
+    const operationId = assignmentOperation(operationKey);
     try {
       const response = await fetch('/api/assignments', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          title: args.title,
-          questionIds: args.question_ids,
-          dueAt: args.due_at ?? null,
-          allowRetake: args.allow_retake ?? false,
-          shuffleAnswers: args.shuffle_answers ?? true,
-        }),
+        body: JSON.stringify({ ...assignment, operationId }),
         signal: context?.signal,
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (response.status < 500 && response.status !== 408 && response.status !== 429) {
+          finishAssignmentOperation(operationKey, operationId);
+        }
         return {
           ok: false,
           error: `Không giao được bài: ${body?.error ?? `máy chủ trả về ${response.status}`}.`,
         };
       }
       const body = (await response.json()) as { id: string };
+      finishAssignmentOperation(operationKey, operationId);
       window.dispatchEvent(new CustomEvent(ASSIGNMENTS_CHANGED_EVENT));
       return {
         ok: true,

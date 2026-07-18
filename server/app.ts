@@ -86,6 +86,7 @@ const questionImportSchema = z.object({
 
 const assignmentSchema = z.object({
   classId: z.string().min(1).optional(),
+  operationId: z.string().uuid().optional(),
   title: z.string().min(3).max(120),
   teacherMessage: z.string().max(500).default(''),
   questionIds: z.array(z.string().min(1)).min(1).max(20),
@@ -745,26 +746,34 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         return reply.code(400).send({ error: 'UNKNOWN_LEARNER_ID' });
       }
     }
-    const id = `assignment-${randomUUID()}`;
-    db.prepare(
-      `INSERT INTO assignments
+    const id = parsed.data.operationId
+      ? `assignment-op-${createHash('sha256')
+          .update(`${user.id}:${parsed.data.operationId}`)
+          .digest('hex')
+          .slice(0, 32)}`
+      : `assignment-${randomUUID()}`;
+    const inserted = db
+      .prepare(
+        `INSERT OR IGNORE INTO assignments
        (id, class_id, teacher_id, title, question_ids_json, created_at, due_at, allow_retake,
         shuffle_answers, recipient_ids_json, teacher_message)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id,
-      classId,
-      user.id,
-      parsed.data.title,
-      JSON.stringify(parsed.data.questionIds),
-      new Date().toISOString(),
-      parsed.data.dueAt,
-      parsed.data.allowRetake ? 1 : 0,
-      parsed.data.shuffleAnswers ? 1 : 0,
-      JSON.stringify(parsed.data.learnerIds),
-      parsed.data.teacherMessage.trim(),
-    );
-    return reply.code(201).send({ id, classId });
+      )
+      .run(
+        id,
+        classId,
+        user.id,
+        parsed.data.title,
+        JSON.stringify(parsed.data.questionIds),
+        new Date().toISOString(),
+        parsed.data.dueAt,
+        parsed.data.allowRetake ? 1 : 0,
+        parsed.data.shuffleAnswers ? 1 : 0,
+        JSON.stringify(parsed.data.learnerIds),
+        parsed.data.teacherMessage.trim(),
+      );
+    const deduplicated = Number(inserted.changes) === 0;
+    return reply.code(deduplicated ? 200 : 201).send({ id, classId, deduplicated });
   });
 
   app.get('/api/assignments', (request, reply) => {

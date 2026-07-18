@@ -11,6 +11,7 @@ import {
   kcName,
   REASON_LABELS,
   STATUS_LABELS,
+  toDomainEvents,
 } from '../../app/adapters/hero-tutor';
 import { reviewRecommendation, REVIEW_REASON_LABELS } from '../../app/adapters/review-selection';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
@@ -59,6 +60,9 @@ export function PathPage() {
   });
   const currentStep =
     plan.currentStepIndex === undefined ? undefined : plan.steps[plan.currentStepIndex];
+  const recordedAnswerCount = toDomainEvents(localRecords).filter(
+    (event) => event.learnerId === learnerContext.learnerId,
+  ).length;
   const review = reviewRecommendation(
     learnerContext,
     diagnosis,
@@ -69,20 +73,32 @@ export function PathPage() {
 
   if (plan.status === 'NEEDS_CHECK_IN' || plan.status === 'TEACHER_REVIEW') {
     const canCheckIn = plan.status === 'NEEDS_CHECK_IN';
+    const hasRetainedAnswers = canCheckIn && recordedAnswerCount > 0;
     return (
       <div className="page-stack">
         <header className="page-heading">
           <p className="eyebrow">Kế hoạch của em</p>
-          <h1>Chưa tạo kế hoạch học</h1>
+          <h1>
+            {hasRetainedAnswers
+              ? 'Câu trả lời đã được ghi nhận, nhưng chưa đủ để tìm nguyên nhân gốc'
+              : 'Chưa tạo kế hoạch học'}
+          </h1>
           <p>
             {canCheckIn
-              ? 'Cần thêm một vài câu trả lời để phân biệt đúng phần kiến thức đang cản em.'
+              ? hasRetainedAnswers
+                ? 'Dữ liệu học tập không bị mất; lộ trình tạm chưa hiển thị vì số câu hiện có chưa đủ để kết luận nguyên nhân gốc.'
+                : 'Cần thêm một vài câu trả lời để phân biệt đúng phần kiến thức đang cản em.'
               : 'Bằng chứng hiện tại chưa đủ an toàn; giáo viên cần xem lại trước khi chọn phần ôn.'}
           </p>
+          {hasRetainedAnswers ? (
+            <p role="status">
+              <strong>{recordedAnswerCount} câu trả lời đã được lưu trong hồ sơ.</strong>
+            </p>
+          ) : null}
         </header>
         {canCheckIn ? (
           <Link className="button-primary" to="/student/check-in">
-            Trả lời câu phân biệt tiếp theo
+            {hasRetainedAnswers ? 'Trả lời câu xác minh để mở lộ trình' : 'Trả lời câu phân biệt tiếp theo'}
           </Link>
         ) : (
           <p role="status" className="decision-panel decision-panel--review">

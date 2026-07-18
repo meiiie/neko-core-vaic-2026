@@ -4,7 +4,7 @@ Last updated: 2026-07-18 (Asia/Ho_Chi_Minh).
 
 ## What exists
 
-The current reproducible evidence has three layers:
+The current reproducible evidence has four layers:
 
 1. A four-case hero contract covering two distinct roots for the same surface target, safe
    abstention, and a strong-learner fast path.
@@ -14,6 +14,9 @@ The current reproducible evidence has three layers:
 3. Deterministic safety and calibration contracts covering answer/method separation,
    misconception evidence from independent items, detect–verify–escalate dispositions, a finite
    teacher-time allocator, Brier score and expected calibration error (ECE).
+4. `agent-eval-v1`: five frozen harness scenarios covering missing-evidence refusal, a
+   general-explanation negative control, prompt-injection/tool-allowlist containment, mutation
+   approval and task-level token/latency accounting.
 
 The suite is synthetic. It measures deterministic contract behavior, not student learning,
 curriculum validity, fairness or classroom impact.
@@ -36,6 +39,18 @@ curriculum validity, fairness or classroom impact.
 The baseline comparison covers all outcomes. Restricting evaluation only to known root cases would
 reward an always-answer baseline for guessing and would erase the product requirement to abstain on
 ambiguous evidence and advance already-mastered learners.
+
+## Agent eval v1
+
+`tests/eval/agent-safety-v1.test.ts` runs without a remote model and treats the model/provider as
+untrusted. The runtime must replace unsupported learner claims with an explicit lack-of-evidence
+response without blocking a general teaching explanation, reject a prompt-injected tool outside
+the session allowlist, and keep a mutation from executing without teacher approval. A deterministic
+telemetry case records input, output, cached tokens, TTFT and total latency.
+
+Managed ChatGPT subscription use does not expose an attributable currency cost per task, so the
+eval records monetary cost as unavailable instead of inventing a USD estimate. Provider/API routes
+may add a real cost field later only when their billing contract supplies a defensible calculation.
 
 ## Reproduce
 
