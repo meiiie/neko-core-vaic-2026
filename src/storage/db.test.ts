@@ -1,7 +1,14 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NekoPathDb, type LearnerEventRecord } from './db';
-import { appendEvent, countEvents, listEventsByLearner, resetDemoData } from './event-repository';
+import {
+  appendEvent,
+  countEvents,
+  listEventsByLearner,
+  mergeServerEvents,
+  migrateLearnerEvents,
+  resetDemoData,
+} from './event-repository';
 import { appendTeacherOverride, listLatestTeacherOverrides } from './override-repository';
 
 function makeDb(): NekoPathDb {
@@ -57,6 +64,60 @@ describe('Dexie schema v1', () => {
     const events = await listEventsByLearner('an', database);
     expect(events.map((e) => e.id)).toEqual(['evt-1', 'evt-2']);
     expect(await countEvents(database)).toBe(2);
+  });
+
+  it('migrates legacy profile-keyed events without changing event or outbox IDs', async () => {
+    const database = makeDb();
+    dbs.push(database);
+    await appendEvent(makeEvent({ id: 'legacy-event', learnerId: 'an' }), database);
+    await database.outbox.add({
+      eventId: 'legacy-event',
+      status: 'PENDING',
+      createdAt: '2026-07-17T08:00:00.000Z',
+      nextRetryAt: '2026-07-17T08:00:00.000Z',
+    });
+
+    expect(await migrateLearnerEvents('an', 'user-student-an', database)).toBe(1);
+    expect(await listEventsByLearner('an', database)).toEqual([]);
+    expect(await listEventsByLearner('user-student-an', database)).toEqual([
+      expect.objectContaining({ id: 'legacy-event', learnerId: 'user-student-an' }),
+    ]);
+    expect(await database.outbox.get('legacy-event')).toMatchObject({ eventId: 'legacy-event' });
+  });
+
+  it('merges account-owned server history without overwriting local rows', async () => {
+    const database = makeDb();
+    dbs.push(database);
+    const learnerId = 'user-student-an';
+    await appendEvent(makeEvent({ id: 'evt-local', learnerId, sequence: 8 }), database);
+
+    expect(
+      await mergeServerEvents(
+        learnerId,
+        [
+          makeEvent({ id: 'evt-local', learnerId, sequence: 99 }),
+          makeEvent({ id: 'evt-server', learnerId, sequence: 9 }),
+        ],
+        database,
+      ),
+    ).toBe(1);
+    expect(await database.events.get('evt-local')).toMatchObject({ sequence: 8 });
+    expect(await database.events.get('evt-server')).toMatchObject({ sequence: 9 });
+    expect(await database.outbox.count()).toBe(0);
+    expect(await database.meta.get(`lastServerHydratedAt:${learnerId}`)).toBeTruthy();
+  });
+
+  it('rejects a mixed-account server history before writing any row', async () => {
+    const database = makeDb();
+    dbs.push(database);
+    await expect(
+      mergeServerEvents(
+        'user-student-an',
+        [makeEvent({ id: 'evt-chi', learnerId: 'user-student-chi' })],
+        database,
+      ),
+    ).rejects.toThrow('EVENT_ACCOUNT_MISMATCH');
+    expect(await database.events.count()).toBe(0);
   });
 
   it('resetDemoData clears events, overrides and outbox', async () => {

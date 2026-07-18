@@ -10,9 +10,12 @@ NekoPath must feel like a usable school product, not a gallery of proof screens.
 diagnosis, abstention and teacher grouping remain the core advantage, but users enter through a
 recognizable role workspace and complete a coherent task.
 
-The one-click account selector is a **demo session**, not authentication. It has no password, JWT,
-remote identity, authorization boundary or learner PII. Real registration and account security are
-out of scope until a school pilot supplies an identity and consent contract.
+The one-click account selector is backed by seeded synthetic accounts and a server-side session,
+but remains an **event demonstration identity flow**, not a school-ready identity system. Online
+verification uses a scrypt password and an opaque HttpOnly cookie; the browser never stores a
+password or JWT. After one successful verification, a sanitized device profile may be reopened
+offline. Real learner PII, registration, recovery, consent and account administration remain out of
+scope until a school pilot supplies an identity contract.
 
 ## Adopted clean-room lessons
 
@@ -36,8 +39,11 @@ asset, prompt or dependency was copied.
 | `/teacher/class` | teacher | compare all ranked need groups and inspect evidence |
 | `/system` | both | verify device/offline data and reset the evaluation state |
 
-Role guards return an authenticated demo account to its own workspace. Signing out returns to the
-account selector. Direct links remain recoverable.
+Role guards return a verified demo account to its own workspace. Switching profiles returns to the
+account selector without deleting profiles previously confirmed on that device. When the directory
+is unreachable, only those confirmed profiles are shown and the action is explicitly labelled
+“Vào ngoại tuyến”. A new device or a new profile still needs one successful online verification.
+Direct links remain recoverable.
 
 ## Quiz behavior
 

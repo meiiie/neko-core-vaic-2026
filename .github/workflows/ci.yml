@@ -32,6 +32,8 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Validate operations scripts
+        run: bash -n ops/backup.sh
       - name: Unit + integration tests
         run: npm run test
       - name: Deterministic eval suite

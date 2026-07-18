@@ -52,6 +52,11 @@ Màn hình: trang Hôm nay của An → mở "Lộ trình học".
 > dưới — và lộ trình bù chỉ gồm những kỹ năng thực sự cần, kèm lý do cho từng bước.
 
 Thao tác: chỉ chuột vào nhãn trạng thái, số bằng chứng, và đường K02 → K10 trên trang lộ trình.
+Bấm "Ôn tóm tắt" ở bước 1 để mở tài liệu tóm tắt kiến thức (ý chính, ví dụ có lời giải, lỗi
+thường gặp) rồi nói:
+
+> Mỗi bước có sẵn tài liệu tóm tắt nằm ngay trong ứng dụng — đọc được cả khi mất mạng — trước khi
+> em bắt tay vào luyện tập.
 
 ### Cảnh 3 — Cùng lỗi, khác gốc: Bình (1:20 – 1:50)
 
@@ -117,6 +122,8 @@ lớp; nếu không, giữ nguyên dashboard.
    quyết định."
 2. "Mỗi câu hỏi trong demo truy được tới kỹ năng, yêu cầu cần đạt và nguồn chương trình."
 3. "Lát cắt Toán được biên soạn đối chiếu GDPT 2018, đang chờ giáo viên chuyên môn duyệt."
+4. "Mỗi kỹ năng có tài liệu tóm tắt do đội biên soạn, nằm sẵn trong ứng dụng và mở được khi mất
+   mạng." (KHÔNG nói "video" — video là lộ trình phát triển, chưa có trong MVP.)
 
 Cấm tuyệt đối (chưa có gate hoặc pilot tương ứng):
 

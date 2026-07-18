@@ -113,6 +113,11 @@ Design decisions that matter:
   with a disclosed synthetic evaluation suite — the UI renders runtime results, never hard-coded
   outcomes.
 - **Sessions over tokens.** HttpOnly, SameSite session cookies instead of JWT-in-localStorage.
+- **Offline entry without offline credentials.** After a successful server login, the device keeps
+  only a sanitized profile (email, local `id`, name, initials, `shortName`, role, subtitle and the
+  optional local learner key). If the directory is unreachable, users may reopen only profiles
+  already confirmed on that device; no password, session cookie or API response is copied into web
+  storage or the service-worker cache.
 - **Zero native dependencies.** `node:sqlite` keeps the image small and the Docker build
   reproducible; the Docker build is the release gate.
 - **System font stack.** Zero download on 2G and native Vietnamese diacritic shaping on every
@@ -162,6 +167,7 @@ The full local gate mirrors CI: `format:check`, `lint`, `typecheck`, `test`, `bu
 - **CI** (`.github/workflows/ci.yml`): SHA-pinned actions, least-privilege permissions, the
   complete gate on every push and pull request.
 - **Deploy** (`.github/workflows/deploy.yml`): manual `workflow_dispatch` to the production VM;
+  keyless GitHub OIDC/Google Workload Identity Federation replaces stored cloud credentials, and
   the Docker build is the release gate. The in-product version surface reports the immutable Git
   SHA; `/api/healthz` reports liveness and server time.
 - **Versioning**: semantic versions, annotated tags, and published
@@ -199,6 +205,7 @@ labs/           Image-generation lab with asset register and review rubric
 | [EXECUTIVE_CONCLUSION_EXECUTION.md](docs/EXECUTIVE_CONCLUSION_EXECUTION.md) | Evidence-aware adaptive core rationale |
 | [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md) | Production topology and verification |
 | [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Submission video script with claim discipline |
+| [PROBLEM_FIT_AUDIT.md](docs/PROBLEM_FIT_AUDIT.md) | Requirement-by-requirement technical audit with measurements |
 | [CURRICULUM_SCOPE_DECISIONS.md](docs/CURRICULUM_SCOPE_DECISIONS.md) | Team-lead-approved curriculum scope and architecture decisions |
 | [ops/RUNBOOK.md](ops/RUNBOOK.md) | Operations: deploy, accounts, recovery |
 

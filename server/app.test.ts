@@ -24,8 +24,10 @@ async function loginCookie(app: Awaited<ReturnType<typeof makeApp>>, email: stri
   });
   expect(response.statusCode).toBe(200);
   const cookie = response.cookies.find((c) => c.name === 'nekopath_sid');
+  const profile = response.cookies.find((c) => c.name === 'nekopath_profile');
   expect(cookie).toBeTruthy();
-  return { nekopath_sid: cookie!.value };
+  expect(profile).toBeTruthy();
+  return { nekopath_sid: cookie!.value, nekopath_profile: profile!.value };
 }
 
 describe('NekoPath API', () => {
@@ -289,6 +291,16 @@ describe('NekoPath API', () => {
     expect(verdict.correct).toBe(false);
     expect(verdict.note).toContain('so sánh cộng');
     expect(verdict.hints[0]).toContain('nhân mấy');
+    expect(verdict.event).toMatchObject({
+      learnerId: 'user-student-an',
+      itemId: questionId,
+      kind: 'ASSIGNMENT_ANSWER',
+    });
+    expect(JSON.parse(verdict.event.payload)).toMatchObject({
+      choiceId: 'b',
+      correct: false,
+      methodValidity: 'UNKNOWN',
+    });
 
     // The teacher's assignment list now shows one submitted learner.
     const progress = await app.inject({ method: 'GET', url: '/api/assignments', cookies: teacher });
@@ -416,6 +428,7 @@ describe('NekoPath API', () => {
 
     const event = {
       id: 'evt-local-1',
+      learnerId: 'user-student-an',
       itemId: 'K02-CHECK-1',
       sequence: 1,
       occurredAt: new Date().toISOString(),
@@ -457,11 +470,118 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('paginates only the authenticated student event history', async () => {
+    const app = await makeApp();
+    const an = await loginCookie(app, STUDENT_EMAIL);
+    const chi = await loginCookie(app, 'chi@nekopath.edu.vn');
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const eventFor = (id: string, learnerId: string) => ({
+      id,
+      learnerId,
+      itemId: 'K02-DIAGNOSTIC',
+      sequence: 1,
+      occurredAt: '2026-07-18T08:00:00.000Z',
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: an,
+      payload: { events: [eventFor('evt-an-history', 'user-student-an')] },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: chi,
+      payload: { events: [eventFor('evt-chi-history', 'user-student-chi')] },
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/events?offset=0', cookies: an });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      events: [expect.objectContaining({ id: 'evt-an-history', learnerId: 'user-student-an' })],
+      nextOffset: null,
+    });
+    expect(
+      (response.json() as { events: { id: string }[] }).events.some(
+        (event) => event.id === 'evt-chi-history',
+      ),
+    ).toBe(false);
+
+    const forbidden = await app.inject({ method: 'GET', url: '/api/events', cookies: teacher });
+    expect(forbidden.statusCode).toBe(403);
+    const invalid = await app.inject({ method: 'GET', url: '/api/events?offset=-1', cookies: an });
+    expect(invalid.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('returns structured misconception evidence for an assigned authored bank item', async () => {
+    const app = await makeApp();
+    const student = await loginCookie(app, STUDENT_EMAIL);
+    await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: {
+        events: [
+          {
+            id: 'evt-offline-before-assignment',
+            learnerId: 'user-student-an',
+            itemId: 'K02-DIAGNOSTIC',
+            sequence: 12,
+            occurredAt: '2026-07-18T08:00:00.000Z',
+            kind: 'ANSWER',
+            payload: '{"choiceId":"a","correct":true}',
+          },
+        ],
+      },
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/assignments/assignment-seed-k02/answers',
+      cookies: student,
+      payload: { questionId: 'bank-K02-CHECK-1', choiceId: 'b' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const result = response.json() as GradeShape;
+    expect(result.event).toMatchObject({
+      learnerId: 'user-student-an',
+      itemId: 'bank-K02-CHECK-1',
+      kind: 'ASSIGNMENT_ANSWER',
+      sequence: 13,
+    });
+    expect(JSON.parse(result.event.payload)).toMatchObject({
+      choiceId: 'b',
+      correct: false,
+      methodValidity: 'INVALID',
+      misconceptionId: 'ADDITIVE_EQUIVALENCE',
+    });
+    await app.close();
+  });
+
+  it('does not let a teacher submit a student assignment answer', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/assignments/assignment-seed-k02/answers',
+      cookies: teacher,
+      payload: { questionId: 'bank-K02-CHECK-1', choiceId: 'a' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: 'FORBIDDEN' });
+    await app.close();
+  });
+
   it('quarantines a resent event ID whose content differs instead of overwriting', async () => {
     const app = await makeApp();
     const student = await loginCookie(app, STUDENT_EMAIL);
     const original = {
       id: 'evt-clash-1',
+      learnerId: 'user-student-an',
       itemId: 'K02-CHECK-1',
       sequence: 1,
       occurredAt: '2026-07-18T03:00:00.000Z',
@@ -496,10 +616,87 @@ describe('NekoPath API', () => {
     expect((summary.json() as { conflictIds: string[] }).conflictIds).toEqual([]);
     await app.close();
   });
+
+  it('quarantines an event ID collision across learner accounts', async () => {
+    const app = await makeApp();
+    const an = await loginCookie(app, STUDENT_EMAIL);
+    const han = await loginCookie(app, 'hs01@nekopath.edu.vn');
+    const occurredAt = '2026-07-18T03:00:00.000Z';
+    const shared = {
+      id: 'evt-cross-account-clash',
+      itemId: 'K02-CHECK-1',
+      sequence: 1,
+      occurredAt,
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    };
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: an,
+      payload: { events: [{ ...shared, learnerId: 'user-student-an' }] },
+    });
+    expect((first.json() as { accepted: number }).accepted).toBe(1);
+
+    const collision = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: han,
+      payload: { events: [{ ...shared, learnerId: 'user-student-7a-01' }] },
+    });
+    expect(collision.json()).toMatchObject({
+      accepted: 0,
+      conflictIds: ['evt-cross-account-clash'],
+    });
+    await app.close();
+  });
+
+  it('rejects stale browser bindings and cross-account event batches', async () => {
+    const app = await makeApp();
+    const student = await loginCookie(app, STUDENT_EMAIL);
+    const staleBinding = { ...student, nekopath_profile: 'user-student-chi' };
+
+    const staleRead = await app.inject({
+      method: 'GET',
+      url: '/api/assignments',
+      cookies: staleBinding,
+    });
+    expect(staleRead.statusCode).toBe(409);
+    expect(staleRead.json()).toMatchObject({ error: 'SESSION_PROFILE_MISMATCH' });
+
+    const crossProfileEvent = {
+      id: 'evt-cross-profile',
+      learnerId: 'user-student-chi',
+      itemId: 'K02-CHECK-1',
+      sequence: 1,
+      occurredAt: new Date().toISOString(),
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    };
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: { events: [crossProfileEvent] },
+    });
+    expect(rejected.statusCode).toBe(403);
+    expect(rejected.json()).toMatchObject({ error: 'EVENT_ACCOUNT_MISMATCH' });
+    await app.close();
+  });
 });
 
 interface GradeShape {
   correct: boolean;
   note: string;
   hints: string[];
+  event: {
+    id: string;
+    learnerId: string;
+    itemId: string;
+    sequence: number;
+    occurredAt: string;
+    kind: string;
+    payload: string;
+  };
 }

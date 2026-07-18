@@ -5,6 +5,29 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.7.0] — 2026-07-18
+
+### Added
+
+- Confirmed device profiles can reopen without connectivity after one successful online sign-in;
+  the same recovery remains available if the directory loads but the network drops during submit.
+- A focused adaptive check-in presents one evidence decision at a time with student-facing copy
+  and an explicit completion state.
+
+### Changed
+
+- Local answers and their outbox rows now commit atomically; duplicate IDs remain idempotent and
+  mismatched payloads are quarantined instead of overwriting server evidence.
+- Teacher support-group actions are shorter and more decision-focused while retaining evidence and
+  intervention detail.
+
+### Fixed
+
+- A browser-visible, non-credential profile binding plus `/api/auth/me` verification prevents an
+  offline profile switch from syncing events through another learner's stale HttpOnly session.
+- Shared-device outbox batches sync only events owned by the currently verified learner; HTTP
+  authentication failures never fall back to offline entry.
+
 ## [0.6.1] — 2026-07-18
 
 ### Changed
@@ -110,6 +133,7 @@ hackathon window).
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.7.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.4.0...v0.5.0

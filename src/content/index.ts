@@ -8,4 +8,5 @@ export * from './hero-class';
 export * from './hero-demo';
 export * from './hero-misconceptions';
 export * from './hero-practice';
+export * from './lessons.v1';
 export * from './schema';

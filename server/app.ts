@@ -22,6 +22,7 @@ import { buildTeacherDashboard } from './teacher-dashboard.ts';
  */
 
 const SESSION_COOKIE = 'nekopath_sid';
+const PROFILE_BINDING_COOKIE = 'nekopath_profile';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -63,6 +64,7 @@ const assignmentSchema = z.object({
 
 const eventSchema = z.object({
   id: z.string().min(1),
+  learnerId: z.string().min(1),
   itemId: z.string().min(1),
   assignmentId: z.string().nullable().optional(),
   sequence: z.number().int().nonnegative(),
@@ -87,6 +89,12 @@ const teacherOverrideSchema = z
       context.addIssue({ code: 'custom', path: ['rootKcId'], message: 'ROOT_NOT_ALLOWED' });
     }
   });
+
+const eventPageQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+
+const EVENT_PAGE_SIZE = 200;
 
 interface QuestionRow {
   id: string;
@@ -143,6 +151,11 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       void reply.code(401).send({ error: 'UNAUTHENTICATED' });
       return null;
     }
+    const boundProfileId = request.cookies[PROFILE_BINDING_COOKIE];
+    if (boundProfileId && boundProfileId !== user.id) {
+      void reply.code(409).send({ error: 'SESSION_PROFILE_MISMATCH' });
+      return null;
+    }
     return user;
   }
 
@@ -175,6 +188,15 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       httpOnly: true,
       sameSite: 'lax',
       secure: useSecureCookies,
+      path: '/',
+      maxAge: 60 * 60 * 12,
+    });
+    // This browser-visible value grants no access. It only lets every protected
+    // endpoint reject a stale HttpOnly session after an offline profile switch.
+    void reply.setCookie(PROFILE_BINDING_COOKIE, userId, {
+      httpOnly: false,
+      sameSite: 'lax',
+      secure: isProduction,
       path: '/',
       maxAge: 60 * 60 * 12,
     });
@@ -214,12 +236,13 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     const sid = request.cookies[SESSION_COOKIE];
     if (sid) destroySession(db, sid);
     void reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    void reply.clearCookie(PROFILE_BINDING_COOKIE, { path: '/' });
     return { ok: true };
   });
 
   app.get('/api/auth/me', (request, reply) => {
-    const user = currentUser(request);
-    if (!user) return reply.code(401).send({ error: 'UNAUTHENTICATED' });
+    const user = requireUser(request, reply);
+    if (!user) return;
     return { user };
   });
 
@@ -579,6 +602,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
   app.post('/api/assignments/:id/answers', (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return;
+    if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
     const { id } = request.params as { id: string };
     const body = z
       .object({ questionId: z.string().min(1), choiceId: z.string().min(1) })
@@ -621,36 +645,103 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!question) return reply.code(404).send({ error: 'QUESTION_NOT_FOUND' });
 
     const correct = question.correct_choice_id === body.data.choiceId;
+    const choices = JSON.parse(question.choices_json) as {
+      id: string;
+      noteVi?: string;
+      misconceptionTag?: string;
+    }[];
+    const picked = choices.find((choice) => choice.id === body.data.choiceId);
+    if (!picked) return reply.code(400).send({ error: 'INVALID_CHOICE' });
+    const misconceptionId = !correct ? picked?.misconceptionTag : undefined;
     const sequence = (
-      db.prepare('SELECT COUNT(*) AS n FROM events WHERE learner_id = ?').get(user.id) as {
-        n: number;
+      db
+        .prepare(
+          'SELECT COALESCE(MAX(sequence), 0) AS maxSequence FROM events WHERE learner_id = ?',
+        )
+        .get(user.id) as {
+        maxSequence: number;
       }
-    ).n;
+    ).maxSequence;
+    const eventId = `evt-${randomUUID()}`;
+    const occurredAt = new Date().toISOString();
+    const payload = JSON.stringify({
+      choiceId: body.data.choiceId,
+      correct,
+      methodValidity: misconceptionId ? 'INVALID' : 'UNKNOWN',
+      ...(misconceptionId ? { misconceptionId } : {}),
+    });
     db.prepare(
       `INSERT OR IGNORE INTO events
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
        VALUES (?, ?, ?, ?, ?, ?, 'ASSIGNMENT_ANSWER', ?, ?)`,
     ).run(
-      `evt-${randomUUID()}`,
+      eventId,
       user.id,
       body.data.questionId,
       id,
       sequence + 1,
-      new Date().toISOString(),
-      JSON.stringify({ choiceId: body.data.choiceId, correct }),
+      occurredAt,
+      payload,
       new Date().toISOString(),
     );
-    const choices = JSON.parse(question.choices_json) as {
-      id: string;
-      noteVi?: string;
-    }[];
-    const picked = choices.find((choice) => choice.id === body.data.choiceId);
     return {
       correct,
       correctChoiceId: question.correct_choice_id,
       explanation: question.explanation,
       note: picked?.noteVi ?? null,
       hints: JSON.parse(question.hints_json) as string[],
+      event: {
+        id: eventId,
+        learnerId: user.id,
+        itemId: body.data.questionId,
+        sequence: sequence + 1,
+        occurredAt,
+        kind: 'ASSIGNMENT_ANSWER',
+        payload,
+      },
+    };
+  });
+
+  /**
+   * Paginated, account-scoped event history for restoring a student's
+   * append-only evidence log on another device.
+   */
+  app.get('/api/events', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
+    const query = eventPageQuerySchema.safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: 'INVALID_QUERY' });
+    const rows = db
+      .prepare(
+        `SELECT id, learner_id, item_id, sequence, occurred_at, kind, payload
+         FROM events
+         WHERE learner_id = ?
+         ORDER BY rowid ASC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(user.id, EVENT_PAGE_SIZE + 1, query.data.offset) as {
+      id: string;
+      learner_id: string;
+      item_id: string;
+      sequence: number;
+      occurred_at: string;
+      kind: string;
+      payload: string;
+    }[];
+    const hasMore = rows.length > EVENT_PAGE_SIZE;
+    const events = rows.slice(0, EVENT_PAGE_SIZE).map((row) => ({
+      id: row.id,
+      learnerId: row.learner_id,
+      itemId: row.item_id,
+      sequence: row.sequence,
+      occurredAt: row.occurred_at,
+      kind: row.kind,
+      payload: row.payload,
+    }));
+    return {
+      events,
+      nextOffset: hasMore ? query.data.offset + EVENT_PAGE_SIZE : null,
     };
   });
 
@@ -666,13 +757,20 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!user) return;
     const parsed = z.object({ events: z.array(eventSchema).max(200) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
+    if (
+      user.role !== 'STUDENT' ||
+      parsed.data.events.some((event) => event.learnerId !== user.id)
+    ) {
+      return reply.code(403).send({ error: 'EVENT_ACCOUNT_MISMATCH' });
+    }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const selectExisting = db.prepare(
-      'SELECT item_id, sequence, occurred_at, kind, payload FROM events WHERE id = ?',
+      `SELECT learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload
+       FROM events WHERE id = ?`,
     );
     const insertConflict = db.prepare(
       `INSERT OR IGNORE INTO sync_conflicts
@@ -680,14 +778,26 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
        VALUES (?, ?, ?, ?, ?)`,
     );
     const fingerprint = (row: {
+      learnerId: string;
       itemId: string;
+      assignmentId?: string | null;
       sequence: number;
       occurredAt: string;
       kind: string;
       payload: string;
     }) =>
       createHash('sha256')
-        .update(JSON.stringify([row.itemId, row.sequence, row.occurredAt, row.kind, row.payload]))
+        .update(
+          JSON.stringify([
+            row.learnerId,
+            row.itemId,
+            row.assignmentId ?? null,
+            row.sequence,
+            row.occurredAt,
+            row.kind,
+            row.payload,
+          ]),
+        )
         .digest('hex');
     let accepted = 0;
     const conflictIds: string[] = [];
@@ -708,11 +818,21 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
         continue;
       }
       const existing = selectExisting.get(event.id) as
-        | { item_id: string; sequence: number; occurred_at: string; kind: string; payload: string }
+        | {
+            learner_id: string;
+            item_id: string;
+            assignment_id: string | null;
+            sequence: number;
+            occurred_at: string;
+            kind: string;
+            payload: string;
+          }
         | undefined;
       if (!existing) continue;
       const serverPrint = fingerprint({
+        learnerId: existing.learner_id,
         itemId: existing.item_id,
+        assignmentId: existing.assignment_id,
         sequence: existing.sequence,
         occurredAt: existing.occurred_at,
         kind: existing.kind,

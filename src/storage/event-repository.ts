@@ -54,6 +54,46 @@ export async function listEventsByLearner(
   );
 }
 
+/**
+ * Move records written by older builds under a simulation-profile key to the
+ * student's stable account key. Event IDs and outbox references stay intact.
+ */
+export async function migrateLearnerEvents(
+  legacyLearnerId: string,
+  learnerId: string,
+  database: NekoPathDb = db,
+): Promise<number> {
+  if (!legacyLearnerId || legacyLearnerId === learnerId) return 0;
+  return database.transaction('rw', database.events, async () => {
+    const rows = await database.events.where('learnerId').equals(legacyLearnerId).toArray();
+    await Promise.all(rows.map((row) => database.events.update(row.id, { learnerId })));
+    return rows.length;
+  });
+}
+
+/** Merge validated server history without overwriting local append-only rows. */
+export async function mergeServerEvents(
+  learnerId: string,
+  records: readonly LearnerEventRecord[],
+  database: NekoPathDb = db,
+): Promise<number> {
+  const parsed = z.array(learnerEventSchema).parse(records);
+  if (parsed.some((record) => record.learnerId !== learnerId)) {
+    throw new Error('EVENT_ACCOUNT_MISMATCH');
+  }
+  return database.transaction('rw', [database.events, database.meta], async () => {
+    const existing = await database.events.bulkGet(parsed.map((record) => record.id));
+    const missing = parsed.filter((_, index) => existing[index] === undefined);
+    if (missing.length > 0) await database.events.bulkAdd(missing);
+    const now = new Date().toISOString();
+    await database.meta.bulkPut([
+      { key: `lastServerHydratedAt:${learnerId}`, value: now, updatedAt: now },
+      { key: 'lastSyncedAt', value: now, updatedAt: now },
+    ]);
+    return missing.length;
+  });
+}
+
 export async function countEvents(database: NekoPathDb = db): Promise<number> {
   return database.events.count();
 }

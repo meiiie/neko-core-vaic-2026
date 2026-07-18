@@ -1,10 +1,10 @@
-import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
 import { greetingVi, todayVi } from '../../app/vietnamese-time';
 import { diagnoseHero, kcName, STATUS_LABELS } from '../../app/adapters/hero-tutor';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
 import type { DiagnosisStatus } from '../../domain';
-import { listEventsByLearner } from '../../storage/event-repository';
 
 const STATUS_TONES: Record<DiagnosisStatus, string> = {
   DIAGNOSED: 'status-label--evidence',
@@ -15,15 +15,23 @@ const STATUS_TONES: Record<DiagnosisStatus, string> = {
 
 export function StudentDashboardPage() {
   const { account } = useSession();
-  const learnerId = account?.learnerId ?? 'chi';
-  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
+  const learnerContext = studentContextForAccount(account);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
 
-  if (localRecords === undefined) {
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
+
+  if (localRecords === undefined || !learnerContext) {
     return <div className="page-loading" aria-label="Đang tải tổng quan" />;
   }
 
   const now = new Date();
-  const result = diagnoseHero(learnerId, localRecords);
+  const result = diagnoseHero(learnerContext, localRecords);
   const evidenceCount = result.evidenceEventIds.length;
   const currentRoot = result.rootKcId ? kcName(result.rootKcId) : 'Đang thu thập thêm bằng chứng';
   const started = localRecords.length > 0;

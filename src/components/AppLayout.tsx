@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useSession, type Role } from '../app/session';
 import { registerSyncTriggers } from '../services/sync';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -37,6 +37,7 @@ const MOBILE_NAVIGATION_QUERY = '(max-width: 52rem)';
 export function AppLayout() {
   const { account, signOut } = useSession();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(
     () =>
@@ -150,6 +151,7 @@ export function AppLayout() {
 
   if (!account) return null;
   const isTeacher = account.role === 'TEACHER';
+  const isAssessmentMode = account.role === 'STUDENT' && location.pathname === '/student/check-in';
   const home = account.role === 'STUDENT' ? '/student' : '/teacher';
   const closedMobileTabIndex = isMobile && !mobileOpen ? -1 : undefined;
 
@@ -164,110 +166,115 @@ export function AppLayout() {
   }
 
   return (
-    <div className="product-shell">
+    <div className="product-shell" data-focus-mode={isAssessmentMode || undefined}>
       <a className="skip-link" href="#main-content">
-        Bỏ qua điều hướng
+        {isAssessmentMode ? 'Đến câu hỏi' : 'Bỏ qua điều hướng'}
       </a>
 
-      <header className="mobile-header" inert={isMobile && mobileOpen ? true : undefined}>
-        <NavLink className="brand-lockup" to={home}>
-          <BrandMark size={36} />
-          <span>NekoPath</span>
-        </NavLink>
-        <button
-          ref={menuButtonRef}
-          className="mobile-menu-button"
-          type="button"
-          aria-expanded={mobileOpen}
-          aria-controls="product-sidebar"
-          onClick={() => {
-            if (mobileOpen) closeMobileNavigation(true);
-            else setMobileOpen(true);
-          }}
-        >
-          {mobileOpen ? 'Đóng' : 'Menu'}
-        </button>
-      </header>
-
-      <aside
-        ref={sidebarRef}
-        id="product-sidebar"
-        className="product-sidebar"
-        data-open={mobileOpen || undefined}
-        inert={isMobile && !mobileOpen ? true : undefined}
-      >
-        <div className="sidebar-head">
-          <NavLink
-            className="brand-lockup"
-            to={home}
-            tabIndex={closedMobileTabIndex}
-            onClick={selectMobileRoute}
-          >
-            <BrandMark size={40} />
-            <span>
-              <strong>NekoPath</strong>
-              <small>{account.role === 'STUDENT' ? 'Cổng học sinh' : 'Cổng giáo viên'}</small>
-            </span>
-          </NavLink>
-        </div>
-
-        <nav className="sidebar-nav" aria-label="Điều hướng chính">
-          <p className="sidebar-label">{isTeacher ? 'Lớp học' : 'Học tập'}</p>
-          {NAVIGATION[account.role].map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              tabIndex={closedMobileTabIndex}
-              onClick={selectMobileRoute}
-            >
-              <span>{item.label}</span>
+      {!isAssessmentMode ? (
+        <>
+          <header className="mobile-header" inert={isMobile && mobileOpen ? true : undefined}>
+            <NavLink className="brand-lockup" to={home}>
+              <BrandMark size={36} />
+              <span>NekoPath</span>
             </NavLink>
-          ))}
+            <button
+              ref={menuButtonRef}
+              className="mobile-menu-button"
+              type="button"
+              aria-expanded={mobileOpen}
+              aria-controls="product-sidebar"
+              onClick={() => {
+                if (mobileOpen) closeMobileNavigation(true);
+                else setMobileOpen(true);
+              }}
+            >
+              {mobileOpen ? 'Đóng' : 'Menu'}
+            </button>
+          </header>
 
-          <p className="sidebar-label sidebar-label--secondary">Thiết bị</p>
-          <NavLink to="/system" tabIndex={closedMobileTabIndex} onClick={selectMobileRoute}>
-            <span>Dữ liệu &amp; ngoại tuyến</span>
-          </NavLink>
-        </nav>
-
-        <div className="sidebar-foot">
-          <ConnectionStatus serverAuthoritative={isTeacher} />
-        </div>
-
-        <div className="sidebar-account">
-          <span className="account-avatar" aria-hidden="true">
-            {account.initials}
-          </span>
-          <span className="account-copy">
-            <strong>{account.shortName}</strong>
-            <span>{account.subtitle}</span>
-          </span>
-          <button
-            type="button"
-            aria-label="Đổi hồ sơ"
-            tabIndex={closedMobileTabIndex}
-            onClick={exitWorkspace}
+          <aside
+            ref={sidebarRef}
+            id="product-sidebar"
+            className="product-sidebar"
+            data-open={mobileOpen || undefined}
+            inert={isMobile && !mobileOpen ? true : undefined}
           >
-            Đổi<span className="sidebar-account-action-detail"> hồ sơ</span>
-          </button>
-        </div>
-      </aside>
+            <div className="sidebar-head">
+              <NavLink
+                className="brand-lockup"
+                to={home}
+                tabIndex={closedMobileTabIndex}
+                onClick={selectMobileRoute}
+              >
+                <BrandMark size={40} />
+                <span>
+                  <strong>NekoPath</strong>
+                  <small>{account.role === 'STUDENT' ? 'Cổng học sinh' : 'Cổng giáo viên'}</small>
+                </span>
+              </NavLink>
+            </div>
 
-      <button
-        className="sidebar-backdrop"
-        type="button"
-        aria-label="Đóng điều hướng"
-        aria-hidden={!mobileOpen}
-        tabIndex={-1}
-        data-open={mobileOpen || undefined}
-        onClick={() => closeMobileNavigation(true)}
-      />
+            <nav className="sidebar-nav" aria-label="Điều hướng chính">
+              <p className="sidebar-label">{isTeacher ? 'Lớp học' : 'Học tập'}</p>
+              {NAVIGATION[account.role].map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  tabIndex={closedMobileTabIndex}
+                  onClick={selectMobileRoute}
+                >
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+
+              <p className="sidebar-label sidebar-label--secondary">Thiết bị</p>
+              <NavLink to="/system" tabIndex={closedMobileTabIndex} onClick={selectMobileRoute}>
+                <span>Dữ liệu &amp; ngoại tuyến</span>
+              </NavLink>
+            </nav>
+
+            <div className="sidebar-foot">
+              <ConnectionStatus serverAuthoritative={isTeacher} />
+            </div>
+
+            <div className="sidebar-account">
+              <span className="account-avatar" aria-hidden="true">
+                {account.initials}
+              </span>
+              <span className="account-copy">
+                <strong>{account.shortName}</strong>
+                <span>{account.subtitle}</span>
+              </span>
+              <button
+                type="button"
+                aria-label="Đổi hồ sơ"
+                tabIndex={closedMobileTabIndex}
+                onClick={exitWorkspace}
+              >
+                Đổi<span className="sidebar-account-action-detail"> hồ sơ</span>
+              </button>
+            </div>
+          </aside>
+
+          <button
+            className="sidebar-backdrop"
+            type="button"
+            aria-label="Đóng điều hướng"
+            aria-hidden={!mobileOpen}
+            tabIndex={-1}
+            data-open={mobileOpen || undefined}
+            onClick={() => closeMobileNavigation(true)}
+          />
+        </>
+      ) : null}
 
       <div
         className="product-workspace"
+        data-focus-mode={isAssessmentMode || undefined}
         data-neko-open={(isTeacher && nekoOpen) || undefined}
-        inert={isMobile && mobileOpen ? true : undefined}
+        inert={!isAssessmentMode && isMobile && mobileOpen ? true : undefined}
       >
         <main ref={mainRef} id="main-content" tabIndex={-1}>
           <Outlet />
