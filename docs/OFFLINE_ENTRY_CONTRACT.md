@@ -22,6 +22,7 @@ can contact an identity provider.
 | Active verified profile, network lost | Restore the last active device profile and continue local work | Previously confirmed device state |
 | User switches profile while offline | Show and open only profiles previously confirmed on this device | No arbitrary roster entry |
 | New device or unconfirmed profile, network lost | Explain that one connection is required and offer retry | Never invent an offline credential |
+| Directory loaded, then login transport times out | Reopen the selected profile only if it was already confirmed on this device | A `401` or any server rejection never falls back offline |
 | Server explicitly returns `401` | Clear the active cached identity and return to the selector | An authoritative response beats cache |
 | Network returns after an offline profile switch | Verify `/api/auth/me`; sync only if the server session matches the selected profile | Mismatches remain queued and every protected API returns `409` |
 
@@ -102,3 +103,5 @@ References:
 5. Verify reconnect sync remains idempotent and `/api/**` is absent from Workbox runtime caching.
 6. Switch from An to Chi while offline, restore connectivity with An's old cookie, and verify no
    Chi event is posted or stored under An; the outbox row must remain pending until Chi signs in.
+7. Load the directory, drop the network before submit and verify a confirmed profile resumes; then
+   repeat with an HTTP `401` and verify the same profile does not bypass the server response.

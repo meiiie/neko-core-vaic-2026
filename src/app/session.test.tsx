@@ -7,23 +7,32 @@ import { SessionProvider, useSession } from './session';
 function Probe() {
   const { account, deviceProfiles, ready, resumeOffline, signIn, signOut } = useSession();
   const [signInError, setSignInError] = useState('');
+  const [offlineEligible, setOfflineEligible] = useState('unset');
   return (
     <div>
       <output data-testid="ready">{String(ready)}</output>
       <output data-testid="who">{account ? `${account.role}:${account.shortName}` : 'none'}</output>
       <output data-testid="device-profiles">{deviceProfiles.length}</output>
       <output data-testid="sign-in-error">{signInError}</output>
+      <output data-testid="offline-eligible">{offlineEligible}</output>
       <button
         type="button"
         onClick={() =>
           void signIn('an@nekopath.edu.vn', 'Nekopath@2026').then((failure) =>
-            setSignInError(failure ?? ''),
+            setSignInError(failure?.message ?? ''),
           )
         }
       >
         in-good
       </button>
-      <button type="button" onClick={() => void signIn('an@nekopath.edu.vn', 'sai')}>
+      <button
+        type="button"
+        onClick={() =>
+          void signIn('an@nekopath.edu.vn', 'sai').then((failure) =>
+            setOfflineEligible(String(failure?.offlineEligible)),
+          )
+        }
+      >
         in-bad
       </button>
       <button type="button" onClick={() => signOut()}>
@@ -95,6 +104,7 @@ describe('API-backed session', () => {
 
     screen.getByRole('button', { name: 'in-bad' }).click();
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('none'));
+    await waitFor(() => expect(screen.getByTestId('offline-eligible').textContent).toBe('false'));
 
     screen.getByRole('button', { name: 'in-good' }).click();
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));

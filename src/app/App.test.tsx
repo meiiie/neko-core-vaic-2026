@@ -312,6 +312,65 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     );
   });
 
+  it('falls back to a confirmed profile when the network drops after loading the directory', async () => {
+    window.localStorage.setItem(
+      'nekopath.device-profiles.v1',
+      JSON.stringify([
+        {
+          email: 'an@nekopath.edu.vn',
+          id: 'user-student-an',
+          role: 'STUDENT',
+          name: 'Trần Ngọc An',
+          initials: 'NA',
+          shortName: 'An',
+          subtitle: 'Học sinh • Lớp 7A',
+          learnerId: 'an',
+        },
+      ]),
+    );
+    window.localStorage.setItem('nekopath.last-email.v1', 'an@nekopath.edu.vn');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/auth/me')) {
+        return new Response(JSON.stringify({ error: 'UNAUTHENTICATED' }), { status: 401 });
+      }
+      if (url.endsWith('/api/auth/directory')) {
+        return new Response(
+          JSON.stringify({
+            accounts: [
+              {
+                email: 'an@nekopath.edu.vn',
+                name: 'Trần Ngọc An',
+                role: 'STUDENT',
+                subtitle: 'Học sinh • Lớp 7A',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/api/auth/login')) throw new TypeError('network down');
+      return new Response('{}', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Đăng nhập' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+
+    expect(await screen.findByRole('navigation', { name: 'Điều hướng chính' })).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/api/auth/login')),
+    ).toHaveLength(1);
+    expect(document.cookie).toContain('nekopath_profile=user-student-an');
+  });
+
   it('keeps mobile drawer focus and exit behavior continuous', async () => {
     installMobileViewport();
     installApiStub('co.ha@nekopath.edu.vn');

@@ -32,6 +32,12 @@ export interface DeviceProfile extends Account {
   readonly email: string;
 }
 
+export interface SignInFailure {
+  readonly message: string;
+  /** True only when no authoritative server response was received. */
+  readonly offlineEligible: boolean;
+}
+
 interface ApiUser {
   id: string;
   email: string | null;
@@ -64,7 +70,7 @@ export interface SessionState {
   readonly deviceProfiles: readonly DeviceProfile[];
   readonly ready: boolean;
   readonly resumeOffline: (email: string) => boolean;
-  readonly signIn: (email: string, password: string) => Promise<string | null>;
+  readonly signIn: (email: string, password: string) => Promise<SignInFailure | null>;
   readonly signOut: () => void;
 }
 
@@ -207,9 +213,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         deadlineMs: SIGN_IN_DEADLINE_MS,
       });
       if (!response.ok) {
-        return response.status === 401
-          ? 'Email hoặc mật khẩu chưa đúng.'
-          : 'Máy chủ từ chối yêu cầu đăng nhập.';
+        return {
+          message:
+            response.status === 401
+              ? 'Email hoặc mật khẩu chưa đúng.'
+              : 'Máy chủ từ chối yêu cầu đăng nhập.',
+          offlineEligible: false,
+        };
       }
       const body = (await response.json()) as { user: ApiUser };
       const next = toAccount(body.user);
@@ -222,9 +232,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return null;
     } catch (error) {
       if (error instanceof DOMException && error.name === 'TimeoutError') {
-        return 'Đăng nhập mất quá nhiều thời gian. Vui lòng thử lại.';
+        return {
+          message: 'Đăng nhập mất quá nhiều thời gian. Vui lòng thử lại.',
+          offlineEligible: true,
+        };
       }
-      return 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
+      return {
+        message: 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.',
+        offlineEligible: true,
+      };
     }
   }, []);
 

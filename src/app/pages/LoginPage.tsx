@@ -165,12 +165,18 @@ export function LoginPage() {
     if (pending || !selectedAccount) return;
     setPending(true);
     setError(null);
-    const failure =
-      directoryState === 'offline'
-        ? resumeOffline(selectedAccount.email)
-          ? null
-          : 'Hồ sơ này chưa được xác nhận trên thiết bị.'
-        : await signIn(selectedAccount.email, CLASS_PASSWORD);
+    let failure: string | null = null;
+    if (directoryState === 'offline') {
+      failure = resumeOffline(selectedAccount.email)
+        ? null
+        : 'Hồ sơ này chưa được xác nhận trên thiết bị.';
+    } else {
+      const signInFailure = await signIn(selectedAccount.email, CLASS_PASSWORD);
+      if (signInFailure) {
+        const resumed = signInFailure.offlineEligible && resumeOffline(selectedAccount.email);
+        failure = resumed ? null : signInFailure.message;
+      }
+    }
     setPending(false);
     if (failure) {
       setError(failure);
