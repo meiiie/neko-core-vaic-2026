@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
 import {
   diagnoseHero,
+  DISPOSITION_LABELS,
   HERO_TARGET_KC_ID,
   kcName,
+  misconceptionName,
   REASON_LABELS,
   STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
@@ -50,9 +52,13 @@ export function PathPage() {
                 : 'Cần thêm một câu kiểm tra trực tiếp trước khi mở nội dung bù.'}
             </p>
           </div>
-          <Link className="button-primary" to="/student/check-in">
-            Làm câu kiểm tra tiếp theo
-          </Link>
+          {result.disposition === 'ASK_VERIFY' && result.nextItemId ? (
+            <Link className="button-primary" to="/student/check-in">
+              Làm câu kiểm tra tiếp theo
+            </Link>
+          ) : (
+            <p role="status">Đã chuyển vào danh sách để giáo viên xem xét.</p>
+          )}
         </section>
       ) : null}
 
@@ -128,6 +134,27 @@ export function PathPage() {
             <div>
               <h3>Bằng chứng được sử dụng</h3>
               <p>{result.evidenceEventIds.length} lượt trả lời theo đúng thứ tự thời gian.</p>
+            </div>
+            <div>
+              <h3>Bước xử lý tiếp theo</h3>
+              <p>{DISPOSITION_LABELS[result.disposition]}</p>
+            </div>
+            <div>
+              <h3>Mẫu ngộ nhận đã quan sát</h3>
+              {result.misconceptionHypotheses.length > 0 ? (
+                <ul>
+                  {result.misconceptionHypotheses.map((hypothesis) => (
+                    <li key={`${hypothesis.kcId}:${hypothesis.misconceptionId}`}>
+                      {misconceptionName(hypothesis.misconceptionId)} —{' '}
+                      {hypothesis.verificationStatus === 'SUPPORTED_BY_MULTIPLE_ITEMS'
+                        ? `lặp lại ở ${hypothesis.independentItemCount} câu hỏi khác nhau`
+                        : 'mới có một quan sát, cần xác minh'}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Chưa có đáp án nhiễu đủ rõ để nêu một mẫu ngộ nhận.</p>
+              )}
             </div>
           </div>
         </details>

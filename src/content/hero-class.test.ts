@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildHeroClassDashboard, HERO_CLASS_LEARNERS } from './hero-class';
+import { HERO_GRAPH } from './hero-demo';
+import { buildHeroClassDashboard, HERO_ACTION_MINUTES, HERO_CLASS_LEARNERS } from './hero-class';
 
 describe('synthetic 40-learner classroom', () => {
   it('uses anonymous stable IDs and deterministic event histories', () => {
@@ -34,6 +35,16 @@ describe('synthetic 40-learner classroom', () => {
         thresholdCount: 3,
       },
     ]);
+    expect(dashboard.attentionPlan).toMatchObject({
+      policyVersion: 'teacher-budget-v1',
+      budgetMinutes: 15,
+      usedMinutes: 12,
+      remainingMinutes: 3,
+    });
+    expect(dashboard.attentionPlan.selected.map((item) => item.groupId)).toEqual([
+      'root:K02',
+      'quick-check',
+    ]);
   });
 
   it('keeps simulation labels out of learner event payloads', () => {
@@ -43,5 +54,13 @@ describe('synthetic 40-learner classroom', () => {
 
     expect(serializedEvents).not.toContain('simulationProfileId');
     expect(serializedEvents).not.toContain('displayLabel');
+  });
+
+  it('defines a positive minute estimate for every valid hero action', () => {
+    for (const node of HERO_GRAPH.nodes) {
+      expect(HERO_ACTION_MINUTES[`RETEACH_${node.id}`]).toBeGreaterThan(0);
+    }
+    expect(HERO_ACTION_MINUTES.RUN_QUICK_CHECK).toBeGreaterThan(0);
+    expect(HERO_ACTION_MINUTES.REVIEW_DIAGNOSIS).toBeGreaterThan(0);
   });
 });

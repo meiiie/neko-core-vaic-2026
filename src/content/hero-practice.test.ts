@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { diagnose } from '../domain';
 import { HERO_DEMO_CONFIG, HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './hero-demo';
+import { HERO_MISCONCEPTIONS } from './hero-misconceptions';
 import { PRACTICE_QUESTIONS, practiceQuestionsForKc } from './hero-practice';
 
 describe('Practice question bank', () => {
@@ -23,6 +24,8 @@ describe('Practice question bank', () => {
   });
 
   it('tags every wrong choice with a misconception and note, never the correct one', () => {
+    const definitions = new Set(HERO_MISCONCEPTIONS.map((definition) => definition.id));
+    const itemsById = new Map(HERO_ITEMS.map((item) => [item.id, item]));
     for (const question of PRACTICE_QUESTIONS) {
       const correct = question.choices.find((choice) => choice.id === question.correctChoiceId);
       expect(correct, question.itemId).toBeTruthy();
@@ -31,6 +34,8 @@ describe('Practice question bank', () => {
         if (choice.id === question.correctChoiceId) continue;
         expect(choice.misconceptionTag, `${question.itemId}/${choice.id}`).toBeTruthy();
         expect(choice.noteVi, `${question.itemId}/${choice.id}`).toBeTruthy();
+        expect(definitions.has(choice.misconceptionTag!), choice.misconceptionTag).toBe(true);
+        expect(itemsById.get(question.itemId)?.misconceptionIds).toContain(choice.misconceptionTag);
       }
     }
   });
