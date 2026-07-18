@@ -14,6 +14,12 @@ function csvCell(value: string | number): string {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
 
+interface OverrideSaveOutcome {
+  message: string;
+  assignmentUrl: string;
+  learnerLabel: string;
+}
+
 function TeacherOverrideForm({
   group,
   overrides,
@@ -21,13 +27,13 @@ function TeacherOverrideForm({
 }: {
   readonly group: TeacherSupportGroupDto;
   readonly overrides: readonly TeacherOverrideDto[];
-  readonly onSaved: (learnerId: string) => Promise<string>;
+  readonly onSaved: (learnerId: string) => Promise<OverrideSaveOutcome>;
 }) {
   const [learnerId, setLearnerId] = useState(group.learnerIds[0] ?? '');
   const [decision, setDecision] = useState('');
   const [reason, setReason] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [saveMessage, setSaveMessage] = useState('');
+  const [saveOutcome, setSaveOutcome] = useState<OverrideSaveOutcome | null>(null);
   const selectedLearnerId = group.learnerIds.includes(learnerId)
     ? learnerId
     : (group.learnerIds[0] ?? '');
@@ -57,8 +63,8 @@ function TeacherOverrideForm({
       });
       setReason('');
       setDecision('');
-      const message = await onSaved(selectedLearnerId);
-      setSaveMessage(message);
+      const outcome = await onSaved(selectedLearnerId);
+      setSaveOutcome(outcome);
       setSaveState('saved');
     } catch {
       setSaveState('error');
@@ -70,6 +76,10 @@ function TeacherOverrideForm({
       <header>
         <h3>Điều chỉnh gợi ý cho một học sinh</h3>
         <p>Chỉ dùng khi cô đã xem câu trả lời hoặc trao đổi trực tiếp với học sinh.</p>
+        <p>
+          Lưu mục này chỉ cập nhật gợi ý của hệ thống, chưa giao bài cho học sinh. Sau khi lưu, cô
+          cần kiểm tra bài ôn rồi xác nhận giao.
+        </p>
       </header>
       <div className="teacher-override-grid">
         <label>
@@ -80,6 +90,7 @@ function TeacherOverrideForm({
               setLearnerId(event.target.value);
               setDecision('');
               setSaveState('idle');
+              setSaveOutcome(null);
             }}
           >
             {group.learners.map((learner) => (
@@ -123,9 +134,16 @@ function TeacherOverrideForm({
       ) : null}
       <div className="teacher-override-actions">
         <button className="button-secondary" type="submit" disabled={saveState === 'saving'}>
-          {saveState === 'saving' ? 'Đang lưu lên máy chủ…' : 'Lưu điều chỉnh'}
+          {saveState === 'saving' ? 'Đang lưu gợi ý…' : 'Lưu gợi ý mới'}
         </button>
-        {saveState === 'saved' ? <span role="status">{saveMessage}</span> : null}
+        {saveState === 'saved' && saveOutcome ? (
+          <div className="teacher-override-saved" role="status">
+            <span>{saveOutcome.message}</span>
+            <Link className="button-primary" to={saveOutcome.assignmentUrl}>
+              Tạo bài ôn cho {saveOutcome.learnerLabel}
+            </Link>
+          </div>
+        ) : null}
         {saveState === 'error' ? (
           <span role="alert">Không lưu được điều chỉnh. Hãy thử lại.</span>
         ) : null}
@@ -175,22 +193,37 @@ export function TeacherGroupDetailPage() {
     );
   }
 
+  const activeGroup = group;
   const groupName = group.rootKcId ? kcName(group.rootKcId) : TEACHER_GROUP_LABELS[group.status];
   const currentGroupId = group.id;
 
-  async function handleOverrideSaved(learnerId: string): Promise<string> {
+  async function handleOverrideSaved(learnerId: string): Promise<OverrideSaveOutcome> {
     const nextDashboard = await refresh();
     const nextGroup = nextDashboard?.groups.find((candidate) =>
       candidate.learnerIds.includes(learnerId),
     );
+    const destinationGroup = nextGroup ?? activeGroup;
+    const learnerLabel =
+      destinationGroup.learners.find((learner) => learner.id === learnerId)?.displayLabel ??
+      activeGroup.learners.find((learner) => learner.id === learnerId)?.displayLabel ??
+      learnerId;
+    const assignmentUrl = `/teacher/assignments?group=${encodeURIComponent(destinationGroup.id)}&learner=${encodeURIComponent(learnerId)}`;
     if (nextGroup && nextGroup.id !== currentGroupId) {
       const nextName = nextGroup.rootKcId
         ? kcName(nextGroup.rootKcId)
         : TEACHER_GROUP_LABELS[nextGroup.status];
       navigate(`/teacher/class/${encodeURIComponent(nextGroup.id)}`, { replace: true });
-      return `Đã lưu. Học sinh được chuyển sang bài cần ôn: ${nextName}.`;
+      return {
+        message: `Đã lưu gợi ý và chuyển học sinh sang bài cần ôn: ${nextName}. Chưa có bài nào được giao cho học sinh.`,
+        assignmentUrl,
+        learnerLabel,
+      };
     }
-    return 'Đã lưu điều chỉnh trên máy chủ.';
+    return {
+      message: 'Đã lưu gợi ý trên máy chủ. Chưa có bài nào được giao cho học sinh.',
+      assignmentUrl,
+      learnerLabel,
+    };
   }
 
   function exportGroup() {

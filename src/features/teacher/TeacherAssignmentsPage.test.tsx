@@ -20,6 +20,10 @@ describe('targeted review assignment flow', () => {
     expect(screen.getByText('Đã chọn 2 học sinh theo dấu hiệu bài làm')).toBeTruthy();
     expect(screen.getByText('Hệ thống đã chọn ngẫu nhiên 5 câu phù hợp.')).toBeTruthy();
 
+    const message = screen.getByLabelText('Lời nhắn của giáo viên');
+    await user.clear(message);
+    await user.type(message, 'Cô gửi em bài ôn này. Em làm kỹ từng câu nhé.');
+
     await user.selectOptions(screen.getByLabelText('Số câu chọn ngẫu nhiên'), '3');
     await user.click(screen.getByRole('button', { name: 'Chọn ngẫu nhiên' }));
     expect(screen.getByText('Đã chọn 3/6 câu trong gói')).toBeTruthy();
@@ -32,6 +36,7 @@ describe('targeted review assignment flow', () => {
     expect(screen.getByText('Trần Ngọc An')).toBeTruthy();
     expect(screen.queryByText('Nguyễn Minh Chi')).toBeNull();
     expect(screen.getByText('3 câu · khoảng 9 phút')).toBeTruthy();
+    expect(screen.getByText('Cô gửi em bài ôn này. Em làm kỹ từng câu nhé.')).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Xác nhận và giao bài' }));
     expect(await screen.findByText('Đã giao bài cho 1 học sinh.')).toBeTruthy();
@@ -45,9 +50,11 @@ describe('targeted review assignment flow', () => {
     const body = JSON.parse(String(postCall?.[1]?.body)) as {
       learnerIds: string[];
       questionIds: string[];
+      teacherMessage: string;
     };
     expect(body.learnerIds).toEqual(['user-student-an']);
     expect(body.questionIds).toHaveLength(3);
+    expect(body.teacherMessage).toBe('Cô gửi em bài ôn này. Em làm kỹ từng câu nhé.');
   });
 
   it('allows selecting the entire lesson package', async () => {

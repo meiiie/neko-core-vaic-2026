@@ -62,16 +62,16 @@ describe('teacher diagnosis override', () => {
       controls.getByLabelText('Lý do điều chỉnh'),
       'Đã trao đổi trực tiếp và xem cách làm của em.',
     );
-    await user.click(controls.getByRole('button', { name: 'Lưu điều chỉnh' }));
+    await user.click(controls.getByRole('button', { name: 'Lưu gợi ý mới' }));
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Bài: Ý nghĩa và thứ tự của tỉ số' }),
     ).toBeTruthy();
-    expect(
-      await screen.findByText(
-        'Đã lưu. Học sinh được chuyển sang bài cần ôn: Ý nghĩa và thứ tự của tỉ số.',
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText(/Chưa có bài nào được giao cho học sinh/)).toBeTruthy();
+    const createReview = screen.getByRole('link', { name: 'Tạo bài ôn cho Trần Ngọc An' });
+    expect(createReview.getAttribute('href')).toBe(
+      '/teacher/assignments?group=root%3AK07&learner=user-student-an',
+    );
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       '/api/teacher/overrides',
       expect.objectContaining({

@@ -2086,6 +2086,18 @@ details li {
   font-size: 0.875rem;
 }
 
+.teacher-override-saved {
+  display: flex;
+  align-items: center;
+  flex: 1 1 30rem;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.teacher-override-saved .button-primary {
+  flex: 0 0 auto;
+}
+
 /* System and utility */
 
 .status-list {
@@ -3175,6 +3187,30 @@ html:has(.question-selection-actions) {
   margin-top: 6px;
 }
 
+.question-bank-list li .student-assignment-message,
+.student-assignment-message {
+  margin: var(--s-2) 0;
+  padding: var(--s-3);
+  border-left: 0.25rem solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+.question-bank-list li .student-assignment-message strong {
+  font-size: 0.875rem;
+}
+
+.question-bank-list li .student-assignment-message p,
+.student-assignment-message p {
+  margin: var(--s-1) 0 0;
+  color: var(--muted-strong);
+}
+
+.student-assignment-message--detail {
+  max-width: 48rem;
+}
+
 .question-library-panel .question-bank-list--managed {
   gap: 0;
   border-top: 1px solid var(--rule);
@@ -3729,7 +3765,8 @@ html:has(.question-selection-actions) {
 }
 
 .random-question-control select,
-.assignment-settings input {
+.assignment-settings input,
+.assignment-settings textarea {
   min-height: var(--touch-target);
   padding: var(--s-2) var(--s-3);
   border: 1px solid var(--rule-strong);
@@ -3737,6 +3774,11 @@ html:has(.question-selection-actions) {
   background: var(--surface);
   color: var(--ink);
   font: inherit;
+}
+
+.assignment-settings textarea {
+  min-height: 6rem;
+  resize: vertical;
 }
 
 .assignment-review-button {

@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 interface ApiAssignment {
   id: string;
   title: string;
+  teacherMessage: string;
   questionCount: number;
   myAnswerCount: number;
 }
@@ -16,6 +17,7 @@ interface ApiChoice {
 interface ApiAssignmentDetail {
   id: string;
   title: string;
+  teacherMessage: string;
   questions: { id: string; kcId: string; prompt: string; choices: ApiChoice[] }[];
 }
 
@@ -69,6 +71,12 @@ export function AssignmentsPage() {
             <span>
               {assignment.questionCount} câu · em đã trả lời {assignment.myAnswerCount} lần
             </span>
+            {assignment.teacherMessage ? (
+              <div className="student-assignment-message">
+                <strong>Lời nhắn của giáo viên</strong>
+                <p>{assignment.teacherMessage}</p>
+              </div>
+            ) : null}
             <Link className="button-primary" to={`/student/assignments/${assignment.id}`}>
               {assignment.myAnswerCount > 0 ? 'Làm tiếp' : 'Bắt đầu làm'}
             </Link>
@@ -167,6 +175,13 @@ export function AssignmentTakePage() {
           Câu {Math.min(index + 1, detail.questions.length)}/{detail.questions.length}
         </span>
       </header>
+
+      {detail.teacherMessage ? (
+        <aside className="student-assignment-message student-assignment-message--detail">
+          <strong>Lời nhắn của giáo viên</strong>
+          <p>{detail.teacherMessage}</p>
+        </aside>
+      ) : null}
 
       {finished ? (
         <section className="completion-panel">

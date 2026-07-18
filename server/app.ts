@@ -49,6 +49,7 @@ const questionSchema = z.object({
 
 const assignmentSchema = z.object({
   title: z.string().min(3).max(120),
+  teacherMessage: z.string().max(500).default(''),
   questionIds: z.array(z.string().min(1)).min(1).max(20),
   learnerIds: z
     .array(z.string().min(1))
@@ -382,8 +383,8 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     db.prepare(
       `INSERT INTO assignments
        (id, class_id, teacher_id, title, question_ids_json, created_at, due_at, allow_retake,
-        shuffle_answers, recipient_ids_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        shuffle_answers, recipient_ids_json, teacher_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       CLASS_7A_ID,
@@ -395,6 +396,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       parsed.data.allowRetake ? 1 : 0,
       parsed.data.shuffleAnswers ? 1 : 0,
       JSON.stringify(parsed.data.learnerIds),
+      parsed.data.teacherMessage.trim(),
     );
     return reply.code(201).send({ id });
   });
@@ -414,6 +416,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       allow_retake: number;
       shuffle_answers: number;
       recipient_ids_json: string;
+      teacher_message: string;
     }[];
     const classRosterCount = (
       db
@@ -470,6 +473,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
         return {
           id: row.id,
           title: row.title,
+          teacherMessage: row.teacher_message,
           createdAt: row.created_at,
           dueAt: row.due_at,
           allowRetake: Boolean(row.allow_retake),
@@ -520,6 +524,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
           allow_retake: number;
           shuffle_answers: number;
           recipient_ids_json: string;
+          teacher_message: string;
         }
       | undefined;
     if (!row) return reply.code(404).send({ error: 'NOT_FOUND' });
@@ -563,6 +568,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     return {
       id: row.id,
       title: row.title,
+      teacherMessage: row.teacher_message,
       allowRetake: Boolean(row.allow_retake),
       shuffleAnswers: Boolean(row.shuffle_answers),
       questions,

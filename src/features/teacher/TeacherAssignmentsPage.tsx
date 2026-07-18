@@ -13,6 +13,7 @@ interface ApiQuestionSummary {
 interface ApiAssignment {
   id: string;
   title: string;
+  teacherMessage: string;
   createdAt: string;
   dueAt: string | null;
   questionCount: number;
@@ -70,6 +71,7 @@ export function TeacherAssignmentsPage() {
   const [searchParams] = useSearchParams();
   const groupId = searchParams.get('group');
   const requestedKcId = searchParams.get('kc');
+  const requestedLearnerId = searchParams.get('learner');
   const initialQuestionIds = useMemo(
     () => ((location.state ?? {}) as AssignmentLocationState).questionIds ?? [],
     [location.state],
@@ -84,6 +86,7 @@ export function TeacherAssignmentsPage() {
   const [randomCount, setRandomCount] = useState(5);
   const [autoSelectionCount, setAutoSelectionCount] = useState<number | null>(null);
   const [title, setTitle] = useState('');
+  const [teacherMessage, setTeacherMessage] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [allowRetake, setAllowRetake] = useState(false);
   const [shuffleAnswers, setShuffleAnswers] = useState(false);
@@ -121,10 +124,17 @@ export function TeacherAssignmentsPage() {
           validInitialIds.includes(question.id),
         );
         const packageId = recommendedKcId ?? firstQuestion?.kcId ?? '';
-        setSelectedPackageId(packageId);
-        setRecipients(
-          new Set(group ? group.learnerIds : dashboardBody.learners.map((learner) => learner.id)),
+        const requestedLearner = dashboardBody.learners.find(
+          (learner) =>
+            learner.id === requestedLearnerId && (!group || group.learnerIds.includes(learner.id)),
         );
+        const initialRecipients = requestedLearner
+          ? [requestedLearner.id]
+          : group
+            ? group.learnerIds
+            : dashboardBody.learners.map((learner) => learner.id);
+        setSelectedPackageId(packageId);
+        setRecipients(new Set(initialRecipients));
         if (validInitialIds.length > 0) {
           setSelected(new Set(validInitialIds));
         } else if (group && packageId) {
@@ -135,13 +145,21 @@ export function TeacherAssignmentsPage() {
           setSelected(new Set(questionIds));
           setAutoSelectionCount(questionIds.length);
         }
-        if (group && packageId) setTitle(`Ôn tập: ${topicLabel(packageId)}`);
+        if (group && packageId) {
+          const lessonName = topicLabel(packageId);
+          setTitle(`Ôn tập: ${lessonName}`);
+          setTeacherMessage(
+            initialRecipients.length === 1
+              ? `Cô gửi em bài ôn "${lessonName}". Em làm chậm và xem kỹ từng câu nhé.`
+              : `Cô gửi các em bài ôn "${lessonName}". Các em làm chậm và xem kỹ từng câu nhé.`,
+          );
+        }
         initialized.current = true;
       }
     } catch {
       setLoadError(true);
     }
-  }, [groupId, initialQuestionIds, requestedKcId]);
+  }, [groupId, initialQuestionIds, requestedKcId, requestedLearnerId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async load; state changes only after awaited responses
@@ -201,7 +219,13 @@ export function TeacherAssignmentsPage() {
   }
 
   async function submit() {
-    if (selected.size === 0 || recipients.size === 0 || title.trim().length < 3) return;
+    if (
+      selected.size === 0 ||
+      recipients.size === 0 ||
+      title.trim().length < 3 ||
+      teacherMessage.trim().length < 3
+    )
+      return;
     setSaveState('saving');
     try {
       const response = await fetch('/api/assignments', {
@@ -210,6 +234,7 @@ export function TeacherAssignmentsPage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           title: title.trim(),
+          teacherMessage: teacherMessage.trim(),
           questionIds: [...selected],
           learnerIds: [...recipients],
           dueAt: dueAt ? new Date(dueAt).toISOString() : null,
@@ -227,7 +252,11 @@ export function TeacherAssignmentsPage() {
     }
   }
 
-  const canReview = selected.size > 0 && recipients.size > 0 && title.trim().length >= 3;
+  const canReview =
+    selected.size > 0 &&
+    recipients.size > 0 &&
+    title.trim().length >= 3 &&
+    teacherMessage.trim().length >= 3;
 
   return (
     <div className="page-stack teacher-assignment-page">
@@ -266,6 +295,7 @@ export function TeacherAssignmentsPage() {
               setStage('compose');
               setSelected(new Set());
               setTitle('');
+              setTeacherMessage('');
             }}
           >
             Tạo bài khác
@@ -426,6 +456,20 @@ export function TeacherAssignmentsPage() {
                 />
               </label>
               <label>
+                Lời nhắn của giáo viên
+                <textarea
+                  required
+                  minLength={3}
+                  maxLength={500}
+                  value={teacherMessage}
+                  onChange={(event) => setTeacherMessage(event.target.value)}
+                  placeholder="Ví dụ: Cô gửi em bài ôn này. Em làm kỹ từng câu nhé."
+                />
+              </label>
+              <p className="assignment-settings-note">
+                Lời nhắn này sẽ xuất hiện cùng bài được giao trong tài khoản học sinh.
+              </p>
+              <label>
                 Hạn nộp
                 <input
                   type="datetime-local"
@@ -463,7 +507,9 @@ export function TeacherAssignmentsPage() {
               Xem lại bài sẽ giao
             </button>
             {!canReview ? (
-              <p className="muted">Cần chọn ít nhất một học sinh, một câu hỏi và đặt tên bài.</p>
+              <p className="muted">
+                Cần chọn ít nhất một học sinh, một câu hỏi, đặt tên bài và viết lời nhắn.
+              </p>
             ) : null}
           </div>
 
@@ -525,6 +571,8 @@ export function TeacherAssignmentsPage() {
                 <strong>{title}</strong>
               </p>
               <p>Hạn nộp: {dueAt ? new Date(dueAt).toLocaleString('vi-VN') : 'Không đặt hạn'}</p>
+              <h3>Lời nhắn của giáo viên</h3>
+              <p>{teacherMessage}</p>
             </section>
           </div>
           <div className="assignment-review-actions">
@@ -579,6 +627,11 @@ export function TeacherAssignmentsPage() {
                   ? assignment.recipientNames.join(', ')
                   : `${assignment.recipientCount ?? assignment.rosterCount} học sinh`}
               </p>
+              {assignment.teacherMessage ? (
+                <p className="assignment-settings-note">
+                  <strong>Lời nhắn:</strong> {assignment.teacherMessage}
+                </p>
+              ) : null}
               <dl className="assignment-progress-metrics">
                 <div>
                   <dt>Đã mở</dt>

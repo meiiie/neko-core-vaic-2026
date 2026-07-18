@@ -325,6 +325,7 @@ describe('NekoPath API', () => {
       cookies: teacher,
       payload: {
         title: 'Ôn tập phân số bằng nhau',
+        teacherMessage: 'Cô gửi em bài ôn này. Em xem kỹ từng câu nhé.',
         questionIds: ['bank-K02-CHECK-1'],
         learnerIds: ['user-student-an'],
         dueAt: null,
@@ -342,10 +343,28 @@ describe('NekoPath API', () => {
       cookies: recipient,
     });
     expect(
-      (recipientList.json() as { assignments: { id: string }[] }).assignments.map(
-        (assignment) => assignment.id,
-      ),
+      (
+        recipientList.json() as {
+          assignments: { id: string; teacherMessage: string }[];
+        }
+      ).assignments.map((assignment) => assignment.id),
     ).toContain(assignmentId);
+    expect(
+      (
+        recipientList.json() as {
+          assignments: { id: string; teacherMessage: string }[];
+        }
+      ).assignments.find((assignment) => assignment.id === assignmentId)?.teacherMessage,
+    ).toBe('Cô gửi em bài ôn này. Em xem kỹ từng câu nhé.');
+
+    const recipientDetail = await app.inject({
+      method: 'GET',
+      url: `/api/assignments/${assignmentId}`,
+      cookies: recipient,
+    });
+    expect(recipientDetail.json()).toMatchObject({
+      teacherMessage: 'Cô gửi em bài ôn này. Em xem kỹ từng câu nhé.',
+    });
 
     const nonRecipient = await loginCookie(app, OTHER_STUDENT_EMAIL);
     const nonRecipientList = await app.inject({
