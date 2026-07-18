@@ -20,7 +20,10 @@ describe('fetchWithDeadline', () => {
   it('returns a successful response and clears its deadline timer', async () => {
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
     const response = new Response('{}', { status: 200 });
-    vi.stubGlobal('fetch', vi.fn(async () => response));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => response),
+    );
 
     await expect(fetchWithDeadline('/ok', { deadlineMs: 3_000 })).resolves.toBe(response);
     expect(clearTimeoutSpy).toHaveBeenCalledOnce();
