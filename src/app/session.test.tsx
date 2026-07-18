@@ -5,12 +5,13 @@ import { installApiStub } from '../test/api-stub';
 import { SessionProvider, useSession } from './session';
 
 function Probe() {
-  const { account, ready, signIn, signOut } = useSession();
+  const { account, deviceProfiles, ready, resumeOffline, signIn, signOut } = useSession();
   const [signInError, setSignInError] = useState('');
   return (
     <div>
       <output data-testid="ready">{String(ready)}</output>
       <output data-testid="who">{account ? `${account.role}:${account.shortName}` : 'none'}</output>
+      <output data-testid="device-profiles">{deviceProfiles.length}</output>
       <output data-testid="sign-in-error">{signInError}</output>
       <button
         type="button"
@@ -27,6 +28,12 @@ function Probe() {
       </button>
       <button type="button" onClick={() => signOut()}>
         out
+      </button>
+      <button type="button" onClick={() => resumeOffline('an@nekopath.edu.vn')}>
+        resume-an
+      </button>
+      <button type="button" onClick={() => resumeOffline('unknown@nekopath.edu.vn')}>
+        resume-unknown
       </button>
     </div>
   );
@@ -74,7 +81,7 @@ describe('API-backed session', () => {
     expect(screen.getByTestId('who').textContent).toBe('none');
   });
 
-  it('signs in with real credentials, caches identity, rejects bad passwords', async () => {
+  it('signs in with real credentials and keeps the confirmed device profile after switching out', async () => {
     installApiStub(null);
     render(
       <SessionProvider>
@@ -89,9 +96,32 @@ describe('API-backed session', () => {
     screen.getByRole('button', { name: 'in-good' }).click();
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));
     expect(window.localStorage.getItem('nekopath.session-cache.v1')).toContain('an');
+    expect(screen.getByTestId('device-profiles').textContent).toBe('1');
+    expect(window.localStorage.getItem('nekopath.device-profiles.v1')).toContain(
+      'an@nekopath.edu.vn',
+    );
 
     screen.getByRole('button', { name: 'out' }).click();
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('none'));
+    expect(window.localStorage.getItem('nekopath.session-cache.v1')).toBeNull();
+    expect(screen.getByTestId('device-profiles').textContent).toBe('1');
+
+    screen.getByRole('button', { name: 'resume-an' }).click();
+    await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));
+  });
+
+  it('never resumes an account that was not confirmed on this device', async () => {
+    installApiStub(null);
+    render(
+      <SessionProvider>
+        <Probe />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
+
+    screen.getByRole('button', { name: 'resume-unknown' }).click();
+
+    expect(screen.getByTestId('who').textContent).toBe('none');
     expect(window.localStorage.getItem('nekopath.session-cache.v1')).toBeNull();
   });
 

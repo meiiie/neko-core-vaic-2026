@@ -27,8 +27,13 @@ export interface Account {
   readonly learnerId?: 'an' | 'binh' | 'chi' | 'minh';
 }
 
+export interface DeviceProfile extends Account {
+  readonly email: string;
+}
+
 interface ApiUser {
   id: string;
+  email: string | null;
   role: Role;
   name: string;
   initials: string;
@@ -55,12 +60,15 @@ function toAccount(user: ApiUser): Account {
 
 export interface SessionState {
   readonly account: Account | null;
+  readonly deviceProfiles: readonly DeviceProfile[];
   readonly ready: boolean;
+  readonly resumeOffline: (email: string) => boolean;
   readonly signIn: (email: string, password: string) => Promise<string | null>;
   readonly signOut: () => void;
 }
 
 const CACHE_KEY = 'nekopath.session-cache.v1';
+export const DEVICE_PROFILES_KEY = 'nekopath.device-profiles.v1';
 export const SESSION_RESTORE_DEADLINE_MS = 3_000;
 export const SIGN_IN_DEADLINE_MS = 8_000;
 
@@ -82,10 +90,59 @@ function writeCache(account: Account | null): void {
   }
 }
 
+function isDeviceProfile(value: unknown): value is DeviceProfile {
+  if (!value || typeof value !== 'object') return false;
+  const profile = value as Partial<DeviceProfile>;
+  const learnerIds = ['an', 'binh', 'chi', 'minh'];
+  return (
+    typeof profile.email === 'string' &&
+    profile.email.includes('@') &&
+    typeof profile.id === 'string' &&
+    (profile.role === 'STUDENT' || profile.role === 'TEACHER') &&
+    typeof profile.name === 'string' &&
+    typeof profile.initials === 'string' &&
+    typeof profile.shortName === 'string' &&
+    typeof profile.subtitle === 'string' &&
+    (profile.learnerId === undefined || learnerIds.includes(profile.learnerId))
+  );
+}
+
+function readDeviceProfiles(): DeviceProfile[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(DEVICE_PROFILES_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isDeviceProfile);
+  } catch {
+    return [];
+  }
+}
+
+function storeDeviceProfiles(profiles: readonly DeviceProfile[]): void {
+  try {
+    window.localStorage.setItem(DEVICE_PROFILES_KEY, JSON.stringify(profiles));
+  } catch {
+    // Device profiles only improve offline entry; the server session still works without them.
+  }
+}
+
+function upsertDeviceProfile(
+  profiles: readonly DeviceProfile[],
+  profile: DeviceProfile,
+): DeviceProfile[] {
+  const email = profile.email.toLocaleLowerCase('vi');
+  const next = [
+    ...profiles.filter((candidate) => candidate.email.toLocaleLowerCase('vi') !== email),
+    profile,
+  ];
+  storeDeviceProfiles(next);
+  return next;
+}
+
 const DemoSessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
+  const [deviceProfiles, setDeviceProfiles] = useState<DeviceProfile[]>(readDeviceProfiles);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -104,6 +161,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           const next = toAccount(body.user);
           setAccount(next);
           writeCache(next);
+          if (body.user.email) {
+            setDeviceProfiles((current) =>
+              upsertDeviceProfile(current, { ...next, email: body.user.email ?? '' }),
+            );
+          }
         } else if (response.status === 401) {
           setAccount(null);
           writeCache(null);
@@ -144,6 +206,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const next = toAccount(body.user);
       setAccount(next);
       writeCache(next);
+      setDeviceProfiles((current) =>
+        upsertDeviceProfile(current, { ...next, email: body.user.email ?? email }),
+      );
       return null;
     } catch (error) {
       if (error instanceof DOMException && error.name === 'TimeoutError') {
@@ -152,6 +217,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
     }
   }, []);
+
+  const resumeOffline = useCallback(
+    (email: string) => {
+      const normalizedEmail = email.toLocaleLowerCase('vi');
+      const profile = deviceProfiles.find(
+        (candidate) => candidate.email.toLocaleLowerCase('vi') === normalizedEmail,
+      );
+      if (!profile) return false;
+      setAccount(profile);
+      writeCache(profile);
+      return true;
+    },
+    [deviceProfiles],
+  );
 
   const signOut = useCallback(() => {
     setAccount(null);
@@ -162,8 +241,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SessionState>(
-    () => ({ account, ready, signIn, signOut }),
-    [account, ready, signIn, signOut],
+    () => ({ account, deviceProfiles, ready, resumeOffline, signIn, signOut }),
+    [account, deviceProfiles, ready, resumeOffline, signIn, signOut],
   );
 
   return <DemoSessionContext.Provider value={value}>{children}</DemoSessionContext.Provider>;

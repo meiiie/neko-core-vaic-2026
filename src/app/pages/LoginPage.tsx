@@ -17,7 +17,7 @@ const LAST_EMAIL_KEY = 'nekopath.last-email.v1';
 const CLASS_PASSWORD = 'Nekopath@2026';
 const DIRECTORY_DEADLINE_MS = 3_000;
 
-type DirectoryState = 'loading' | 'retrying' | 'ready' | 'error';
+type DirectoryState = 'loading' | 'retrying' | 'ready' | 'offline' | 'error';
 
 interface DirectoryAccount {
   email: string;
@@ -37,7 +37,7 @@ function fold(value: string): string {
 }
 
 export function LoginPage() {
-  const { account, ready, signIn } = useSession();
+  const { account, deviceProfiles, ready, resumeOffline, signIn } = useSession();
   const navigate = useNavigate();
 
   const [directory, setDirectory] = useState<DirectoryAccount[] | null>(null);
@@ -76,13 +76,31 @@ export function LoginPage() {
         }
       })
       .catch(() => {
-        if (!cancelled) setDirectoryState('error');
+        if (cancelled) return;
+        const localDirectory = deviceProfiles.map(({ email, name, role, subtitle }) => ({
+          email,
+          name,
+          role,
+          subtitle,
+        }));
+        if (localDirectory.length === 0) {
+          setDirectory(null);
+          setDirectoryState('error');
+          return;
+        }
+        setDirectory(localDirectory);
+        setSelected((current) =>
+          localDirectory.some((entry) => entry.email === current)
+            ? current
+            : localDirectory[0].email,
+        );
+        setDirectoryState('offline');
       });
     return () => {
       cancelled = true;
       lifecycle.abort();
     };
-  }, [directoryAttempt]);
+  }, [deviceProfiles, directoryAttempt]);
 
   // Close when tapping anywhere outside the combobox (spatial consistency:
   // the panel folds back into the field it grew from).
@@ -113,6 +131,7 @@ export function LoginPage() {
 
   function retryDirectory() {
     if (directoryState === 'retrying') return;
+    setDirectory(null);
     setDirectoryState('retrying');
     setDirectoryAttempt((attempt) => attempt + 1);
   }
@@ -146,7 +165,12 @@ export function LoginPage() {
     if (pending || !selectedAccount) return;
     setPending(true);
     setError(null);
-    const failure = await signIn(selectedAccount.email, CLASS_PASSWORD);
+    const failure =
+      directoryState === 'offline'
+        ? resumeOffline(selectedAccount.email)
+          ? null
+          : 'Hồ sơ này chưa được xác nhận trên thiết bị.'
+        : await signIn(selectedAccount.email, CLASS_PASSWORD);
     setPending(false);
     if (failure) {
       setError(failure);
@@ -239,7 +263,20 @@ export function LoginPage() {
           <p className="auth-loading">Đang tải danh sách lớp…</p>
         ) : null}
 
-        {directoryState === 'ready' && directory !== null ? (
+        {directoryState === 'offline' ? (
+          <div className="auth-device-note" role="status">
+            <strong>Đang dùng hồ sơ đã lưu trên thiết bị</strong>
+            <span>
+              Không kết nối được máy chủ. Chỉ những hồ sơ đã xác nhận trên thiết bị này mới có thể
+              vào.
+            </span>
+            <button type="button" className="auth-retry" onClick={retryDirectory}>
+              Kiểm tra lại mạng
+            </button>
+          </div>
+        ) : null}
+
+        {(directoryState === 'ready' || directoryState === 'offline') && directory !== null ? (
           <div className="auth-combobox" ref={boxRef}>
             <label className="auth-field">
               <span>Bạn là ai?</span>
@@ -296,7 +333,13 @@ export function LoginPage() {
         ) : null}
 
         <button className="auth-submit" type="submit" disabled={pending || !selectedAccount}>
-          {pending ? 'Đang đăng nhập…' : 'Đăng nhập'}
+          {pending
+            ? directoryState === 'offline'
+              ? 'Đang mở…'
+              : 'Đang đăng nhập…'
+            : directoryState === 'offline'
+              ? 'Vào ngoại tuyến'
+              : 'Đăng nhập'}
         </button>
 
         <p className="auth-fineprint">

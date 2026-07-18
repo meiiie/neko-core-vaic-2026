@@ -265,6 +265,53 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     ).toBeTruthy();
   });
 
+  it('enters through a previously confirmed device profile when the class directory is offline', async () => {
+    window.localStorage.setItem(
+      'nekopath.device-profiles.v1',
+      JSON.stringify([
+        {
+          email: 'an@nekopath.edu.vn',
+          id: 'user-student-an',
+          role: 'STUDENT',
+          name: 'Trần Ngọc An',
+          initials: 'NA',
+          shortName: 'An',
+          subtitle: 'Học sinh • Lớp 7A',
+          learnerId: 'an',
+        },
+      ]),
+    );
+    window.localStorage.setItem('nekopath.last-email.v1', 'an@nekopath.edu.vn');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/auth/me')) {
+        return new Response(JSON.stringify({ error: 'UNAUTHENTICATED' }), { status: 401 });
+      }
+      if (url.endsWith('/api/auth/directory')) throw new TypeError('network down');
+      if (url.endsWith('/api/auth/logout')) return new Response(JSON.stringify({ ok: true }));
+      return new Response('{}', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Đang dùng hồ sơ đã lưu trên thiết bị')).toBeTruthy();
+    expect(
+      (screen.getByRole('combobox', { name: 'Chọn tên của bạn' }) as HTMLInputElement).value,
+    ).toBe('Trần Ngọc An');
+    await user.click(screen.getByRole('button', { name: 'Vào ngoại tuyến' }));
+
+    expect(await screen.findByRole('navigation', { name: 'Điều hướng chính' })).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/auth/login'))).toBe(
+      false,
+    );
+  });
+
   it('keeps mobile drawer focus and exit behavior continuous', async () => {
     installMobileViewport();
     installApiStub('co.ha@nekopath.edu.vn');
