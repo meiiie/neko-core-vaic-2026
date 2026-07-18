@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useCallback, useEffect, useState } from 'react';
+import { liveQuery } from 'dexie';
 import type { Account } from '../session';
 import type { LearnerEventRecord } from '../../storage/db';
 import { listEventsByLearner, migrateLearnerEvents } from '../../storage/event-repository';
@@ -14,33 +14,66 @@ export function studentContextForAccount(account: Account | null): StudentDiagno
   };
 }
 
-export function useStudentEvents(
-  context: StudentDiagnosisContext | null,
-): LearnerEventRecord[] | undefined {
+export interface StudentEventsState {
+  readonly records: LearnerEventRecord[] | undefined;
+  readonly migrationError: boolean;
+  readonly retryMigration: () => void;
+}
+
+interface PreparationState {
+  readonly key: string | null;
+  readonly status: 'loading' | 'ready' | 'error';
+  readonly records?: LearnerEventRecord[];
+}
+
+export function useStudentEvents(context: StudentDiagnosisContext | null): StudentEventsState {
   const learnerId = context?.learnerId;
   const simulationProfileId = context?.simulationProfileId;
   const scopeKey = learnerId ? `${learnerId}:${simulationProfileId ?? 'no-simulation'}` : null;
-  const [preparedKey, setPreparedKey] = useState<string | null>(null);
+  const [preparation, setPreparation] = useState<PreparationState>({
+    key: null,
+    status: 'loading',
+  });
+  const [migrationAttempt, setMigrationAttempt] = useState(0);
+  const retryMigration = useCallback(() => {
+    setPreparation({ key: scopeKey, status: 'loading' });
+    setMigrationAttempt((attempt) => attempt + 1);
+  }, [scopeKey]);
 
   useEffect(() => {
     let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
     if (!learnerId || !scopeKey) return;
     void (async () => {
-      if (simulationProfileId) {
-        await migrateLearnerEvents(simulationProfileId, learnerId);
+      try {
+        if (simulationProfileId) {
+          await migrateLearnerEvents(simulationProfileId, learnerId);
+        }
+        if (cancelled) return;
+        const subscription = liveQuery(() => listEventsByLearner(learnerId)).subscribe(
+          (records) => {
+            if (!cancelled) setPreparation({ key: scopeKey, status: 'ready', records });
+          },
+          () => {
+            if (!cancelled) setPreparation({ key: scopeKey, status: 'error' });
+          },
+        );
+        unsubscribe = () => subscription.unsubscribe();
+      } catch {
+        if (!cancelled) setPreparation({ key: scopeKey, status: 'error' });
       }
-      if (!cancelled) setPreparedKey(scopeKey);
     })();
     return () => {
       cancelled = true;
+      unsubscribe?.();
     };
-  }, [learnerId, scopeKey, simulationProfileId]);
+  }, [learnerId, migrationAttempt, scopeKey, simulationProfileId]);
 
-  return useLiveQuery(
-    () =>
-      learnerId && preparedKey === scopeKey
-        ? listEventsByLearner(learnerId)
-        : Promise.resolve(undefined),
-    [learnerId, preparedKey, scopeKey],
-  );
+  const migrationError = preparation.status === 'error' && preparation.key === scopeKey;
+  const records =
+    preparation.status === 'ready' && preparation.key === scopeKey
+      ? preparation.records
+      : undefined;
+
+  return { records, migrationError, retryMigration };
 }

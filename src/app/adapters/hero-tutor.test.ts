@@ -9,6 +9,9 @@ import {
   toHeroClassObservedEvents,
 } from './hero-tutor';
 
+const CHI_CONTEXT = { learnerId: 'user-student-chi', simulationProfileId: 'chi' } as const;
+const MINH_CONTEXT = { learnerId: 'user-student-minh', simulationProfileId: 'minh' } as const;
+
 describe('hero-tutor adapter (UI integration over domain runtime)', () => {
   it('reproduces the four hero outcomes through the adapter', () => {
     const an = diagnoseHero('an');
@@ -28,14 +31,14 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
   });
 
   it('builds schema-valid local answer records with continuing sequence numbers', () => {
-    const record = buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'a', true, 0);
+    const record = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, 0);
     expect(() => learnerEventSchema.parse(record)).not.toThrow();
     // Chi has 7 seeded events (sequence 1..7); the first local answer continues after them.
     expect(record.sequence).toBe(8);
 
     const [event] = toDomainEvents([record]);
     expect(event).toMatchObject({
-      learnerId: 'chi',
+      learnerId: 'user-student-chi',
       itemId: 'K02-DIAGNOSTIC',
       correct: true,
       methodValidity: 'UNKNOWN',
@@ -92,7 +95,7 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
   });
 
   it('persists structured misconception evidence from an authored distractor', () => {
-    const record = buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'b', false, 0, {
+    const record = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'b', false, 0, {
       misconceptionId: 'ADDITIVE_EQUIVALENCE',
       methodValidity: 'INVALID',
     });
@@ -105,7 +108,7 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
   });
 
   it('infers invalid method evidence for an authored transfer distractor', () => {
-    const record = buildLocalAnswerRecord('minh', 'K10-TRANSFER', 'b', false, 0);
+    const record = buildLocalAnswerRecord(MINH_CONTEXT, 'K10-TRANSFER', 'b', false, 0);
 
     expect(toDomainEvents([record])[0]).toMatchObject({
       correct: false,
@@ -115,7 +118,7 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
   });
 
   it('drops a stale or mismatched misconception ID from local storage', () => {
-    const record = buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'a', true, 0);
+    const record = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, 0);
     record.payload = JSON.stringify({
       choiceId: 'a',
       correct: true,
@@ -124,21 +127,23 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     });
 
     expect(toDomainEvents([record])[0]).not.toHaveProperty('misconceptionId');
-    expect(() => diagnoseHero('chi', [record])).not.toThrow();
+    expect(() => diagnoseHero(CHI_CONTEXT, [record])).not.toThrow();
   });
 
   it('skips malformed local payloads instead of guessing', () => {
-    const broken = { ...buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'a', true, 0) };
+    const broken = {
+      ...buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, 0),
+    };
     broken.payload = 'not-json';
     expect(toDomainEvents([broken])).toEqual([]);
   });
 
   it('feeds local answers into a fresh deterministic diagnosis', () => {
-    const first = buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'a', true, 0);
-    const withLocal = diagnoseHero('chi', [first]);
-    const withoutLocal = diagnoseHero('chi');
+    const first = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, 0);
+    const withLocal = diagnoseHero(CHI_CONTEXT, [first]);
+    const withoutLocal = diagnoseHero(CHI_CONTEXT);
     // Same call twice is deterministic; adding evidence must be reflected.
-    expect(diagnoseHero('chi', [first])).toEqual(withLocal);
+    expect(diagnoseHero(CHI_CONTEXT, [first])).toEqual(withLocal);
     expect(withLocal.evidenceEventIds).not.toEqual(withoutLocal.evidenceEventIds);
   });
 

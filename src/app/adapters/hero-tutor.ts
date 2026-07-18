@@ -120,14 +120,13 @@ function seededMaxSequence(context: StudentDiagnosisContext): number {
 
 /** Build the Dexie record for a locally answered hero question. */
 export function buildLocalAnswerRecord(
-  reference: StudentDiagnosisReference,
+  context: StudentDiagnosisContext,
   itemId: string,
   choiceId: string,
   correct: boolean,
   existingLocalCount: number,
   evidence: LocalAnswerEvidence = {},
 ): LearnerEventRecord {
-  const context = normalizeStudentContext(reference);
   const authoredMisconceptionId = questionForItem(itemId)?.choices.find(
     (choice) => choice.id === choiceId,
   )?.misconceptionId;

@@ -8,6 +8,7 @@ import {
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { useSession } from '../../app/session';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
 import { recordAnswer } from '../../services/sync';
@@ -55,7 +56,11 @@ export function PracticePage() {
   } | null>(null);
   const savingRef = useRef(false);
 
-  const localRecords = useStudentEvents(learnerContext);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
 
   const result =
     localRecords === undefined || !learnerContext
@@ -87,6 +92,10 @@ export function PracticePage() {
       cancelled = true;
     };
   }, [explainKey, rootKcId]);
+
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
 
   if (localRecords === undefined || !learnerContext || result === null) {
     return <div className="page-loading" aria-label="Đang tải bài luyện tập" />;

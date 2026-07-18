@@ -3,6 +3,7 @@ import { useSession } from '../../app/session';
 import { greetingVi, todayVi } from '../../app/vietnamese-time';
 import { diagnoseHero, kcName, STATUS_LABELS } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
 import type { DiagnosisStatus } from '../../domain';
 
 const STATUS_TONES: Record<DiagnosisStatus, string> = {
@@ -15,7 +16,15 @@ const STATUS_TONES: Record<DiagnosisStatus, string> = {
 export function StudentDashboardPage() {
   const { account } = useSession();
   const learnerContext = studentContextForAccount(account);
-  const localRecords = useStudentEvents(learnerContext);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
+
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
 
   if (localRecords === undefined || !learnerContext) {
     return <div className="page-loading" aria-label="Đang tải tổng quan" />;

@@ -11,6 +11,7 @@ import {
   questionForItem,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { recordAnswer } from '../../services/sync';
 
 const QUESTION_BUDGET = 3;
@@ -21,7 +22,15 @@ export function LearnPage() {
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const savingRef = useRef(false);
-  const localRecords = useStudentEvents(learnerContext);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
+
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
 
   if (localRecords === undefined || !learnerContext) {
     return <div className="page-loading" aria-label="Đang tải bài kiểm tra" />;
