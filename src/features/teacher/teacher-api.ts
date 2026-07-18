@@ -208,22 +208,6 @@ export async function saveTeacherOverride(
   if (!response.ok) throw new Error(`TEACHER_OVERRIDE_${response.status}`);
 }
 
-export async function createTeacherClass(input: {
-  name: string;
-  subject: string;
-  schoolYear: string;
-}): Promise<TeacherClassDto> {
-  const response = await fetchWithDeadline('/api/teacher/classes', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(input),
-    deadlineMs: 8_000,
-  });
-  if (!response.ok) throw new Error(`CREATE_CLASS_${response.status}`);
-  return (await response.json()) as TeacherClassDto;
-}
-
 export async function fetchClassStudents(
   classId: string,
   signal?: AbortSignal,

@@ -18,7 +18,6 @@ import {
   createSession,
   credentialsByEmail,
   destroySession,
-  hashPassword,
   userForSession,
   verifyPassword,
 } from './auth.ts';
@@ -30,7 +29,6 @@ import {
   QuestionImportError,
   type ImportedDifficulty,
 } from './question-import.ts';
-import { parseStudentFile, StudentImportError } from './student-import.ts';
 
 const LESSON_KC_IDS = new Set(LESSON_SUMMARIES.map((lesson) => lesson.kcId));
 
@@ -86,22 +84,6 @@ const assignmentSchema = z.object({
   dueAt: z.string().datetime().nullable().default(null),
   allowRetake: z.boolean().default(false),
   shuffleAnswers: z.boolean().default(false),
-});
-
-const classSchema = z.object({
-  name: z.string().trim().min(2).max(80),
-  subject: z.string().trim().min(2).max(80).default('Toán'),
-  schoolYear: z.string().trim().max(30).default(''),
-});
-
-const studentSchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  email: z.string().trim().email().max(160),
-  temporaryPassword: z.string().min(8).max(100).optional(),
-});
-
-const studentImportCommitSchema = z.object({
-  students: z.array(studentSchema).min(1).max(200),
 });
 
 const lessonSchema = z.object({
@@ -282,61 +264,6 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     return row?.id ?? null;
   }
 
-  function initialsFor(name: string): string {
-    return name
-      .trim()
-      .split(/\s+/)
-      .slice(-2)
-      .map((part) => part[0] ?? '')
-      .join('')
-      .toLocaleUpperCase('vi');
-  }
-
-  function enrollStudent(
-    classId: string,
-    className: string,
-    input: z.infer<typeof studentSchema>,
-  ):
-    | { ok: true; learnerId: string; created: boolean; temporaryPassword: string | null }
-    | { ok: false; error: 'ACCOUNT_IS_NOT_STUDENT' | 'ALREADY_ENROLLED' } {
-    const email = input.email.trim().toLocaleLowerCase('vi');
-    const existing = db
-      .prepare('SELECT id, role FROM users WHERE email = ? COLLATE NOCASE')
-      .get(email) as { id: string; role: 'STUDENT' | 'TEACHER' } | undefined;
-    if (existing?.role === 'TEACHER') return { ok: false, error: 'ACCOUNT_IS_NOT_STUDENT' };
-    const alreadyEnrolled = existing
-      ? db
-          .prepare('SELECT 1 FROM enrollments WHERE class_id = ? AND user_id = ?')
-          .get(classId, existing.id)
-      : null;
-    if (alreadyEnrolled) return { ok: false, error: 'ALREADY_ENROLLED' };
-
-    let learnerId = existing?.id;
-    let temporaryPassword: string | null = null;
-    if (!learnerId) {
-      learnerId = `user-student-${randomUUID()}`;
-      temporaryPassword = input.temporaryPassword ?? `Neko-${randomUUID().slice(0, 8)}`;
-      const shortName = input.name.trim().split(/\s+/).at(-1) ?? input.name.trim();
-      db.prepare(
-        `INSERT INTO users
-         (id, username, email, password_hash, role, name, initials, short_name, subtitle,
-          learner_profile)
-         VALUES (?, ?, ?, ?, 'STUDENT', ?, ?, ?, ?, NULL)`,
-      ).run(
-        learnerId,
-        `student-${randomUUID()}`,
-        email,
-        hashPassword(temporaryPassword),
-        input.name.trim(),
-        initialsFor(input.name),
-        shortName,
-        `Học sinh • ${className}`,
-      );
-    }
-    db.prepare('INSERT INTO enrollments (class_id, user_id) VALUES (?, ?)').run(classId, learnerId);
-    return { ok: true, learnerId, created: !existing, temporaryPassword };
-  }
-
   function recipientIds(value: string): string[] {
     const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed) && parsed.every((id) => typeof id === 'string') ? parsed : [];
@@ -456,24 +383,6 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     };
   });
 
-  app.post('/api/teacher/classes', (request, reply) => {
-    const user = requireTeacher(request, reply);
-    if (!user) return;
-    const parsed = classSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
-    const duplicate = db
-      .prepare('SELECT 1 FROM classes WHERE teacher_id = ? AND name = ? COLLATE NOCASE')
-      .get(user.id, parsed.data.name);
-    if (duplicate) return reply.code(409).send({ error: 'CLASS_NAME_EXISTS' });
-    const id = `class-${randomUUID()}`;
-    const createdAt = new Date().toISOString();
-    db.prepare(
-      `INSERT INTO classes (id, teacher_id, name, subject, school_year, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(id, user.id, parsed.data.name, parsed.data.subject, parsed.data.schoolYear, createdAt);
-    return reply.code(201).send({ id, ...parsed.data, createdAt, studentCount: 0 });
-  });
-
   app.get('/api/teacher/classes/:classId/dashboard', (request, reply) => {
     const user = requireTeacher(request, reply);
     if (!user) return;
@@ -489,105 +398,6 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     const classroom = teacherClass(user.id, classId);
     if (!classroom) return reply.code(404).send({ error: 'CLASS_NOT_FOUND' });
     return { class: classroom, students: buildClassStudentList(db, classId) };
-  });
-
-  app.post('/api/teacher/classes/:classId/students', (request, reply) => {
-    const user = requireTeacher(request, reply);
-    if (!user) return;
-    const { classId } = request.params as { classId: string };
-    const classroom = teacherClass(user.id, classId);
-    if (!classroom) return reply.code(404).send({ error: 'CLASS_NOT_FOUND' });
-    const parsed = studentSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
-    const result = enrollStudent(classId, classroom.name, parsed.data);
-    if (!result.ok) return reply.code(409).send({ error: result.error });
-    return reply.code(201).send(result);
-  });
-
-  app.delete('/api/teacher/classes/:classId/students/:studentId', (request, reply) => {
-    const user = requireTeacher(request, reply);
-    if (!user) return;
-    const { classId, studentId } = request.params as { classId: string; studentId: string };
-    if (!teacherClass(user.id, classId)) return reply.code(404).send({ error: 'CLASS_NOT_FOUND' });
-    const result = db
-      .prepare('DELETE FROM enrollments WHERE class_id = ? AND user_id = ?')
-      .run(classId, studentId);
-    if (Number(result.changes) === 0) return reply.code(404).send({ error: 'STUDENT_NOT_FOUND' });
-    return reply.code(204).send();
-  });
-
-  app.post('/api/teacher/classes/:classId/students/import/preview', async (request, reply) => {
-    const user = requireTeacher(request, reply);
-    if (!user) return;
-    const { classId } = request.params as { classId: string };
-    if (!teacherClass(user.id, classId)) return reply.code(404).send({ error: 'CLASS_NOT_FOUND' });
-    if (!request.isMultipart()) return reply.code(400).send({ error: 'MULTIPART_REQUIRED' });
-    try {
-      const file = await request.file();
-      if (!file) return reply.code(400).send({ error: 'FILE_REQUIRED' });
-      const preview = await parseStudentFile(file.filename, await file.toBuffer());
-      const students = preview.students.map((student) => {
-        const existing = db
-          .prepare('SELECT id, role FROM users WHERE email = ? COLLATE NOCASE')
-          .get(student.email) as { id: string; role: string } | undefined;
-        const enrolled = existing
-          ? Boolean(
-              db
-                .prepare('SELECT 1 FROM enrollments WHERE class_id = ? AND user_id = ?')
-                .get(classId, existing.id),
-            )
-          : false;
-        const issues = [...student.issues];
-        if (existing?.role === 'TEACHER') issues.push('Email này thuộc tài khoản giáo viên.');
-        if (enrolled) issues.push('Học sinh đã có trong lớp.');
-        return {
-          ...student,
-          accountStatus: existing ? 'EXISTING' : 'NEW',
-          valid: student.valid && issues.length === 0,
-          issues,
-        };
-      });
-      const validCount = students.filter((student) => student.valid).length;
-      return {
-        ...preview,
-        validCount,
-        invalidCount: students.length - validCount,
-        students,
-      };
-    } catch (error) {
-      if (error instanceof StudentImportError) {
-        return reply.code(400).send({ error: error.code, message: error.message });
-      }
-      return reply.code(400).send({ error: 'UNREADABLE_FILE' });
-    }
-  });
-
-  app.post('/api/teacher/classes/:classId/students/import', (request, reply) => {
-    const user = requireTeacher(request, reply);
-    if (!user) return;
-    const { classId } = request.params as { classId: string };
-    const classroom = teacherClass(user.id, classId);
-    if (!classroom) return reply.code(404).send({ error: 'CLASS_NOT_FOUND' });
-    const parsed = studentImportCommitSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
-    const credentials: { email: string; temporaryPassword: string }[] = [];
-    const learnerIds: string[] = [];
-    db.exec('BEGIN IMMEDIATE;');
-    try {
-      for (const student of parsed.data.students) {
-        const result = enrollStudent(classId, classroom.name, student);
-        if (!result.ok) throw new Error(result.error);
-        learnerIds.push(result.learnerId);
-        if (result.temporaryPassword) {
-          credentials.push({ email: student.email, temporaryPassword: result.temporaryPassword });
-        }
-      }
-      db.exec('COMMIT;');
-    } catch (error) {
-      db.exec('ROLLBACK;');
-      return reply.code(409).send({ error: (error as Error).message || 'IMPORT_FAILED' });
-    }
-    return reply.code(201).send({ importedCount: learnerIds.length, learnerIds, credentials });
   });
 
   app.get('/api/teacher/classes/:classId/students/:studentId', (request, reply) => {

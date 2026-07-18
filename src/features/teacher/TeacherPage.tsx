@@ -48,6 +48,7 @@ export function TeacherPage() {
   const [classes, setClasses] = useState<readonly TeacherClassDto[]>([]);
   const [classesLoading, setClassesLoading] = useState(true);
   const [classesError, setClassesError] = useState(false);
+  const [classesAttempt, setClassesAttempt] = useState(0);
   const requestedClassId = searchParams.get('classId');
   const selectedClassId =
     classes.find((classroom) => classroom.id === requestedClassId)?.id ?? classes[0]?.id ?? null;
@@ -69,7 +70,7 @@ export function TeacherPage() {
         if (!controller.signal.aborted) setClassesLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [classesAttempt]);
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
   const topGroup = groups[0];
   const gap = dashboard.classWideGaps[0];
@@ -99,7 +100,16 @@ export function TeacherPage() {
       <section className="empty-state" role="alert">
         <h1>Chưa tải được tình hình lớp</h1>
         <p>{error ?? 'Không tải được danh sách lớp từ máy chủ.'}</p>
-        <button className="button-secondary" type="button" onClick={() => void refresh()}>
+        <button
+          className="button-secondary"
+          type="button"
+          onClick={() => {
+            if (classesError) {
+              setClassesLoading(true);
+              setClassesAttempt((attempt) => attempt + 1);
+            } else void refresh();
+          }}
+        >
           Thử tải lại
         </button>
       </section>
@@ -108,13 +118,20 @@ export function TeacherPage() {
 
   if (classes.length === 0) {
     return (
-      <section className="empty-state teacher-first-class" role="status">
-        <p className="eyebrow">Bắt đầu quản lý lớp</p>
-        <h1>Chưa có lớp học nào</h1>
-        <p>Tạo lớp đầu tiên, sau đó thêm học sinh để theo dõi tiến độ theo từng bài học.</p>
-        <Link className="button-primary" to="/teacher/students?newClass=1">
-          Tạo lớp học
-        </Link>
+      <section className="empty-state" role="status">
+        <p className="eyebrow">Dữ liệu lớp từ máy chủ</p>
+        <h1>Chưa tìm thấy lớp được gắn với tài khoản giáo viên</h1>
+        <p>Hãy kiểm tra dữ liệu lớp trên hệ thống hoặc thử tải lại sau khi dữ liệu được đồng bộ.</p>
+        <button
+          className="button-secondary"
+          type="button"
+          onClick={() => {
+            setClassesLoading(true);
+            setClassesAttempt((attempt) => attempt + 1);
+          }}
+        >
+          Thử tải lại
+        </button>
       </section>
     );
   }

@@ -384,51 +384,31 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
-  it('creates a teacher-owned class and enrolls a real student account', async () => {
+  it('does not expose the postponed class and student mutation routes', async () => {
     const app = await makeApp();
     const teacher = await loginCookie(app, TEACHER_EMAIL);
-    const created = await app.inject({
+
+    const createClass = await app.inject({
       method: 'POST',
       url: '/api/teacher/classes',
       cookies: teacher,
-      payload: { name: 'Lớp 8B', subject: 'Toán', schoolYear: '2026–2027' },
+      payload: { name: 'Lớp 8B' },
     });
-    expect(created.statusCode).toBe(201);
-    const classId = (created.json() as { id: string }).id;
-
-    const enrolled = await app.inject({
+    const addStudent = await app.inject({
       method: 'POST',
-      url: `/api/teacher/classes/${classId}/students`,
+      url: '/api/teacher/classes/class-7a/students',
       cookies: teacher,
-      payload: { name: 'Nguyễn Hải Nam', email: 'hai.nam@example.edu.vn' },
+      payload: { name: 'Học sinh mới', email: 'new@example.edu.vn' },
     });
-    expect(enrolled.statusCode).toBe(201);
-    expect(enrolled.json()).toMatchObject({ created: true });
-    expect(
-      (enrolled.json() as { temporaryPassword: string }).temporaryPassword.length,
-    ).toBeGreaterThanOrEqual(8);
-
-    const roster = await app.inject({
-      method: 'GET',
-      url: `/api/teacher/classes/${classId}/students`,
+    const removeStudent = await app.inject({
+      method: 'DELETE',
+      url: '/api/teacher/classes/class-7a/students/user-student-an',
       cookies: teacher,
-    });
-    expect(roster.statusCode).toBe(200);
-    expect(roster.json()).toMatchObject({
-      class: { id: classId, name: 'Lớp 8B' },
-      students: [{ name: 'Nguyễn Hải Nam', progressPercent: 0, needsSupportCount: 0 }],
     });
 
-    const learnerId = (enrolled.json() as { learnerId: string }).learnerId;
-    const detail = await app.inject({
-      method: 'GET',
-      url: `/api/teacher/classes/${classId}/students/${learnerId}`,
-      cookies: teacher,
-    });
-    expect(detail.statusCode).toBe(200);
-    expect(detail.json()).toMatchObject({
-      student: { id: learnerId, assignedWork: [], recommendedLessons: [] },
-    });
+    expect(createClass.statusCode).toBe(404);
+    expect(addStudent.statusCode).toBe(404);
+    expect(removeStudent.statusCode).toBe(404);
     await app.close();
   });
 
@@ -474,6 +454,57 @@ describe('NekoPath API', () => {
       evaluatedLearnerCount: 0,
       answerEventCount: 0,
       groups: [],
+    });
+    await app.close();
+  });
+
+  it('keeps the dashboard available when an old event has an unsupported misconception tag', async () => {
+    const db = openDb(':memory:');
+    seed(db);
+    const question = db
+      .prepare('SELECT choices_json FROM questions WHERE id = ?')
+      .get('bank-K07-CHECK-2') as { choices_json: string };
+    const choices = (
+      JSON.parse(question.choices_json) as { id: string; misconceptionTag?: string }[]
+    ).map((choice) =>
+      choice.id === 'b' ? { ...choice, misconceptionTag: 'ADDITIVE_COMPARISON' } : choice,
+    );
+    db.prepare('UPDATE questions SET choices_json = ? WHERE id = ?').run(
+      JSON.stringify(choices),
+      'bank-K07-CHECK-2',
+    );
+    db.prepare(
+      `INSERT INTO events
+       (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
+       VALUES (?, ?, ?, NULL, ?, ?, 'ANSWER', ?, ?)`,
+    ).run(
+      'chi-local-invalid-misconception',
+      'user-student-chi',
+      'bank-K07-CHECK-2',
+      1,
+      '2026-07-18T03:05:47.191Z',
+      JSON.stringify({
+        choiceId: 'b',
+        correct: false,
+        misconceptionId: 'RATIO_ORDER_REVERSED',
+        methodValidity: 'INVALID',
+      }),
+      '2026-07-18T03:05:48.191Z',
+    );
+    const app = buildApp(db);
+    await app.ready();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      classId: 'class-7a',
+      answerEventCount: 1,
     });
     await app.close();
   });

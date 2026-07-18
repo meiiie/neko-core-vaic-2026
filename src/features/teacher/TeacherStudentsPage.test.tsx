@@ -67,5 +67,7 @@ describe('TeacherStudentsPage', () => {
       'classId=class-8b',
     );
     expect(screen.getByText('1 bài')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Tạo lớp học' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Thêm học sinh' })).toBeNull();
   });
 });
