@@ -60,13 +60,15 @@ describe('agent tools (deterministic facts)', () => {
       ],
     });
 
-    const result = await toolByName('chan_doan_hoc_sinh')!.run({ hoc_sinh: 'an' });
+    for (const query of ['an', 'An,', 'Ngọc-An']) {
+      const result = await toolByName('chan_doan_hoc_sinh')!.run({ hoc_sinh: query });
 
-    expect(result.ok).toBe(true);
-    expect(result.data).toMatchObject({
-      hocSinh: 'Trần Ngọc An',
-      kienThucGoc: 'Phân số bằng nhau',
-    });
+      expect(result.ok).toBe(true);
+      expect(result.data).toMatchObject({
+        hocSinh: 'Trần Ngọc An',
+        kienThucGoc: 'Phân số bằng nhau',
+      });
+    }
   });
 });
 
@@ -333,6 +335,7 @@ describe('JSON tool envelope fallback (models without native tools, e.g. Gemma)'
         '{"tool":"tong_quan_lop","args":{}} {"tool":"giai_thich_kien_thuc","args":{"kc":"K02"}}',
       ),
     ).toEqual({ name: 'tong_quan_lop', args: {} });
+    expect(parseJsonToolEnvelope('{'.repeat(64_000))).toBeNull();
     expect(parseJsonToolEnvelope('Câu trả lời thường, không JSON.')).toBeNull();
   });
 

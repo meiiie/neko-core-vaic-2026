@@ -87,7 +87,9 @@ async function executeOne(
       signal?.addEventListener('abort', abortFromParent, { once: true });
       if (signal?.aborted) abortFromParent();
     });
-    const outcome = await Promise.race([run, interrupted]);
+    // Read-only work may be detached safely. Mutations must settle after the
+    // abort signal so a late commit cannot be mistaken for a definitive timeout.
+    const outcome = tool.readOnly ? await Promise.race([run, interrupted]) : await run;
     if (outcome.kind === 'interrupted') {
       return fail(
         outcome.code === 'TOOL_ABORTED'
@@ -106,6 +108,12 @@ async function executeOne(
       return fail(
         outcome.error instanceof Error ? outcome.error.message : 'Công cụ gặp lỗi.',
         'TOOL_ERROR',
+      );
+    }
+    if (timeout.signal.aborted && !outcome.value.ok) {
+      return fail(
+        signal?.aborted ? 'Lệnh công cụ đã bị hủy.' : 'Công cụ vượt quá thời gian cho phép.',
+        signal?.aborted ? 'TOOL_ABORTED' : 'TOOL_TIMEOUT',
       );
     }
     return {

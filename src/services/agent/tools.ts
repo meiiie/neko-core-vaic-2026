@@ -73,8 +73,8 @@ function normalizedLearnerQuery(value: string): string {
     .replace(/\p{M}/gu, '')
     .toLocaleLowerCase('vi-VN')
     .replace(/đ/g, 'd')
-    .trim()
-    .replace(/\s+/g, ' ');
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 function learnerMatchScore(id: string, displayLabel: string, rawQuery: string): number {
@@ -223,7 +223,9 @@ const chanDoanHocSinh: AgentTool = {
     } catch {
       const normalizedQuery = normalizedLearnerQuery(query);
       const learnerId = ['an', 'binh', 'chi', 'minh'].find(
-        (candidate) => normalizedQuery === candidate || normalizedQuery.endsWith(`-${candidate}`),
+        (candidate) =>
+          normalizedQuery === candidate ||
+          normalizedQuery === normalizedLearnerQuery(`user-student-${candidate}`),
       );
       if (!learnerId || !isHeroLearnerId(learnerId)) {
         return { ok: false, error: 'Không đọc được dữ liệu học sinh từ máy chủ.' };

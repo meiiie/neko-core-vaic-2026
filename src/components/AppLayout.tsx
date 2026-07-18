@@ -35,6 +35,7 @@ const NAVIGATION: Record<Role, readonly NavItem[]> = {
 };
 
 const MOBILE_NAVIGATION_QUERY = '(max-width: 52rem)';
+const NEKO_MODAL_QUERY = '(max-width: 34rem)';
 
 export function AppLayout() {
   const { account, signOut } = useSession();
@@ -45,6 +46,9 @@ export function AppLayout() {
     () =>
       typeof window !== 'undefined' &&
       window.matchMedia?.(MOBILE_NAVIGATION_QUERY).matches === true,
+  );
+  const [isNekoModal, setIsNekoModal] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.(NEKO_MODAL_QUERY).matches === true,
   );
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -88,8 +92,10 @@ export function AppLayout() {
   useEffect(() => {
     if (!window.matchMedia) return;
     const media = window.matchMedia(MOBILE_NAVIGATION_QUERY);
+    const nekoMedia = window.matchMedia(NEKO_MODAL_QUERY);
     const updateViewport = () => {
       setIsMobile(media.matches);
+      setIsNekoModal(nekoMedia.matches);
       if (!media.matches) {
         restoreMenuFocusRef.current = false;
         setMobileOpen(false);
@@ -98,7 +104,11 @@ export function AppLayout() {
 
     updateViewport();
     media.addEventListener('change', updateViewport);
-    return () => media.removeEventListener('change', updateViewport);
+    nekoMedia.addEventListener('change', updateViewport);
+    return () => {
+      media.removeEventListener('change', updateViewport);
+      nekoMedia.removeEventListener('change', updateViewport);
+    };
   }, []);
 
   useEffect(() => {
@@ -197,7 +207,9 @@ export function AppLayout() {
         <>
           <header
             className="mobile-header"
-            inert={isMobile && (mobileOpen || (isTeacher && nekoOpen)) ? true : undefined}
+            inert={
+              (isMobile && mobileOpen) || (isTeacher && isNekoModal && nekoOpen) ? true : undefined
+            }
           >
             <NavLink className="brand-lockup" to={home}>
               <BrandMark size={36} />
@@ -223,7 +235,9 @@ export function AppLayout() {
             id="product-sidebar"
             className="product-sidebar"
             data-open={mobileOpen || undefined}
-            inert={isMobile && (!mobileOpen || (isTeacher && nekoOpen)) ? true : undefined}
+            inert={
+              (isMobile && !mobileOpen) || (isTeacher && isNekoModal && nekoOpen) ? true : undefined
+            }
           >
             <div className="sidebar-head">
               <NavLink
@@ -300,7 +314,7 @@ export function AppLayout() {
         data-focus-mode={isAssessmentMode || undefined}
         data-neko-open={(isTeacher && nekoOpen) || undefined}
         inert={
-          !isAssessmentMode && isMobile && (mobileOpen || (isTeacher && nekoOpen))
+          !isAssessmentMode && ((isMobile && mobileOpen) || (isTeacher && isNekoModal && nekoOpen))
             ? true
             : undefined
         }

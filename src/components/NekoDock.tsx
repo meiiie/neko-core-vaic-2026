@@ -160,6 +160,15 @@ function Metrics({ metrics, fallback }: { metrics: GenerationMetrics; fallback?:
   );
 }
 
+function isReachableTabStop(element: HTMLElement): boolean {
+  if (element.tabIndex < 0) return false;
+  const closedDisclosure = element.closest<HTMLDetailsElement>('details:not([open])');
+  return (
+    !closedDisclosure ||
+    (element.tagName === 'SUMMARY' && element.parentElement === closedDisclosure)
+  );
+}
+
 export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { account } = useSession();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -195,6 +204,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const approvalRef = useRef<PendingApproval | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const store = useMemo(() => new AgentSessionStore(db), []);
   const provider =
@@ -262,6 +272,12 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileModal, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (controllerReady) inputRef.current?.focus();
+    else if (mobileModal) closeButtonRef.current?.focus();
+  }, [controllerReady, mobileModal, open]);
 
   const applyChatGptStatus = useCallback((status: ChatGptStatus): void => {
     setChatGpt(status);
@@ -422,7 +438,6 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       setBusy(false);
       return;
     }
-    inputRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (busyRef.current) stop();
@@ -436,7 +451,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         ...panel.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary',
         ),
-      ].filter((element) => element.tabIndex >= 0);
+      ].filter(isReachableTabStop);
       const first = tabbable[0];
       const last = tabbable.at(-1);
       if (!first || !last) return;
@@ -717,7 +732,13 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
           <strong>Neko</strong>
           <small>Lớp 7A · dữ liệu hệ thống là nguồn sự thật</small>
         </div>
-        <button type="button" className="dock-close" onClick={onClose} aria-label="Đóng (Esc)">
+        <button
+          ref={closeButtonRef}
+          type="button"
+          className="dock-close"
+          onClick={onClose}
+          aria-label="Đóng (Esc)"
+        >
           ×
         </button>
       </header>
@@ -730,7 +751,8 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         className="neko-scroll"
         ref={logRef}
         role="log"
-        aria-live="off"
+        aria-live="polite"
+        aria-relevant="additions"
         onClick={(event) => {
           if (event.target !== event.currentTarget) return;
           const selection = window.getSelection();
@@ -780,9 +802,11 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
         {busy ? (
           <div className="neko-msg neko-msg--assistant neko-msg--live">
-            <div className="neko-live-status" role="status" aria-live="polite" aria-atomic="true">
+            <div className="neko-live-status">
               <span className="neko-pulse" aria-hidden="true" />
-              <span>{activity || 'Đang kiểm tra dữ liệu lớp…'}</span>
+              <span role="status" aria-live="polite" aria-atomic="true">
+                {activity || 'Đang kiểm tra dữ liệu lớp…'}
+              </span>
               {busyElapsed > 0 ? <time>{busyElapsed}s</time> : null}
             </div>
             {liveTrace.length > 0 ? (

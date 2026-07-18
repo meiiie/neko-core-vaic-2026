@@ -23,6 +23,22 @@ function installMobileViewport() {
   );
 }
 
+function installTabletViewport() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(max-width: 52rem)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => true),
+    })),
+  );
+}
+
 function abortAwarePendingFetch() {
   return vi.fn(
     (_input: RequestInfo | URL, init?: RequestInit) =>
@@ -494,5 +510,23 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     await waitFor(() => expect(document.activeElement).toBe(restoredLauncher));
     expect(workspace?.hasAttribute('inert')).toBe(false);
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('keeps the workspace interactive when Neko is a side panel at tablet width', async () => {
+    installTabletViewport();
+    installApiStub('co.ha@nekopath.edu.vn');
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/teacher']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'Mở trợ lý Neko' }));
+    expect(
+      await screen.findByRole('complementary', { name: 'Neko — trợ lý lớp học' }),
+    ).toBeTruthy();
+    expect(document.querySelector('.product-workspace')?.hasAttribute('inert')).toBe(false);
+    expect(document.querySelector('.mobile-header')?.hasAttribute('inert')).toBe(false);
   });
 });

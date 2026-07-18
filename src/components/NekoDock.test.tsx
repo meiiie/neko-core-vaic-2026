@@ -8,6 +8,22 @@ import { db } from '../storage/db';
 import { installApiStub } from '../test/api-stub';
 import { NekoDock } from './NekoDock';
 
+function installMobileViewport() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(max-width: 34rem)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(() => true),
+    })),
+  );
+}
+
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -168,6 +184,8 @@ describe('NekoDock agent session', () => {
     await waitFor(() => expect(input.hasAttribute('disabled')).toBe(false));
     await user.click(screen.getByRole('button', { name: 'Chẩn đoán của bạn An thế nào?' }));
     expect((await screen.findAllByText(/Phân số bằng nhau/)).length).toBeGreaterThan(0);
+    expect(screen.getByRole('log').getAttribute('aria-live')).toBe('polite');
+    expect(screen.getByRole('log').getAttribute('aria-relevant')).toBe('additions');
     expect(screen.getByText(/Dự phòng cục bộ · Tổng/)).toBeTruthy();
     expect(screen.queryByText(/\{"ok"|hoc_sinh/)).toBeNull();
 
@@ -304,6 +322,9 @@ describe('NekoDock agent session', () => {
     await user.type(textarea, 'Câu đầu');
     await user.click(screen.getByRole('button', { name: 'Gửi' }));
     expect(await screen.findByRole('button', { name: 'Dừng' })).toBeTruthy();
+    const status = screen.getByRole('status');
+    expect(status.parentElement?.classList.contains('neko-live-status')).toBe(true);
+    expect(status.parentElement?.hasAttribute('role')).toBe(false);
     expect(textarea.hasAttribute('disabled')).toBe(false);
 
     await user.type(textarea, 'Câu tiếp theo');
@@ -375,6 +396,49 @@ describe('NekoDock agent session', () => {
     expect(await screen.findByText('Đã dừng lượt đang xử lý.')).toBeTruthy();
     await user.keyboard('{Escape}');
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('moves focus into the mobile dialog before the session controller is ready', async () => {
+    installMobileViewport();
+    installApiStub('co.ha@nekopath.edu.vn');
+    vi.spyOn(AgentSessionStore.prototype, 'load').mockImplementation(
+      () => new Promise<never>(() => undefined),
+    );
+    render(
+      <SessionProvider>
+        <NekoDock open onClose={() => undefined} />
+      </SessionProvider>,
+    );
+
+    const close = screen.getByRole('button', { name: 'Đóng (Esc)' });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    expect(screen.getByRole('textbox', { name: 'Câu hỏi cho Neko' }).hasAttribute('disabled')).toBe(
+      true,
+    );
+  });
+
+  it('keeps Tab inside the mobile dialog when settings are collapsed', async () => {
+    installMobileViewport();
+    installApiStub('co.ha@nekopath.edu.vn');
+    const user = userEvent.setup();
+    render(
+      <SessionProvider>
+        <NekoDock open onClose={() => undefined} />
+      </SessionProvider>,
+    );
+    await screen.findByText(/Chào Cô Hà/);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Câu hỏi cho Neko' }).hasAttribute('disabled'),
+      ).toBe(false),
+    );
+
+    const summary = screen.getByText('Tùy chọn AI').closest('summary');
+    expect(summary).not.toBeNull();
+    summary?.focus();
+    await user.tab();
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Đóng (Esc)' }));
   });
 
   it('keeps the answer visible and discloses when local session persistence fails', async () => {
