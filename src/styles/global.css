@@ -2083,6 +2083,111 @@ details li {
   margin-top: var(--s-3);
 }
 
+.teacher-learner-evidence {
+  margin-top: var(--s-5);
+}
+
+.teacher-learner-evidence > header {
+  max-width: 42rem;
+}
+
+.teacher-learner-evidence > header p {
+  margin-top: var(--s-1);
+}
+
+.teacher-learner-evidence-list {
+  display: grid;
+  gap: var(--s-2);
+  margin: var(--s-3) 0 0;
+}
+
+.teacher-learner-evidence-list > details {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.teacher-learner-evidence-list > details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: var(--touch-target);
+  padding: var(--s-3) var(--s-4);
+  cursor: pointer;
+}
+
+.teacher-learner-evidence-list > details > summary > span {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.teacher-learner-evidence-list > details > summary > span:last-child {
+  align-items: flex-end;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.teacher-learner-evidence-list summary small {
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.teacher-learner-evidence-list summary > span:last-child small {
+  color: var(--review);
+  font-weight: 700;
+}
+
+.teacher-learner-evidence-list ul {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0 var(--s-4) var(--s-4);
+  list-style: none;
+}
+
+.teacher-learner-evidence-list li {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+
+.teacher-learner-evidence-list li strong {
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.teacher-learner-evidence-list li span,
+.teacher-learner-evidence-list li small {
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+.teacher-learner-evidence-list > details > p {
+  margin: 0;
+  padding: 0 var(--s-4) var(--s-4);
+}
+
+@media (max-width: 34rem) {
+  .teacher-learner-evidence-list > details > summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .teacher-learner-evidence-list > details > summary > span:last-child {
+    align-items: flex-start;
+  }
+}
+
 .learner-chip-list {
   display: flex;
   flex-wrap: wrap;

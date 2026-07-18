@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { kcName } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH } from '../../content';
+import { buildTeacherLearnerEvidenceRows } from './teacher-evidence';
 import { TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
 import {
   saveTeacherOverride,
@@ -196,6 +197,7 @@ export function TeacherGroupDetailPage() {
   const activeGroup = group;
   const groupName = group.rootKcId ? kcName(group.rootKcId) : TEACHER_GROUP_LABELS[group.status];
   const currentGroupId = group.id;
+  const learnerEvidenceRows = buildTeacherLearnerEvidenceRows(group, dashboard.overrides);
 
   async function handleOverrideSaved(learnerId: string): Promise<OverrideSaveOutcome> {
     const nextDashboard = await refresh();
@@ -344,17 +346,49 @@ export function TeacherGroupDetailPage() {
           <p className="muted">Nhóm này chưa có câu trả lời sai ở lần làm gần nhất.</p>
         )}
 
-        <details className="learner-roster-disclosure">
-          <summary>Xem {group.totalLearnerCount} học sinh cần ôn bài này</summary>
-          <ul>
-            {group.learners.map((learner) => (
-              <li key={learner.id}>
-                <strong>{learner.displayLabel}</strong>
-                <span>{learner.eventCount} câu trả lời đã ghi nhận</span>
-              </li>
+        <section className="teacher-learner-evidence" aria-labelledby="learner-evidence-heading">
+          <header>
+            <h3 id="learner-evidence-heading">Căn cứ của từng học sinh</h3>
+            <p className="muted">
+              Mở tên học sinh để kiểm tra kết quả và từng câu trả lời sai trước khi giao bài ôn.
+            </p>
+          </header>
+          <div className="teacher-learner-evidence-list">
+            {learnerEvidenceRows.map((row) => (
+              <details key={row.learnerId}>
+                <summary>
+                  <span>
+                    <strong>{row.learnerLabel}</strong>
+                    <small>{row.decisionLabel}</small>
+                  </span>
+                  <span>
+                    {row.evidenceCount} câu trả lời
+                    {row.overridden ? <small>Đã được cô điều chỉnh</small> : null}
+                  </span>
+                </summary>
+                {row.wrongAnswers.length > 0 ? (
+                  <ul>
+                    {row.wrongAnswers.map((answer) => (
+                      <li key={answer.eventId}>
+                        <strong>{answer.prompt}</strong>
+                        <span>
+                          Đã chọn: {answer.selectedChoiceLabel} · Đáp án đúng:{' '}
+                          {answer.correctChoiceLabel}
+                        </span>
+                        <small>
+                          {answer.assignmentTitle} ·{' '}
+                          {new Date(answer.occurredAt).toLocaleString('vi-VN')}
+                        </small>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">Chưa ghi nhận câu trả lời sai trong dữ liệu hiện có.</p>
+                )}
+              </details>
             ))}
-          </ul>
-        </details>
+          </div>
+        </section>
       </section>
 
       <section className="teacher-support-actions" aria-labelledby="support-actions-heading">

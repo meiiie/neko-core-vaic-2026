@@ -142,7 +142,7 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Quay lại các bài cần ôn' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Học sinh đang sai ở đâu?' })).toBeTruthy();
-    expect(screen.getByText('Xem 2 học sinh cần ôn bài này')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Căn cứ của từng học sinh' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Xem gói bài ôn đề xuất' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Tải danh sách' })).toBeTruthy();
 
