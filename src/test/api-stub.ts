@@ -20,6 +20,21 @@ export interface StubUser {
 
 const PASSWORD = 'Nekopath@2026';
 
+export const TEACHER_QUESTION_FIXTURE = [
+  ...Array.from({ length: 6 }, (_, index) => ({
+    id: `bank-K02-REVIEW-${index + 1}`,
+    kcId: 'K02',
+    prompt: `Câu ôn phân số bằng nhau ${index + 1}`,
+    difficulty: index < 2 ? 'EASY' : index < 5 ? 'MEDIUM' : 'HARD',
+  })),
+  {
+    id: 'bank-K01-REVIEW-1',
+    kcId: 'K01',
+    prompt: 'Câu ôn ý nghĩa phân số',
+    difficulty: 'EASY',
+  },
+] as const;
+
 export const TEACHER_DASHBOARD_FIXTURE: TeacherDashboardDto = {
   dataSource: 'SERVER',
   generatedAt: '2026-07-18T08:00:00.000Z',
@@ -45,6 +60,12 @@ export const TEACHER_DASHBOARD_FIXTURE: TeacherDashboardDto = {
       priorityScore: 8,
       representativeEventIds: ['evt-an-k02', 'evt-chi-k02'],
       suggestedActionId: 'RETEACH_K02',
+      reviewLearnerRate: 1,
+      wrongAnswerCount: 2,
+      evidenceAnswerCount: 4,
+      wrongAnswerRate: 0.5,
+      recommendedKcIds: ['K02'],
+      recommendedQuestionIds: ['bank-K02-CHECK-1', 'bank-K02-CHECK-2'],
       learners: [
         { id: 'user-student-an', displayLabel: 'Trần Ngọc An', eventCount: 2 },
         { id: 'user-student-chi', displayLabel: 'Nguyễn Minh Chi', eventCount: 2 },
@@ -165,8 +186,9 @@ function json(body: unknown, status = 200): Response {
 export function installApiStub(
   initialEmail: string | null = null,
   teacherDashboard: TeacherDashboardDto = TEACHER_DASHBOARD_FIXTURE,
+  dashboardAfterOverride?: TeacherDashboardDto,
 ) {
-  const state = { email: initialEmail };
+  const state = { email: initialEmail, teacherDashboard };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -201,9 +223,14 @@ export function installApiStub(
         state.email = null;
         return json({ ok: true });
       }
-      if (url.endsWith('/api/teacher/dashboard')) return json(teacherDashboard);
+      if (url.endsWith('/api/teacher/dashboard')) return json(state.teacherDashboard);
       if (url.endsWith('/api/teacher/overrides') && init?.method === 'POST') {
+        if (dashboardAfterOverride) state.teacherDashboard = dashboardAfterOverride;
         return json({ id: 'override-test', updatedAt: '2026-07-18T08:05:00.000Z' }, 201);
+      }
+      if (url.endsWith('/api/questions')) return json({ questions: TEACHER_QUESTION_FIXTURE });
+      if (url.endsWith('/api/assignments') && init?.method === 'POST') {
+        return json({ id: 'assignment-test' }, 201);
       }
       if (url.endsWith('/api/assignments')) return json({ assignments: [] });
       return json({ error: 'NOT_FOUND' }, 404);

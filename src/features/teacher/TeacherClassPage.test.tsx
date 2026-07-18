@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { installApiStub } from '../../test/api-stub';
+import { installApiStub, TEACHER_DASHBOARD_FIXTURE } from '../../test/api-stub';
 import { TeacherGroupDetailPage } from './TeacherGroupDetailPage';
 
 describe('teacher diagnosis override', () => {
@@ -11,6 +11,32 @@ describe('teacher diagnosis override', () => {
   });
 
   it('persists a reasoned decision through the teacher backend API', async () => {
+    const originalGroup = TEACHER_DASHBOARD_FIXTURE.groups[0]!;
+    const movedLearner = originalGroup.learners[0]!;
+    const remainingLearner = originalGroup.learners[1]!;
+    installApiStub('co.ha@nekopath.edu.vn', TEACHER_DASHBOARD_FIXTURE, {
+      ...TEACHER_DASHBOARD_FIXTURE,
+      groups: [
+        {
+          ...originalGroup,
+          id: 'root:K07',
+          rootKcId: 'K07',
+          learnerIds: [movedLearner.id],
+          learners: [movedLearner],
+          totalLearnerCount: 1,
+          reviewLearnerRate: 0.5,
+          recommendedKcIds: ['K07'],
+          recommendedQuestionIds: ['bank-K07-CHECK-1', 'bank-K07-CHECK-2'],
+        },
+        {
+          ...originalGroup,
+          learnerIds: [remainingLearner.id],
+          learners: [remainingLearner],
+          totalLearnerCount: 1,
+          reviewLearnerRate: 0.5,
+        },
+      ],
+    });
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/teacher/class/root%3AK02']}>
@@ -38,7 +64,14 @@ describe('teacher diagnosis override', () => {
     );
     await user.click(controls.getByRole('button', { name: 'Lưu điều chỉnh' }));
 
-    expect(await screen.findByText('Đã lưu điều chỉnh trên máy chủ.')).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bài: Ý nghĩa và thứ tự của tỉ số' }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'Đã lưu. Học sinh được chuyển sang bài cần ôn: Ý nghĩa và thứ tự của tỉ số.',
+      ),
+    ).toBeTruthy();
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       '/api/teacher/overrides',
       expect.objectContaining({

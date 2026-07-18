@@ -50,6 +50,11 @@ const questionSchema = z.object({
 const assignmentSchema = z.object({
   title: z.string().min(3).max(120),
   questionIds: z.array(z.string().min(1)).min(1).max(20),
+  learnerIds: z
+    .array(z.string().min(1))
+    .max(40)
+    .default([])
+    .refine((ids) => new Set(ids).size === ids.length),
   dueAt: z.string().datetime().nullable().default(null),
   allowRetake: z.boolean().default(false),
   shuffleAnswers: z.boolean().default(false),
@@ -147,6 +152,17 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       return null;
     }
     return user;
+  }
+
+  function recipientIds(value: string): string[] {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((id) => typeof id === 'string') ? parsed : [];
+  }
+
+  function canOpenAssignment(user: { id: string; role: 'STUDENT' | 'TEACHER' }, value: string) {
+    if (user.role === 'TEACHER') return true;
+    const recipients = recipientIds(value);
+    return recipients.length === 0 || recipients.includes(user.id);
   }
 
   const isProduction = process.env.NODE_ENV === 'production';
@@ -350,12 +366,24 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (known.length !== parsed.data.questionIds.length) {
       return reply.code(400).send({ error: 'UNKNOWN_QUESTION_ID' });
     }
+    if (parsed.data.learnerIds.length > 0) {
+      const enrolled = db
+        .prepare(
+          `SELECT u.id FROM enrollments e JOIN users u ON u.id = e.user_id
+           WHERE e.class_id = ? AND u.role = 'STUDENT'
+             AND u.id IN (${parsed.data.learnerIds.map(() => '?').join(',')})`,
+        )
+        .all(CLASS_7A_ID, ...parsed.data.learnerIds) as { id: string }[];
+      if (enrolled.length !== parsed.data.learnerIds.length) {
+        return reply.code(400).send({ error: 'UNKNOWN_LEARNER_ID' });
+      }
+    }
     const id = `assignment-${randomUUID()}`;
     db.prepare(
       `INSERT INTO assignments
        (id, class_id, teacher_id, title, question_ids_json, created_at, due_at, allow_retake,
-        shuffle_answers)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        shuffle_answers, recipient_ids_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       CLASS_7A_ID,
@@ -366,6 +394,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       parsed.data.dueAt,
       parsed.data.allowRetake ? 1 : 0,
       parsed.data.shuffleAnswers ? 1 : 0,
+      JSON.stringify(parsed.data.learnerIds),
     );
     return reply.code(201).send({ id });
   });
@@ -384,63 +413,79 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       due_at: string | null;
       allow_retake: number;
       shuffle_answers: number;
+      recipient_ids_json: string;
     }[];
-    const rosterCount = (
-      db.prepare('SELECT COUNT(*) AS n FROM enrollments WHERE class_id = ?').get(CLASS_7A_ID) as {
+    const classRosterCount = (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM enrollments e JOIN users u ON u.id = e.user_id
+           WHERE e.class_id = ? AND u.role = 'STUDENT'`,
+        )
+        .get(CLASS_7A_ID) as {
         n: number;
       }
     ).n;
-    const assignments = rows.map((row) => {
-      const questionIds = JSON.parse(row.question_ids_json) as string[];
-      const submitted = (
-        db
-          .prepare('SELECT COUNT(DISTINCT learner_id) AS n FROM events WHERE assignment_id = ?')
-          .get(row.id) as { n: number }
-      ).n;
-      const progress = db
-        .prepare(
-          `SELECT learner_id AS learnerId, COUNT(DISTINCT item_id) AS answered
+    const assignments = rows
+      .filter((row) => canOpenAssignment(user, row.recipient_ids_json))
+      .map((row) => {
+        const questionIds = JSON.parse(row.question_ids_json) as string[];
+        const recipients = recipientIds(row.recipient_ids_json);
+        const recipientNames = recipients.map((learnerId) => {
+          const learner = db.prepare('SELECT name FROM users WHERE id = ?').get(learnerId) as
+            { name: string } | undefined;
+          return learner?.name ?? learnerId;
+        });
+        const submitted = (
+          db
+            .prepare('SELECT COUNT(DISTINCT learner_id) AS n FROM events WHERE assignment_id = ?')
+            .get(row.id) as { n: number }
+        ).n;
+        const progress = db
+          .prepare(
+            `SELECT learner_id AS learnerId, COUNT(DISTINCT item_id) AS answered
            FROM events WHERE assignment_id = ? GROUP BY learner_id`,
-        )
-        .all(row.id) as { learnerId: string; answered: number }[];
-      const opened = (
-        db
-          .prepare('SELECT COUNT(*) AS n FROM assignment_views WHERE assignment_id = ?')
-          .get(row.id) as { n: number }
-      ).n;
-      const completed = progress.filter((entry) => entry.answered >= questionIds.length).length;
-      const kcIds = [
-        ...new Set(
-          questionIds.flatMap((questionId) => {
-            const question = db
-              .prepare('SELECT kc_id FROM questions WHERE id = ?')
-              .get(questionId) as { kc_id: string } | undefined;
-            return question ? [question.kc_id] : [];
-          }),
-        ),
-      ];
-      const myAnswers = (
-        db
-          .prepare('SELECT COUNT(*) AS n FROM events WHERE assignment_id = ? AND learner_id = ?')
-          .get(row.id, user.id) as { n: number }
-      ).n;
-      return {
-        id: row.id,
-        title: row.title,
-        createdAt: row.created_at,
-        dueAt: row.due_at,
-        allowRetake: Boolean(row.allow_retake),
-        shuffleAnswers: Boolean(row.shuffle_answers),
-        questionCount: questionIds.length,
-        kcIds,
-        openedLearnerCount: opened,
-        inProgressLearnerCount: Math.max(0, progress.length - completed),
-        completedLearnerCount: completed,
-        submittedLearnerCount: submitted,
-        rosterCount,
-        myAnswerCount: myAnswers,
-      };
-    });
+          )
+          .all(row.id) as { learnerId: string; answered: number }[];
+        const opened = (
+          db
+            .prepare('SELECT COUNT(*) AS n FROM assignment_views WHERE assignment_id = ?')
+            .get(row.id) as { n: number }
+        ).n;
+        const completed = progress.filter((entry) => entry.answered >= questionIds.length).length;
+        const kcIds = [
+          ...new Set(
+            questionIds.flatMap((questionId) => {
+              const question = db
+                .prepare('SELECT kc_id FROM questions WHERE id = ?')
+                .get(questionId) as { kc_id: string } | undefined;
+              return question ? [question.kc_id] : [];
+            }),
+          ),
+        ];
+        const myAnswers = (
+          db
+            .prepare('SELECT COUNT(*) AS n FROM events WHERE assignment_id = ? AND learner_id = ?')
+            .get(row.id, user.id) as { n: number }
+        ).n;
+        return {
+          id: row.id,
+          title: row.title,
+          createdAt: row.created_at,
+          dueAt: row.due_at,
+          allowRetake: Boolean(row.allow_retake),
+          shuffleAnswers: Boolean(row.shuffle_answers),
+          questionCount: questionIds.length,
+          kcIds,
+          openedLearnerCount: opened,
+          inProgressLearnerCount: Math.max(0, progress.length - completed),
+          completedLearnerCount: completed,
+          submittedLearnerCount: submitted,
+          rosterCount: recipients.length > 0 ? recipients.length : classRosterCount,
+          recipientCount: recipients.length > 0 ? recipients.length : classRosterCount,
+          ...(user.role === 'TEACHER' ? { recipientNames } : {}),
+          myAnswerCount: myAnswers,
+        };
+      });
     return { assignments };
   });
 
@@ -449,8 +494,13 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!user) return;
     if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
     const { id } = request.params as { id: string };
-    const exists = db.prepare('SELECT id FROM assignments WHERE id = ?').get(id);
+    const exists = db
+      .prepare('SELECT id, recipient_ids_json FROM assignments WHERE id = ?')
+      .get(id) as { id: string; recipient_ids_json: string } | undefined;
     if (!exists) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (!canOpenAssignment(user, exists.recipient_ids_json)) {
+      return reply.code(403).send({ error: 'FORBIDDEN' });
+    }
     db.prepare(
       `INSERT OR IGNORE INTO assignment_views (assignment_id, learner_id, opened_at)
        VALUES (?, ?, ?)`,
@@ -469,9 +519,13 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
           question_ids_json: string;
           allow_retake: number;
           shuffle_answers: number;
+          recipient_ids_json: string;
         }
       | undefined;
     if (!row) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (!canOpenAssignment(user, row.recipient_ids_json)) {
+      return reply.code(403).send({ error: 'FORBIDDEN' });
+    }
     const questionIds = JSON.parse(row.question_ids_json) as string[];
     const answeredIds =
       user.role === 'STUDENT' && !row.allow_retake
@@ -525,10 +579,21 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       .safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'INVALID_BODY' });
     const assignment = db
-      .prepare('SELECT question_ids_json, due_at, allow_retake FROM assignments WHERE id = ?')
+      .prepare(
+        'SELECT question_ids_json, due_at, allow_retake, recipient_ids_json FROM assignments WHERE id = ?',
+      )
       .get(id) as
-      { question_ids_json: string; due_at: string | null; allow_retake: number } | undefined;
+      | {
+          question_ids_json: string;
+          due_at: string | null;
+          allow_retake: number;
+          recipient_ids_json: string;
+        }
+      | undefined;
     if (!assignment) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (!canOpenAssignment(user, assignment.recipient_ids_json)) {
+      return reply.code(403).send({ error: 'FORBIDDEN' });
+    }
     const questionIds = JSON.parse(assignment.question_ids_json) as string[];
     if (!questionIds.includes(body.data.questionId)) {
       return reply.code(400).send({ error: 'QUESTION_NOT_IN_ASSIGNMENT' });

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { kcName } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH } from '../../content';
 import { TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
@@ -21,12 +21,13 @@ function TeacherOverrideForm({
 }: {
   readonly group: TeacherSupportGroupDto;
   readonly overrides: readonly TeacherOverrideDto[];
-  readonly onSaved: () => Promise<void>;
+  readonly onSaved: (learnerId: string) => Promise<string>;
 }) {
   const [learnerId, setLearnerId] = useState(group.learnerIds[0] ?? '');
   const [decision, setDecision] = useState('');
   const [reason, setReason] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
   const selectedLearnerId = group.learnerIds.includes(learnerId)
     ? learnerId
     : (group.learnerIds[0] ?? '');
@@ -56,8 +57,9 @@ function TeacherOverrideForm({
       });
       setReason('');
       setDecision('');
+      const message = await onSaved(selectedLearnerId);
+      setSaveMessage(message);
       setSaveState('saved');
-      await onSaved();
     } catch {
       setSaveState('error');
     }
@@ -123,7 +125,7 @@ function TeacherOverrideForm({
         <button className="button-secondary" type="submit" disabled={saveState === 'saving'}>
           {saveState === 'saving' ? 'Đang lưu lên máy chủ…' : 'Lưu điều chỉnh'}
         </button>
-        {saveState === 'saved' ? <span role="status">Đã lưu điều chỉnh trên máy chủ.</span> : null}
+        {saveState === 'saved' ? <span role="status">{saveMessage}</span> : null}
         {saveState === 'error' ? (
           <span role="alert">Không lưu được điều chỉnh. Hãy thử lại.</span>
         ) : null}
@@ -134,6 +136,7 @@ function TeacherOverrideForm({
 
 export function TeacherGroupDetailPage() {
   const { groupId = '' } = useParams();
+  const navigate = useNavigate();
   const { dashboard, loading, error, refresh } = useTeacherDashboard();
   const group = dashboard.groups.find((candidate) => candidate.id === groupId);
 
@@ -162,7 +165,7 @@ export function TeacherGroupDetailPage() {
     return (
       <div className="page-stack teacher-group-detail-page">
         <Link className="text-link teacher-group-back-link" to="/teacher/class">
-          Quay lại danh sách nhóm
+          Quay lại các bài cần ôn
         </Link>
         <section className="empty-state" role="status">
           <h1>Không tìm thấy nhóm này</h1>
@@ -173,6 +176,22 @@ export function TeacherGroupDetailPage() {
   }
 
   const groupName = group.rootKcId ? kcName(group.rootKcId) : TEACHER_GROUP_LABELS[group.status];
+  const currentGroupId = group.id;
+
+  async function handleOverrideSaved(learnerId: string): Promise<string> {
+    const nextDashboard = await refresh();
+    const nextGroup = nextDashboard?.groups.find((candidate) =>
+      candidate.learnerIds.includes(learnerId),
+    );
+    if (nextGroup && nextGroup.id !== currentGroupId) {
+      const nextName = nextGroup.rootKcId
+        ? kcName(nextGroup.rootKcId)
+        : TEACHER_GROUP_LABELS[nextGroup.status];
+      navigate(`/teacher/class/${encodeURIComponent(nextGroup.id)}`, { replace: true });
+      return `Đã lưu. Học sinh được chuyển sang bài cần ôn: ${nextName}.`;
+    }
+    return 'Đã lưu điều chỉnh trên máy chủ.';
+  }
 
   function exportGroup() {
     if (!group) return;
@@ -197,7 +216,7 @@ export function TeacherGroupDetailPage() {
   return (
     <div className="page-stack teacher-group-detail-page">
       <Link className="text-link teacher-group-back-link" to="/teacher/class">
-        Quay lại danh sách nhóm
+        Quay lại các bài cần ôn
       </Link>
 
       <header className="page-heading teacher-group-detail-heading">
@@ -212,7 +231,7 @@ export function TeacherGroupDetailPage() {
 
       <section className="teacher-group-purpose" aria-labelledby="group-purpose-heading">
         <div>
-          <p className="eyebrow">Vì sao có nhóm này?</p>
+          <p className="eyebrow">Vì sao cần ôn bài này?</p>
           <h2 id="group-purpose-heading">
             {group.totalLearnerCount} học sinh đang có dấu hiệu cần ôn {groupName}
           </h2>
@@ -222,22 +241,22 @@ export function TeacherGroupDetailPage() {
           </p>
         </div>
         <p className="teacher-group-suggestion">
-          <strong>Gợi ý:</strong> {teacherActionLabel(group.suggestedActionId)}
+          <strong>Phương án hệ thống đề xuất:</strong> {teacherActionLabel(group.suggestedActionId)}
         </p>
       </section>
 
       <section className="teacher-group-detail-metrics" aria-label="Tổng quan nhóm">
         <span>
-          <small>Học sinh trong nhóm</small>
+          <small>Học sinh cần ôn</small>
           <strong>{group.totalLearnerCount}</strong>
         </span>
         <span>
-          <small>Câu đang cần kiểm tra</small>
-          <strong>{group.wrongQuestions.length}</strong>
+          <small>Tỷ lệ học sinh cần ôn</small>
+          <strong>{Math.round(group.reviewLearnerRate * 100)}%</strong>
         </span>
         <span>
-          <small>Mức ưu tiên</small>
-          <strong>{group.priorityScore > 0 ? 'Làm trước' : 'Theo dõi'}</strong>
+          <small>Tỷ lệ câu trả lời sai</small>
+          <strong>{Math.round(group.wrongAnswerRate * 100)}%</strong>
         </span>
       </section>
 
@@ -245,7 +264,7 @@ export function TeacherGroupDetailPage() {
         <header className="teacher-evidence-heading">
           <div>
             <p className="eyebrow">Bước 1</p>
-            <h2 id="wrong-answers-heading">Kiểm tra câu trả lời sai</h2>
+            <h2 id="wrong-answers-heading">Học sinh đang sai ở đâu?</h2>
           </div>
           <p>Bấm vào từng câu để xem học sinh đã chọn gì và đáp án đúng.</p>
         </header>
@@ -293,7 +312,7 @@ export function TeacherGroupDetailPage() {
         )}
 
         <details className="learner-roster-disclosure">
-          <summary>Xem danh sách {group.totalLearnerCount} học sinh trong nhóm</summary>
+          <summary>Xem {group.totalLearnerCount} học sinh cần ôn bài này</summary>
           <ul>
             {group.learners.map((learner) => (
               <li key={learner.id}>
@@ -307,16 +326,19 @@ export function TeacherGroupDetailPage() {
 
       <section className="teacher-support-actions" aria-labelledby="support-actions-heading">
         <div>
-          <p className="eyebrow">Bước 2</p>
-          <h2 id="support-actions-heading">Chọn cách hỗ trợ</h2>
-          <p>Giao bài ôn cho cả nhóm sau khi cô đã kiểm tra các câu trả lời phía trên.</p>
+          <p className="eyebrow">Bước 2 · Gợi ý bài ôn</p>
+          <h2 id="support-actions-heading">Xem gói câu hỏi hệ thống đề xuất</h2>
+          <p>
+            Hệ thống tìm thấy {group.recommendedQuestionIds.length} câu phù hợp với bài học các em
+            đang cần ôn. Cô có thể xem, bỏ chọn hoặc chọn ngẫu nhiên trước khi giao.
+          </p>
         </div>
         <div className="group-actions">
           <Link
             className="button-primary"
-            to={`/teacher/assignments${group.rootKcId ? `?kc=${group.rootKcId}` : ''}`}
+            to={`/teacher/assignments?group=${encodeURIComponent(group.id)}`}
           >
-            Giao bài ôn cho nhóm
+            Xem gói bài ôn đề xuất
           </Link>
           <button className="button-secondary" type="button" onClick={exportGroup}>
             Tải danh sách
@@ -326,7 +348,11 @@ export function TeacherGroupDetailPage() {
 
       <details className="teacher-override-disclosure">
         <summary>Điều chỉnh gợi ý của hệ thống</summary>
-        <TeacherOverrideForm group={group} overrides={dashboard.overrides} onSaved={refresh} />
+        <TeacherOverrideForm
+          group={group}
+          overrides={dashboard.overrides}
+          onSaved={handleOverrideSaved}
+        />
       </details>
     </div>
   );

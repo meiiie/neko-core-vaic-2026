@@ -126,23 +126,23 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     );
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Nhóm học sinh cần hỗ trợ' }),
+      await screen.findByRole('heading', { level: 1, name: 'Bài học có học sinh cần ôn' }),
     ).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: 'Bài: Phân số bằng nhau' })).toBeTruthy();
     expect(screen.queryByText('Trần Ngọc An')).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Giao bài ôn cho nhóm' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Xem gói bài ôn đề xuất' })).toBeNull();
 
     await user.click(
-      screen.getByRole('link', { name: 'Xem chi tiết và hỗ trợ nhóm Phân số bằng nhau' }),
+      screen.getByRole('link', { name: 'Xem học sinh và gợi ý ôn bài Phân số bằng nhau' }),
     );
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Bài: Phân số bằng nhau' }),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Quay lại danh sách nhóm' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Kiểm tra câu trả lời sai' })).toBeTruthy();
-    expect(screen.getByText('Xem danh sách 2 học sinh trong nhóm')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Giao bài ôn cho nhóm' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Quay lại các bài cần ôn' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Học sinh đang sai ở đâu?' })).toBeTruthy();
+    expect(screen.getByText('Xem 2 học sinh cần ôn bài này')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Xem gói bài ôn đề xuất' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Tải danh sách' })).toBeTruthy();
 
     await user.click(screen.getByText('Xem câu trả lời'));
@@ -173,7 +173,7 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     );
 
     expect(
-      await screen.findByRole('heading', { name: 'Chưa thể tạo nhóm cần hỗ trợ' }),
+      await screen.findByRole('heading', { name: 'Chưa thể xác định bài học cần ôn' }),
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Giao bài kiểm tra nhanh' })).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Bài: Phân số bằng nhau' })).toBeNull();
@@ -312,9 +312,9 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(sidebar?.hasAttribute('inert')).toBe(true);
 
     await user.click(menu);
-    await user.click(await screen.findByRole('link', { name: /Nhóm cần hỗ trợ/ }));
+    await user.click(await screen.findByRole('link', { name: /Bài học cần ôn/ }));
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Nhóm học sinh cần hỗ trợ' }),
+      await screen.findByRole('heading', { level: 1, name: 'Bài học có học sinh cần ôn' }),
     ).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.id).toBe('main-content'));
     expect(sidebar?.hasAttribute('inert')).toBe(true);

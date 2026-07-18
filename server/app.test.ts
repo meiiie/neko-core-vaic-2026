@@ -14,6 +14,7 @@ async function makeApp() {
 
 const TEACHER_EMAIL = 'co.ha@nekopath.edu.vn';
 const STUDENT_EMAIL = 'an@nekopath.edu.vn';
+const OTHER_STUDENT_EMAIL = 'chi@nekopath.edu.vn';
 
 async function loginCookie(app: Awaited<ReturnType<typeof makeApp>>, email: string) {
   const response = await app.inject({
@@ -124,6 +125,10 @@ describe('NekoPath API', () => {
       answerEventCount: number;
       groups: {
         rootKcId?: string;
+        reviewLearnerRate: number;
+        wrongAnswerRate: number;
+        recommendedKcIds: string[];
+        recommendedQuestionIds: string[];
         learners: { id: string; displayLabel: string }[];
         wrongQuestions: {
           prompt: string;
@@ -145,6 +150,12 @@ describe('NekoPath API', () => {
       }),
     );
     expect(group?.wrongQuestions).toHaveLength(2);
+    expect(group).toMatchObject({
+      reviewLearnerRate: 1,
+      wrongAnswerRate: 0.5,
+      recommendedKcIds: ['K02'],
+      recommendedQuestionIds: ['bank-K02-CHECK-1', 'bank-K02-CHECK-2'],
+    });
     expect(group?.wrongQuestions[0]?.answers[0]).toMatchObject({
       learnerName: 'Trần Ngọc An',
       selectedChoiceLabel: expect.any(String),
@@ -301,6 +312,79 @@ describe('NekoPath API', () => {
       inProgressLearnerCount: 0,
       allowRetake: true,
       shuffleAnswers: true,
+    });
+    await app.close();
+  });
+
+  it('delivers a targeted review assignment only to its selected learners', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const assigned = await app.inject({
+      method: 'POST',
+      url: '/api/assignments',
+      cookies: teacher,
+      payload: {
+        title: 'Ôn tập phân số bằng nhau',
+        questionIds: ['bank-K02-CHECK-1'],
+        learnerIds: ['user-student-an'],
+        dueAt: null,
+        allowRetake: false,
+        shuffleAnswers: false,
+      },
+    });
+    expect(assigned.statusCode).toBe(201);
+    const assignmentId = (assigned.json() as { id: string }).id;
+
+    const recipient = await loginCookie(app, STUDENT_EMAIL);
+    const recipientList = await app.inject({
+      method: 'GET',
+      url: '/api/assignments',
+      cookies: recipient,
+    });
+    expect(
+      (recipientList.json() as { assignments: { id: string }[] }).assignments.map(
+        (assignment) => assignment.id,
+      ),
+    ).toContain(assignmentId);
+
+    const nonRecipient = await loginCookie(app, OTHER_STUDENT_EMAIL);
+    const nonRecipientList = await app.inject({
+      method: 'GET',
+      url: '/api/assignments',
+      cookies: nonRecipient,
+    });
+    expect(
+      (nonRecipientList.json() as { assignments: { id: string }[] }).assignments.map(
+        (assignment) => assignment.id,
+      ),
+    ).not.toContain(assignmentId);
+
+    for (const request of [
+      { method: 'GET' as const, url: `/api/assignments/${assignmentId}` },
+      { method: 'POST' as const, url: `/api/assignments/${assignmentId}/open` },
+      {
+        method: 'POST' as const,
+        url: `/api/assignments/${assignmentId}/answers`,
+        payload: { questionId: 'bank-K02-CHECK-1', choiceId: 'a' },
+      },
+    ]) {
+      const response = await app.inject({ ...request, cookies: nonRecipient });
+      expect(response.statusCode).toBe(403);
+    }
+
+    const teacherList = await app.inject({
+      method: 'GET',
+      url: '/api/assignments',
+      cookies: teacher,
+    });
+    const row = (
+      teacherList.json() as {
+        assignments: { id: string; recipientCount: number; recipientNames: string[] }[];
+      }
+    ).assignments.find((assignment) => assignment.id === assignmentId);
+    expect(row).toMatchObject({
+      recipientCount: 1,
+      recipientNames: ['Trần Ngọc An'],
     });
     await app.close();
   });

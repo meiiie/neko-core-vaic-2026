@@ -312,7 +312,33 @@ export function buildTeacherDashboard(
         answers: answers.sort((left, right) => left.learnerName.localeCompare(right.learnerName)),
       };
     });
-    return { ...group, learners, wrongQuestions };
+    const groupEvidence = [...latestEvidence.values()].filter((item) =>
+      group.learnerIds.includes(item.event.learnerId),
+    );
+    const wrongAnswerCount = groupEvidence.filter((item) => !item.event.correct).length;
+    const recommendedKcIds = [
+      ...new Set([
+        ...(group.rootKcId ? [group.rootKcId] : []),
+        ...wrongQuestions.map((question) => question.kcId),
+        ...(!group.rootKcId && wrongQuestions.length === 0 ? [TARGET_KC_ID] : []),
+      ]),
+    ];
+    const recommendedQuestionIds = questions
+      .filter((question) => recommendedKcIds.includes(question.kc_id))
+      .map((question) => question.id)
+      .sort();
+    return {
+      ...group,
+      learners,
+      wrongQuestions,
+      reviewLearnerRate:
+        eventsByLearner.size > 0 ? group.totalLearnerCount / eventsByLearner.size : 0,
+      wrongAnswerCount,
+      evidenceAnswerCount: groupEvidence.length,
+      wrongAnswerRate: groupEvidence.length > 0 ? wrongAnswerCount / groupEvidence.length : 0,
+      recommendedKcIds,
+      recommendedQuestionIds,
+    };
   });
 
   return {

@@ -13,9 +13,12 @@ export function useTeacherDashboard() {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      setDashboard(await fetchTeacherDashboard());
+      const next = await fetchTeacherDashboard();
+      setDashboard(next);
+      return next;
     } catch {
       setError('Không tải được dữ liệu lớp từ máy chủ.');
+      return null;
     } finally {
       setLoading(false);
     }

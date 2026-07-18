@@ -40,7 +40,7 @@ export function TeacherClassPage() {
   return (
     <div className="page-stack teacher-class-page">
       <header className="page-heading">
-        <h1>Nhóm học sinh cần hỗ trợ</h1>
+        <h1>Bài học có học sinh cần ôn</h1>
         <p className="page-meta">
           {dashboard.className} · {dashboard.rosterCount} học sinh · Dữ liệu từ máy chủ
           {dashboard.latestAnswerAt
@@ -52,24 +52,24 @@ export function TeacherClassPage() {
       <section className="teacher-workflow-intro" aria-labelledby="teacher-workflow-heading">
         <div>
           <p className="eyebrow">Mục đích của trang</p>
-          <h2 id="teacher-workflow-heading">Tìm nhóm học sinh đang cùng vướng một nội dung</h2>
+          <h2 id="teacher-workflow-heading">Biết bài nào cần ôn và những em nào đang gặp khó</h2>
           <p>
-            Hệ thống chỉ tạo nhóm từ các câu trả lời đã lưu trên máy chủ. Cô kiểm tra bằng chứng
-            trước, rồi chọn cách hỗ trợ phù hợp.
+            Hệ thống đọc bài làm đã lưu trên máy chủ, gom các em có dấu hiệu sai gần giống nhau theo
+            từng bài học và đề xuất một bài ôn để cô kiểm tra.
           </p>
         </div>
         <ol>
           <li>
-            <strong>1. Chọn nhóm</strong>
-            <span>Xem bài học mà nhiều em đang gặp khó khăn.</span>
+            <strong>1. Hệ thống phát hiện</strong>
+            <span>Mỗi thẻ là một bài học có học sinh cần xem lại.</span>
           </li>
           <li>
-            <strong>2. Xem câu trả lời</strong>
-            <span>Kiểm tra từng em đã chọn gì và đáp án đúng.</span>
+            <strong>2. Cô kiểm tra</strong>
+            <span>Mở bài học để xem đúng học sinh và lỗi thường gặp.</span>
           </li>
           <li>
-            <strong>3. Hỗ trợ</strong>
-            <span>Giao bài ôn hoặc điều chỉnh gợi ý của hệ thống.</span>
+            <strong>3. Xác nhận bài ôn</strong>
+            <span>Xem gói câu hỏi hệ thống chọn sẵn, chỉnh nếu cần rồi giao.</span>
           </li>
         </ol>
       </section>
@@ -77,7 +77,7 @@ export function TeacherClassPage() {
       {dashboard.answerEventCount === 0 ? (
         <section className="empty-state teacher-no-evidence" role="status">
           <p className="eyebrow">Chưa có bài làm trên máy chủ</p>
-          <h2>Chưa thể tạo nhóm cần hỗ trợ</h2>
+          <h2>Chưa thể xác định bài học cần ôn</h2>
           <p>
             Khi học sinh hoàn thành bài kiểm tra, hệ thống sẽ dùng câu trả lời thật để tạo nhóm.
           </p>
@@ -88,7 +88,7 @@ export function TeacherClassPage() {
       ) : null}
 
       {dashboard.answerEventCount > 0 ? (
-        <section className="teacher-filter-bar" aria-label="Lọc nhóm học sinh">
+        <section className="teacher-filter-bar" aria-label="Lọc bài học cần ôn">
           <label>
             Bài học
             <select value={topic} onChange={(event) => setTopic(event.target.value)}>
@@ -108,12 +108,12 @@ export function TeacherClassPage() {
               <option value="MONITOR">Có thể xem sau</option>
             </select>
           </label>
-          <p role="status">Có {filteredGroups.length} nhóm</p>
+          <p role="status">Có {filteredGroups.length} bài học</p>
         </section>
       ) : null}
 
       {dashboard.answerEventCount > 0 ? (
-        <section className="group-table" aria-label="Danh sách nhóm cần hỗ trợ">
+        <section className="group-table" aria-label="Danh sách bài học cần ôn">
           {filteredGroups.map((group, index) => {
             const groupName = group.rootKcId
               ? kcName(group.rootKcId)
@@ -123,7 +123,7 @@ export function TeacherClassPage() {
                 <Link
                   className="intervention-summary"
                   to={`/teacher/class/${encodeURIComponent(group.id)}`}
-                  aria-label={`Xem chi tiết và hỗ trợ nhóm ${groupName}`}
+                  aria-label={`Xem học sinh và gợi ý ôn bài ${groupName}`}
                 >
                   <span className="rank-cell" aria-label={`Thứ tự ${index + 1}`}>
                     {String(index + 1).padStart(2, '0')}
@@ -136,26 +136,32 @@ export function TeacherClassPage() {
                       <strong>{group.rootKcId ? 'Bài:' : 'Nhóm:'}</strong> {groupName}
                     </span>
                     <span className="intervention-guidance">
-                      <strong>Gợi ý:</strong> {teacherActionLabel(group.suggestedActionId)}
+                      <strong>Phương án đề xuất:</strong>{' '}
+                      {teacherActionLabel(group.suggestedActionId)}
                     </span>
+                    {group.wrongQuestions[0] ? (
+                      <span className="intervention-common-error">
+                        <strong>Lỗi thường gặp:</strong> {group.wrongQuestions[0].prompt}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="intervention-metrics">
                     <span>
-                      <small>Học sinh</small>
+                      <small>Học sinh cần ôn</small>
                       <strong>{group.totalLearnerCount}</strong>
                     </span>
                     <span>
-                      <small>Đã có đủ dữ liệu</small>
-                      <strong>
-                        {group.sufficientEvidenceCount}/{group.totalLearnerCount}
-                      </strong>
+                      <small>Tỷ lệ trong số đã làm</small>
+                      <strong>{Math.round(group.reviewLearnerRate * 100)}%</strong>
                     </span>
                     <span>
-                      <small>Cần làm trước?</small>
-                      <strong>{group.priorityScore > 0 ? 'Có' : 'Chưa'}</strong>
+                      <small>Câu trả lời sai</small>
+                      <strong>
+                        {group.wrongAnswerCount}/{group.evidenceAnswerCount}
+                      </strong>
                     </span>
                   </span>
-                  <span className="intervention-disclosure-label">Xem chi tiết và hỗ trợ</span>
+                  <span className="intervention-disclosure-label">Xem học sinh và gợi ý</span>
                 </Link>
               </article>
             );
@@ -165,7 +171,7 @@ export function TeacherClassPage() {
 
       {dashboard.answerEventCount > 0 && filteredGroups.length === 0 ? (
         <section className="empty-state" role="status">
-          <h2>Không có nhóm phù hợp</h2>
+          <h2>Không có bài học phù hợp</h2>
           <p>Thử chọn bài học khác hoặc xem tất cả nhóm.</p>
         </section>
       ) : null}

@@ -62,7 +62,8 @@ export function openDb(path: string): DatabaseSync {
       created_at TEXT NOT NULL,
       due_at TEXT,
       allow_retake INTEGER NOT NULL DEFAULT 1,
-      shuffle_answers INTEGER NOT NULL DEFAULT 0
+      shuffle_answers INTEGER NOT NULL DEFAULT 0,
+      recipient_ids_json TEXT NOT NULL DEFAULT '[]'
     );
     CREATE TABLE IF NOT EXISTS assignment_views (
       assignment_id TEXT NOT NULL REFERENCES assignments(id),
@@ -119,6 +120,9 @@ export function openDb(path: string): DatabaseSync {
   }
   if (!assignmentColumns.some((column) => column.name === 'shuffle_answers')) {
     db.exec('ALTER TABLE assignments ADD COLUMN shuffle_answers INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!assignmentColumns.some((column) => column.name === 'recipient_ids_json')) {
+    db.exec("ALTER TABLE assignments ADD COLUMN recipient_ids_json TEXT NOT NULL DEFAULT '[]';");
   }
 
   // Additive migration for databases created before email login existed.

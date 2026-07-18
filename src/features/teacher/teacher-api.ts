@@ -39,6 +39,12 @@ export interface TeacherWrongQuestionDto {
 export interface TeacherSupportGroupDto extends TeacherGroup {
   readonly learners: readonly TeacherLearnerDto[];
   readonly wrongQuestions: readonly TeacherWrongQuestionDto[];
+  readonly reviewLearnerRate: number;
+  readonly wrongAnswerCount: number;
+  readonly evidenceAnswerCount: number;
+  readonly wrongAnswerRate: number;
+  readonly recommendedKcIds: readonly string[];
+  readonly recommendedQuestionIds: readonly string[];
 }
 
 export interface TeacherOverrideDto {
