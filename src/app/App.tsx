@@ -4,6 +4,7 @@ import { AppLayout } from '../components/AppLayout';
 import { BrandMark } from '../components/BrandMark';
 import { SessionProvider, useSession, type Role } from './session';
 import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
+import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 
 const PathPage = lazy(() =>
@@ -108,11 +109,18 @@ function RequireRole({ role }: { role: Role }) {
   return <Outlet />;
 }
 
-function WorkspaceHome() {
+/**
+ * "/" introduces the product to signed-out visitors; an existing session goes
+ * straight to its workspace so the installed PWA (start_url "/") still opens
+ * on work, not marketing.
+ */
+function RootRoute() {
   const { account, ready } = useSession();
   if (!ready) return <SessionStartup />;
-  if (!account) return <Navigate to="/login" replace />;
-  return <Navigate to={account.role === 'STUDENT' ? '/student' : '/teacher'} replace />;
+  if (account) {
+    return <Navigate to={account.role === 'STUDENT' ? '/student' : '/teacher'} replace />;
+  }
+  return <LandingPage />;
 }
 
 function NotFoundPage() {
@@ -140,10 +148,10 @@ function AppContent() {
         fallback={<div className="page-loading" aria-label="Đang tải không gian làm việc" />}
       >
         <Routes>
+          <Route index element={<RootRoute />} />
           <Route path="/login" element={<LoginPage />} />
           <Route element={<RequireSession />}>
             <Route element={<AppLayout />}>
-              <Route index element={<WorkspaceHome />} />
               <Route element={<RequireRole role="STUDENT" />}>
                 <Route path="student" element={<StudentDashboardPage />} />
                 <Route path="student/check-in" element={<LearnPage />} />
