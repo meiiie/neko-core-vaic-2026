@@ -38,7 +38,7 @@ jobs:
             --project=the-wiii-lab-500306 \
             --zone=asia-southeast1-c \
             --tunnel-through-iap \
-            --command="set -eu; sudo -u Admin git -C /opt/nekopath fetch origin main; sudo -u Admin git -C /opt/nekopath checkout main; sudo -u Admin git -C /opt/nekopath pull --ff-only origin main; export GITHUB_SHA=\$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD); cd /opt/nekopath; sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app"
+            --command="set -eu; sudo -u Admin git -C /opt/nekopath fetch origin main; sudo -u Admin git -C /opt/nekopath checkout main; sudo -u Admin git -C /opt/nekopath pull --ff-only origin main; export GITHUB_SHA=\$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD); cd /opt/nekopath; bash ops/backup.sh \"\$GITHUB_SHA\"; sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app"
 
       - name: Smoke canonical URL
         run: |
