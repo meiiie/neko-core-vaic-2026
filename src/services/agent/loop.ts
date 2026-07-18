@@ -50,8 +50,22 @@ export interface AgentProvider {
 }
 
 export type AgentTraceEvent =
-  | { kind: 'tool_call'; name: string; args: Readonly<Record<string, unknown>> }
-  | { kind: 'tool_result'; name: string; ok: boolean; summary: string }
+  | { kind: 'step'; index: number; max: number }
+  | {
+      kind: 'tool_call';
+      name: string;
+      args: Readonly<Record<string, unknown>>;
+      step: number;
+    }
+  | {
+      kind: 'tool_result';
+      name: string;
+      ok: boolean;
+      summary: string;
+      durationMs: number;
+      errorCode?: string;
+      step: number;
+    }
   | { kind: 'answer'; text: string }
   | { kind: 'note'; text: string };
 
@@ -68,9 +82,10 @@ const MAX_STEPS = 4;
 const MAX_NATIVE_TOOL_CALLS = 8;
 
 export const AGENT_SYSTEM_PROMPT =
-  'Bạn là trợ lý lớp học NekoPath cho GIÁO VIÊN. Chỉ được trả lời dựa trên kết quả công cụ; ' +
-  'tuyệt đối không tự bịa số liệu hay chẩn đoán. Nếu không có công cụ phù hợp, nói rõ giới hạn. ' +
-  'Trả lời tiếng Việt, ngắn gọn, nêu rõ hành động gợi ý khi có.';
+  'Bạn là Neko, trợ lý lớp học dành cho giáo viên trong NekoPath. Kết quả công cụ là nguồn sự thật duy nhất: ' +
+  'không tự sửa quan hệ chương trình, đáp án, mức thành thạo, nhóm, độ ưu tiên hoặc nhãn đánh giá. ' +
+  'Không bịa số liệu hay chẩn đoán; bằng chứng thiếu hoặc mâu thuẫn thì nói rõ chưa đủ dữ kiện. ' +
+  'Không trình bày chuỗi suy luận nội bộ. Trả lời tiếng Việt tự nhiên, ngắn gọn, nêu nguồn và hành động gợi ý khi có.';
 
 function callKey(call: AgentToolCall): string {
   return `${call.name}:${JSON.stringify(
@@ -138,6 +153,7 @@ export async function runAgentTurn(
   let nativeToolCallCount = 0;
 
   for (let step = 1; step <= MAX_STEPS; step += 1) {
+    onTrace({ kind: 'step', index: step, max: MAX_STEPS });
     const nativeResults: { call: AgentToolCall; result: ToolExecutionResult }[] = [];
     const completion = await provider.complete(messages, tools, signal, onDelta, {
       executeTool: async (call) => {
@@ -164,7 +180,7 @@ export async function runAgentTurn(
         }
         seenCalls.add(key);
         nativeToolCallCount += 1;
-        onTrace({ kind: 'tool_call', name: call.name, args: call.args });
+        onTrace({ kind: 'tool_call', name: call.name, args: call.args, step });
         const [result] = await executeToolCalls([call], tools, signal, approveTool);
         onTrace({
           kind: 'tool_result',
@@ -173,6 +189,9 @@ export async function runAgentTurn(
           summary: result.ok
             ? JSON.stringify({ ok: true, data: result.data })
             : (result.error ?? 'lỗi không rõ'),
+          durationMs: result.durationMs,
+          errorCode: result.errorCode,
+          step,
         });
         nativeResults.push({ call, result });
         return result;
@@ -249,7 +268,7 @@ export async function runAgentTurn(
     keys.forEach((key) => seenCalls.add(key));
 
     completion.toolCalls.forEach((call) => {
-      onTrace({ kind: 'tool_call', name: call.name, args: call.args });
+      onTrace({ kind: 'tool_call', name: call.name, args: call.args, step });
     });
     const results = await executeToolCalls(completion.toolCalls, tools, signal, approveTool);
     completion.toolCalls.forEach((call, index) => {
@@ -260,6 +279,9 @@ export async function runAgentTurn(
         name: call.name,
         ok: result.ok,
         summary: result.ok ? payload : (result.error ?? 'lỗi không rõ'),
+        durationMs: result.durationMs,
+        errorCode: result.errorCode,
+        step,
       });
       messages.push({
         role: 'assistant',

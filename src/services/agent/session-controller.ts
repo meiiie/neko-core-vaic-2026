@@ -127,7 +127,7 @@ export class AgentSessionController {
         fallback: result.fallback,
       };
     } catch (error) {
-      this.messages = before;
+      if (generation === this.generation && !this.disposed) this.messages = before;
       throw error;
     } finally {
       runOptions.signal?.removeEventListener('abort', abortFromParent);

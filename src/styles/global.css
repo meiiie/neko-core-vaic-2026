@@ -4880,62 +4880,27 @@ html:has(.question-selection-actions) {
   background: var(--surface-subtle);
 }
 
-.neko-dock {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 60;
-  display: flex;
-  width: min(26rem, 100vw);
-  flex-direction: column;
-  border-left: 1px solid #1f2937;
-  background: #0c1220;
-  color: #d7e2f4;
-  font-family: ui-monospace, 'Cascadia Code', Consolas, 'Courier New', monospace;
-  font-size: 0.8125rem;
-  box-shadow: -1rem 0 2.5rem rgb(2 6 23 / 30%);
-}
-
-.neko-dock .console-log {
-  flex: 1;
-  height: auto;
-}
-
 .dock-close {
-  min-height: 2rem;
+  display: inline-flex;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
   margin-left: auto;
-  padding: 0.125rem 0.5rem;
+  padding: 0;
   border: 0;
-  border-radius: 0.375rem;
+  border-radius: 0.75rem;
   background: transparent;
-  color: #64748b;
+  color: var(--muted, #667085);
   cursor: pointer;
+  font-size: 1.5rem;
 }
 
 .dock-close:hover {
-  background: #1e293b;
-  color: #e2e8f0;
-}
-
-/* Desktop: dock pushes the workspace instead of covering it. */
-@media (min-width: 75rem) {
-  .product-workspace[data-neko-open] {
-    margin-right: 26rem;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .neko-dock {
-    animation: neko-dock-in 200ms ease-out;
-  }
-
-  @keyframes neko-dock-in {
-    from {
-      transform: translateX(1.5rem);
-      opacity: 0;
-    }
-  }
+  background: var(--surface-subtle, #f9fafb);
+  color: var(--ink, #101828);
 }
 
 /* ---------- Neko panel ---------- */
@@ -4947,6 +4912,7 @@ html:has(.question-selection-actions) {
   bottom: 0;
   z-index: 60;
   display: flex;
+  height: 100dvh;
   width: min(24.5rem, 100vw);
   flex-direction: column;
   border-left: 1px solid var(--rule, #e4e7ec);
@@ -4958,7 +4924,7 @@ html:has(.question-selection-actions) {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 1rem 1.25rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) 1.25rem 0.75rem;
   border-bottom: 1px solid var(--rule, #e4e7ec);
 }
 
@@ -4968,7 +4934,11 @@ html:has(.question-selection-actions) {
 }
 
 .neko-panel-head small {
+  display: block;
+  margin-top: 0.125rem;
   color: var(--muted, #667085);
+  font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 .neko-mark {
@@ -4988,6 +4958,7 @@ html:has(.question-selection-actions) {
   padding: 1.5rem 1.25rem;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scroll-padding-block: 1rem;
 }
 
 .neko-hello h2 {
@@ -5026,6 +4997,17 @@ html:has(.question-selection-actions) {
   max-width: 94%;
   margin-bottom: 1rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.neko-role {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--muted, #667085);
+  font-size: 0.6875rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .neko-msg p {
@@ -5042,14 +5024,66 @@ html:has(.question-selection-actions) {
   color: #fff;
 }
 
+.neko-msg--user .neko-role {
+  color: rgb(255 255 255 / 70%);
+}
+
 .neko-msg--assistant {
   margin-right: auto;
-  padding: 0.25rem 0;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--rule, #e4e7ec);
+  border-radius: 0.25rem 0.875rem 0.875rem;
+  background: var(--surface-subtle, #f9fafb);
   color: var(--ink, #101828);
 }
 
 .neko-msg--live {
+  width: 100%;
+  max-width: 100%;
+  border-color: color-mix(in srgb, var(--primary, #006c62) 24%, var(--rule, #e4e7ec));
   color: var(--muted-strong, #475467);
+}
+
+.neko-live-status {
+  display: flex;
+  min-height: 1.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.neko-live-status time {
+  margin-left: auto;
+  color: var(--muted, #667085);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.neko-pulse {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--primary, #006c62);
+}
+
+.neko-live-trace {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.625rem 0 0;
+  padding-left: 1.125rem;
+  color: var(--muted, #667085);
+  font-size: 0.75rem;
+}
+
+.neko-live-trace li[data-kind='note'] {
+  color: var(--review, #b54708);
+}
+
+.neko-stream-text {
+  margin-top: 0.75rem !important;
+  color: var(--ink, #101828);
 }
 
 .neko-sources {
@@ -5058,9 +5092,11 @@ html:has(.question-selection-actions) {
 }
 
 .neko-sources summary {
+  display: flex;
+  align-items: center;
   color: var(--muted, #667085);
   cursor: pointer;
-  min-height: 1.75rem;
+  min-height: 2.75rem;
 }
 
 .neko-sources ul {
@@ -5090,7 +5126,9 @@ html:has(.question-selection-actions) {
 }
 
 .neko-metrics summary {
-  min-height: 1.75rem;
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
   cursor: pointer;
 }
 
@@ -5144,8 +5182,75 @@ html:has(.question-selection-actions) {
   gap: 0.5rem;
 }
 
-.neko-input-row {
+.neko-notice {
+  margin: 0 1.25rem 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--rule, #e4e7ec);
+  border-radius: 0.625rem;
+  background: var(--surface-subtle, #f9fafb);
+  color: var(--muted-strong, #475467);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.neko-notice[data-kind='warning'] {
+  border-color: color-mix(in srgb, var(--review, #b54708) 32%, var(--rule, #e4e7ec));
+  color: var(--review, #b54708);
+}
+
+.neko-queue {
+  margin: 0 1.25rem 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--rule, #e4e7ec);
+  border-radius: 0.75rem;
+  background: var(--surface-subtle, #f9fafb);
+  font-size: 0.75rem;
+}
+
+.neko-queue > div,
+.neko-queue li {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.neko-queue ol {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.375rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.neko-queue li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neko-queue button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--primary, #006c62);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.neko-queue button:hover {
+  background: var(--surface, #fff);
+}
+
+.neko-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
   gap: 0.5rem;
   padding: 0.875rem 1.25rem 0.5rem;
 }
@@ -5173,25 +5278,66 @@ html:has(.question-selection-actions) {
   font-weight: 650;
 }
 
-.neko-input-row input {
-  flex: 1;
+.neko-input-row textarea {
+  width: 100%;
   min-height: 2.75rem;
-  padding: 0.5rem 1rem;
+  max-height: 8.5rem;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--rule-strong, #d0d5dd);
-  border-radius: 999px;
+  border-radius: 0.75rem;
   background: var(--surface, #fff);
+  color: var(--ink, #101828);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.4;
+  resize: none;
+  overflow-y: auto;
 }
 
-.neko-input-row input:focus-visible {
+.neko-input-row textarea:focus-visible {
   border-color: var(--primary, #155eef);
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--primary, #155eef) 22%, transparent);
+  outline-offset: 1px;
+}
+
+.neko-input-actions {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.neko-input-actions button {
+  min-height: 2.75rem;
 }
 
 .neko-foot {
+  padding: 0.25rem 1.25rem max(0.75rem, env(safe-area-inset-bottom));
+  font-size: 0.8125rem;
+}
+
+.neko-settings > summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--muted, #667085);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.neko-settings > summary small {
+  max-width: 66%;
+  overflow: hidden;
+  color: var(--muted, #667085);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neko-settings > div {
   display: grid;
   gap: 0.5rem;
-  padding: 0.25rem 1.25rem 1rem;
-  font-size: 0.8125rem;
+  padding-top: 0.25rem;
 }
 
 .neko-foot label {
@@ -5216,7 +5362,10 @@ html:has(.question-selection-actions) {
 
 .neko-chip:focus-visible,
 .neko-foot select:focus-visible,
-.neko-login a:focus-visible {
+.neko-login a:focus-visible,
+.neko-settings > summary:focus-visible,
+.neko-queue button:focus-visible,
+.dock-close:focus-visible {
   outline: 2px solid var(--primary, #006c62);
   outline-offset: 2px;
 }
@@ -5230,6 +5379,74 @@ html:has(.question-selection-actions) {
 @media (prefers-reduced-motion: no-preference) {
   .neko-panel {
     animation: neko-dock-in 200ms ease-out;
+  }
+
+  .neko-pulse {
+    animation: neko-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes neko-dock-in {
+    from {
+      transform: translateX(1.5rem);
+      opacity: 0;
+    }
+  }
+
+  @keyframes neko-pulse {
+    50% {
+      transform: scale(0.72);
+      opacity: 0.45;
+    }
+  }
+}
+
+@media (max-width: 34rem) {
+  .neko-panel {
+    width: 100vw;
+    border-left: 0;
+  }
+
+  .neko-panel-head,
+  .neko-scroll,
+  .neko-input-row,
+  .neko-foot {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .neko-scroll {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .neko-msg {
+    max-width: 96%;
+  }
+
+  .neko-notice,
+  .neko-login,
+  .neko-queue {
+    margin-right: 1rem;
+    margin-left: 1rem;
+  }
+
+  .neko-input-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .neko-input-actions button {
+    flex: 1;
+  }
+
+  .neko-foot label {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .neko-foot select {
+    width: 100%;
+    max-width: none;
   }
 }
 

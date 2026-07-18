@@ -224,4 +224,59 @@ describe('AgentSessionController memory', () => {
     expect(snapshot.messages).toHaveLength(1);
     expect(dispose).not.toHaveBeenCalled();
   });
+
+  it('does not restore stale messages after reset aborts an in-flight turn', async () => {
+    let blocked = false;
+    const provider: AgentProvider = {
+      id: 'reset-race',
+      label: 'reset-race',
+      complete: (_messages, _tools, signal) => {
+        if (!blocked) return Promise.resolve({ content: 'Lượt đầu đã xong.', toolCalls: [] });
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      },
+    };
+    const session = new AgentSessionController({
+      provider,
+      tools: [],
+      scope: { accountId: 'teacher-1', role: 'teacher', classId: '7A' },
+    });
+    await session.run('Lượt đầu');
+    blocked = true;
+    const running = session.run('Lượt đang chạy').catch((error: unknown) => error);
+
+    session.reset();
+    await running;
+
+    expect(session.snapshot()).toMatchObject({ turnCount: 0, compactionCount: 0 });
+    expect(session.snapshot().messages).toHaveLength(1);
+  });
+
+  it('does not resurrect messages after dispose aborts an in-flight turn', async () => {
+    let blocked = false;
+    const provider: AgentProvider = {
+      id: 'dispose-race',
+      label: 'dispose-race',
+      complete: (_messages, _tools, signal) => {
+        if (!blocked) return Promise.resolve({ content: 'Lượt đầu đã xong.', toolCalls: [] });
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+      },
+    };
+    const session = new AgentSessionController({
+      provider,
+      tools: [],
+      scope: { accountId: 'teacher-1', role: 'teacher', classId: '7A' },
+    });
+    await session.run('Lượt đầu');
+    blocked = true;
+    const running = session.run('Lượt đang chạy').catch((error: unknown) => error);
+
+    await session.dispose();
+    await running;
+
+    expect(session.snapshot().messages).toEqual([]);
+  });
 });
