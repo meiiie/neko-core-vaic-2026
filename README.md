@@ -27,19 +27,20 @@ asks for more evidence when the cause is ambiguous instead of guessing, and give
 prioritized, correctable intervention plan that fits a finite attention budget. Learners who have
 already mastered the target take a fast path instead of repeating a fixed lesson sequence.
 
-Built in 48 hours for **VAIC 2026** (problem: *personalized learning paths for mixed-ability
-classrooms*, Duy Tan University track) by team **Neko Core**.
+Built in 48 hours for **VAIC 2026** (problem: *Adaptive tutor for the mixed-ability classroom*,
+Duy Tan University, Education & Training track) by team **Neko Core**.
 
 ## Live deployment
 
 | Surface | URL | Notes |
 |---|---|---|
 | Product | [nekopath.holilihu.online](https://nekopath.holilihu.online) | Canonical domain, HTTPS, installable PWA |
-| Health | [/api/healthz](https://nekopath.holilihu.online/api/healthz) | Fastify liveness with build SHA |
-| Sign-in | Class-roll picker | Pick your name from the seeded Class 7A roll; no password typing, no external identity provider |
+| Health | [/api/healthz](https://nekopath.holilihu.online/api/healthz) | Fastify liveness (`status` and server time) |
+| Sign-in | Class-roll picker | Event walkthrough access; no password typing or external identity provider |
 
-The class roll and every learning event are real records in the production database — there is no
-mock session layer. Accounts are sample evaluation data, not learner PII.
+The class roll and learning events are server-backed sample records, not learner PII. The
+one-click event walkthrough is intentionally **not** presented as a production identity or
+security boundary.
 
 ## Why this design fits the problem
 
@@ -51,9 +52,12 @@ mock session layer. Accounts are sample evaluation data, not learner PII.
 - **The teacher stays in command.** A mandatory dashboard groups the class by need, verifies
   suspected patterns, and selects interventions under an explicit 15-minute teacher budget.
 - **Works where the network does not.** Rural, low-bandwidth classrooms are the stated user:
-  the PWA is local-first (IndexedDB), fully functional offline after first load, and syncs
-  through an idempotent outbox when connectivity returns.
-- **Curriculum-anchored.** Every skill and item maps to a sourced GDPT 2018 (Toán 7) outcome.
+  diagnosis, paths and the authored practice flow continue from IndexedDB after first load, and
+  learning events sync through an idempotent outbox when connectivity returns. Server-owned
+  authoring and assignment operations still require a connection.
+- **Curriculum-bounded.** The judgeable fractions-to-proportion slice is drafted against GDPT
+  2018 (Toán 7); its edges, items and wording remain `UNREVIEWED` until a named mathematics
+  teacher signs them off.
 
 ## Product capabilities
 
@@ -102,9 +106,9 @@ flowchart LR
 
 Design decisions that matter:
 
-- **Local-first, then sync.** Learning continues with zero connectivity; the outbox replays
-  events with exponential backoff and event-ID idempotency, so the server converges without
-  duplicates.
+- **Local-first, then sync.** Core diagnosis, paths and practice continue with zero connectivity;
+  the outbox replays events with exponential backoff and event-ID idempotency, so the server
+  converges without duplicates.
 - **Deterministic domain core.** Diagnosis, grouping and mastery are pure TypeScript functions
   with a disclosed synthetic evaluation suite — the UI renders runtime results, never hard-coded
   outcomes.
@@ -135,8 +139,8 @@ The full local gate mirrors CI: `format:check`, `lint`, `typecheck`, `test`, `bu
 - **CI** (`.github/workflows/ci.yml`): SHA-pinned actions, least-privilege permissions, the
   complete gate on every push and pull request.
 - **Deploy** (`.github/workflows/deploy.yml`): manual `workflow_dispatch` to the production VM;
-  the Docker build is the release gate, and the running container reports its git SHA at
-  `/api/healthz`.
+  the Docker build is the release gate. The in-product version surface reports the immutable Git
+  SHA; `/api/healthz` reports liveness and server time.
 - **Versioning**: semantic versions, annotated tags, and published
   [GitHub Releases](https://github.com/meiiie/neko-core-vaic-2026/releases); history in
   [CHANGELOG.md](CHANGELOG.md).
@@ -188,10 +192,11 @@ hypothesis and is labeled as such throughout the documentation.
 NekoPath là trợ giảng thích ứng cho lớp học đa trình độ: lần theo lỗi hiện tại của học sinh về
 đúng lỗ hổng kiến thức gốc sớm nhất có thể can thiệp, chủ động **hỏi thêm khi chưa đủ bằng
 chứng** thay vì gán nhãn sai, và trao cho giáo viên một kế hoạch can thiệp xếp ưu tiên trong
-ngân sách 15 phút. Ứng dụng là PWA **cục bộ trước** — dùng được hoàn toàn khi mất mạng, tự đồng
-bộ khi có mạng — phù hợp lớp học vùng sâu vùng xa theo đúng đề bài. Mọi kỹ năng và câu hỏi đều
-gắn với yêu cầu cần đạt của chương trình GDPT 2018 (Toán 7). Đăng nhập bằng cách chọn tên trong
-danh sách lớp, không cần gõ mật khẩu, không phụ thuộc nhà cung cấp danh tính bên ngoài.
+ngân sách 15 phút. Ứng dụng là PWA **cục bộ trước**: chẩn đoán, lộ trình và luyện tập cốt lõi
+tiếp tục khi mất mạng rồi tự đồng bộ sự kiện khi có kết nối; các thao tác do máy chủ sở hữu vẫn
+cần mạng. Lát cắt Toán 7 được biên soạn theo định hướng GDPT 2018 nhưng còn chờ giáo viên được
+nêu tên duyệt chính thức. Đăng nhập trình diễn bằng cách chọn tên trong danh sách lớp, không cần
+gõ mật khẩu và không được xem là ranh giới định danh bảo mật cho triển khai trường học thật.
 
 ## License
 
