@@ -206,6 +206,7 @@ labs/           Image-generation lab with asset register and review rubric
 | [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md) | Production topology and verification |
 | [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Submission video script with claim discipline |
 | [PROBLEM_FIT_AUDIT.md](docs/PROBLEM_FIT_AUDIT.md) | Requirement-by-requirement technical audit with measurements |
+| [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) | Team delivery rules benchmarked against industry practice |
 | [CURRICULUM_SCOPE_DECISIONS.md](docs/CURRICULUM_SCOPE_DECISIONS.md) | Team-lead-approved curriculum scope and architecture decisions |
 | [ops/RUNBOOK.md](ops/RUNBOOK.md) | Operations: deploy, accounts, recovery |
 

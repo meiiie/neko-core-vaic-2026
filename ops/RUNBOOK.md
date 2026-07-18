@@ -39,6 +39,18 @@ Expected: both services are `healthy`; origin health JSON has `"status":"ok"`; c
 
 ## Deploy a reviewed main commit
 
+The standard path is the pipeline — keyless (Workload Identity Federation), IAP-tunneled
+from GitHub's runners, serialized, smoke-tested and audited:
+
+```bash
+gh workflow run deploy.yml
+gh run watch --exit-status "$(gh run list --workflow=deploy.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
+```
+
+Everything below is **break-glass only** (pipeline red for reasons its logs cannot
+explain, or the VM unreachable by the pipeline). Report any break-glass session and what
+it touched. See `docs/ENGINEERING_STANDARDS.md`.
+
 ```bash
 sudo -u Admin git -C /opt/nekopath fetch origin main
 sudo -u Admin git -C /opt/nekopath checkout main
