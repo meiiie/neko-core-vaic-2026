@@ -1186,6 +1186,19 @@ button:disabled,
   font-size: 0.875rem;
 }
 
+details summary {
+  min-height: var(--touch-target);
+  cursor: pointer;
+  color: var(--muted-strong);
+  font-weight: 650;
+}
+
+details p,
+details li {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 .completion-panel {
   max-width: 44rem;
   padding: clamp(2rem, 6vw, 4rem);
@@ -1193,9 +1206,21 @@ button:disabled,
 }
 
 .completion-mark {
-  display: block;
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
   margin: 0 auto var(--s-5);
+  place-items: center;
+  border-radius: 50%;
+  background: var(--evidence-soft);
   color: var(--evidence);
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.completion-mark--icon {
+  display: block;
+  background: transparent;
 }
 
 /* Learning path */

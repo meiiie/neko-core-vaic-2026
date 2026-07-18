@@ -167,7 +167,12 @@ export function LearnPage() {
         </div>
       ) : (
         <section className="completion-panel">
-          <CheckCircleIcon className="completion-mark" aria-hidden="true" size={56} weight="fill" />
+          <CheckCircleIcon
+            className="completion-mark completion-mark--icon"
+            aria-hidden="true"
+            size={56}
+            weight="fill"
+          />
           <p className="eyebrow">Đã hoàn thành bài kiểm tra nền tảng</p>
           {result.status === 'NEEDS_MORE_EVIDENCE' ? (
             <>
