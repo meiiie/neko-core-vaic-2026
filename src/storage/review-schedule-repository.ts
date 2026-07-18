@@ -5,7 +5,7 @@ import {
   REVIEW_SCHEDULE_VERSION,
   reviewScheduleEventId,
   type ReviewSchedulePayload,
-} from '../domain';
+} from '../domain/review-schedule.ts';
 import type { LearnerEventRecord } from './db';
 
 export const reviewSchedulePayloadSchema = z.object({

@@ -13,6 +13,10 @@ COPY public ./public
 COPY src ./src
 COPY server ./server
 RUN npm run typecheck && npm run test -- --run && npm run build
+# Boot smoke: resolve the SERVER module graph with plain Node ESM. Vite and
+# vitest tolerate directory/extension-less imports that node cannot — twice
+# on 18/07 that gap crash-looped production while every test was green.
+RUN node --input-type=module -e "await import('./server/app.ts'); console.log('server module graph OK');"
 
 # Runtime stage — Fastify serves /api and the built PWA on one origin.
 FROM node:24.18.0-alpine AS runtime
