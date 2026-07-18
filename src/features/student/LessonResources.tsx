@@ -1,24 +1,120 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSession } from '../../app/session';
 import {
   cachedResourceObjectUrl,
   formatBytes,
   removeResourceOffline,
   resourceFileUrl,
   saveResourceOffline,
+  saveResourceProgress,
+  useResourceProgress,
   useResourcesForKc,
 } from '../../services/resources';
+import { formatDuration, resumePositionFrom } from '../../services/video-probe';
 import type { ResourceRecord } from '../../storage/db';
 
 /**
  * Multimedia attachments of a lesson: micro-learning video and PDF summary.
- * Files stream online; "Lưu ngoại tuyến" pins the full file into the device
- * cache so watching/reading survives a dead network. The download is always
- * explicit with the size shown — nothing heavy rides in silently.
+ * Files stream online (HTTP Range); "Lưu ngoại tuyến" pins the full file into
+ * the device cache so watching/reading survives a dead network. Downloads are
+ * always explicit with the size shown — nothing heavy rides in silently.
+ *
+ * Video UX follows the LMS_hohulili player: poster + duration before any
+ * bytes stream, per-learner resume position ("Tiếp tục từ 3:24"), and one
+ * silent retry that preserves the position when a flaky stream errors out.
  */
+
+const PROGRESS_SAVE_INTERVAL_SECONDS = 5;
 
 interface OfflineState {
   readonly cached: boolean;
   readonly url: string | null;
+}
+
+function VideoPlayer({
+  resource,
+  mediaUrl,
+  streaming,
+}: {
+  readonly resource: ResourceRecord;
+  readonly mediaUrl: string;
+  readonly streaming: boolean;
+}) {
+  const { account } = useSession();
+  const learnerId = account?.learnerId ?? account?.id ?? null;
+  const progress = useResourceProgress(learnerId, resource.id);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const lastSavedAtRef = useRef(0);
+  const retriedRef = useRef(false);
+  const resumeAt = resumePositionFrom(progress?.positionSeconds, progress?.durationSeconds);
+
+  function persistPosition() {
+    const video = videoRef.current;
+    if (!video || !learnerId || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    void saveResourceProgress(learnerId, resource.id, video.currentTime, video.duration);
+  }
+
+  return (
+    <figure className="video-card">
+      <video
+        ref={videoRef}
+        className="resource-video"
+        controls
+        preload="none"
+        playsInline
+        src={mediaUrl}
+        poster={resource.posterDataUrl ?? undefined}
+        onLoadedMetadata={() => {
+          const video = videoRef.current;
+          if (video && resumeAt !== null && video.currentTime < 1) {
+            video.currentTime = resumeAt;
+          }
+        }}
+        onTimeUpdate={() => {
+          const video = videoRef.current;
+          if (!video || video.paused) return;
+          if (video.currentTime - lastSavedAtRef.current >= PROGRESS_SAVE_INTERVAL_SECONDS) {
+            lastSavedAtRef.current = video.currentTime;
+            persistPosition();
+          }
+        }}
+        onPause={persistPosition}
+        onEnded={() => {
+          const video = videoRef.current;
+          if (video && learnerId && Number.isFinite(video.duration)) {
+            void saveResourceProgress(learnerId, resource.id, video.duration, video.duration);
+          }
+        }}
+        onError={() => {
+          // One silent reload preserving the position covers the common
+          // dropped-connection case; a second failure surfaces the native
+          // player error instead of looping.
+          const video = videoRef.current;
+          if (!video || !streaming || retriedRef.current) return;
+          retriedRef.current = true;
+          const position = video.currentTime;
+          video.load();
+          if (position > 0) video.currentTime = position;
+        }}
+      />
+      {resumeAt !== null ? (
+        <figcaption className="video-resume">
+          <button
+            className="text-link"
+            type="button"
+            onClick={() => {
+              const video = videoRef.current;
+              if (!video) return;
+              video.currentTime = resumeAt;
+              void video.play();
+            }}
+          >
+            Tiếp tục từ {formatDuration(resumeAt)}
+          </button>
+        </figcaption>
+      ) : null}
+    </figure>
+  );
 }
 
 function ResourceRow({ resource }: { readonly resource: ResourceRecord }) {
@@ -58,23 +154,28 @@ function ResourceRow({ resource }: { readonly resource: ResourceRecord }) {
   }
 
   const mediaUrl = offline.url ?? resourceFileUrl(resource.id);
+  const roleLabel =
+    resource.role === 'EXPLAIN'
+      ? 'Giải thích'
+      : resource.role === 'WORKED_EXAMPLE'
+        ? 'Ví dụ có lời giải'
+        : 'Tóm tắt';
+  const metaLine = [
+    resource.kind === 'VIDEO' ? 'Video bài giảng' : 'Tài liệu PDF',
+    roleLabel,
+    formatDuration(resource.durationSeconds),
+    formatBytes(resource.byteSize),
+    resource.uploadedByName ?? '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <li className="resource-row">
       <div className="resource-row-head">
         <span className="resource-copy">
           <strong>{resource.title}</strong>
-          <small>
-            {resource.kind === 'VIDEO' ? 'Video bài giảng' : 'Tài liệu PDF'} ·{' '}
-            {resource.role === 'EXPLAIN'
-              ? 'Giải thích'
-              : resource.role === 'WORKED_EXAMPLE'
-                ? 'Ví dụ có lời giải'
-                : 'Tóm tắt'}{' '}
-            · {formatBytes(resource.byteSize)}
-            {resource.durationSeconds ? ` · ${Math.ceil(resource.durationSeconds / 60)} phút` : ''}
-            {resource.uploadedByName ? ` · ${resource.uploadedByName}` : ''}
-          </small>
+          <small>{metaLine}</small>
         </span>
         <span className="resource-actions">
           {resource.kind === 'PDF' ? (
@@ -99,7 +200,7 @@ function ResourceRow({ resource }: { readonly resource: ResourceRecord }) {
       </div>
       {resource.kind === 'VIDEO' ? (
         <>
-          <video className="resource-video" controls preload="none" src={mediaUrl} />
+          <VideoPlayer resource={resource} mediaUrl={mediaUrl} streaming={offline.url === null} />
           <details>
             <summary>Transcript video</summary>
             <p>

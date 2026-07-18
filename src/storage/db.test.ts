@@ -37,7 +37,7 @@ describe('Dexie schema', () => {
     }
   });
 
-  it('opens at v5 with curated resource metadata and scoped agent sessions', async () => {
+  it('opens at v5 with curated resource metadata and video resume positions', async () => {
     const database = makeDb();
     dbs.push(database);
     await database.open();
@@ -50,6 +50,7 @@ describe('Dexie schema', () => {
       'meta',
       'outbox',
       'overrides',
+      'resourceProgress',
       'resources',
     ]);
   });

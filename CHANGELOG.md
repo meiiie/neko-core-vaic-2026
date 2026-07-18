@@ -5,6 +5,40 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.11.0] — 2026-07-19
+
+The complete multimedia flow, distilled from the team's mature LMS at atomic level.
+
+### Added
+
+- **Pre-upload video probe on the teacher's device** (LMS_hohulili
+  `video-probe` pattern, as YouTube Studio does): duration, frame size and a
+  real poster frame are read from the file before any byte leaves the machine,
+  shown for confirmation, and stored with the resource — zero server-side
+  transcoding. The probe auto-fills the duration field; curated metadata
+  (role, grade band, transcript, review state) rides in the same upload.
+- **Drag-drop upload zone** with keyboard access and a byte-true progress bar
+  (XMLHttpRequest upload events), replacing the bare file input.
+- **Student video player card**: poster and duration visible before any bytes
+  stream, per-learner resume position — "Tiếp tục từ 3:24" — kept local-first
+  in the device database like scroll position, and one silent stream retry
+  that preserves the position on flaky connections.
+- **Deep-linkable authoring URLs**: `/teacher/lessons/K02` addresses one
+  skill's materials directly (course-editor routing pattern).
+- Resource rows now show kind chips, duration, size, publish/review state and
+  uploader attribution in one metadata line on both teacher and student
+  surfaces.
+
+### Changed
+
+- Local database schema v5 adds per-learner video resume positions alongside
+  the curated resource indexes; existing devices upgrade in place from any
+  prior version.
+- Server `resources` table gains probed media metadata columns via additive,
+  idempotent migration — verified against both fresh and existing databases.
+- Video duration accepts fractional seconds end-to-end (the probe reads real
+  values like 204.8s; an integer-only rule would reject honest data).
+
 ## [0.10.0] — 2026-07-18
 
 The hardened Neko classroom-assistant release.
@@ -235,6 +269,7 @@ Baseline release for the per-feature deepening phase.
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.11.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.7.0...v0.8.0

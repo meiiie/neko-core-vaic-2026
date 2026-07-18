@@ -21,7 +21,12 @@ async function makeApp(options?: AppOptions) {
 }
 
 /** Hand-rolled multipart body so upload tests need no extra dependency. */
-function multipartUpload(fields: Record<string, string>, fileName: string, fileBody: Buffer) {
+function multipartUpload(
+  fields: Record<string, string>,
+  fileName: string,
+  fileBody: Buffer,
+  mimeType = 'application/pdf',
+) {
   const boundary = 'X-NEKOPATH-TEST-BOUNDARY';
   const parts: Buffer[] = [];
   for (const [name, value] of Object.entries(fields)) {
@@ -34,7 +39,7 @@ function multipartUpload(fields: Record<string, string>, fileName: string, fileB
   parts.push(
     Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\n` +
-        `Content-Type: application/pdf\r\n\r\n`,
+        `Content-Type: ${mimeType}\r\n\r\n`,
     ),
     fileBody,
     Buffer.from(`\r\n--${boundary}--\r\n`),
@@ -1347,6 +1352,89 @@ describe('NekoPath API', () => {
       cookies: student,
     });
     expect(gone.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it('stores client-probed video metadata and ignores it for PDFs', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const poster = `data:image/jpeg;base64,${Buffer.from('poster-bytes').toString('base64')}`;
+
+    const video = multipartUpload(
+      {
+        kcId: 'K03',
+        title: 'Video 3 phút — Rút gọn phân số',
+        role: 'EXPLAIN',
+        durationSeconds: '204.8',
+        transcriptVi: '',
+        sortOrder: '0',
+        status: 'DRAFT',
+        reviewState: 'UNREVIEWED',
+        gradeMin: '5',
+        gradeMax: '7',
+        mediaWidth: '1280',
+        mediaHeight: '720',
+        posterDataUrl: poster,
+      },
+      'rut-gon.mp4',
+      Buffer.from('not-really-mp4-but-server-trusts-mime'),
+      'video/mp4',
+    );
+    const createdVideo = await app.inject({
+      method: 'POST',
+      url: '/api/resources',
+      cookies: teacher,
+      headers: video.headers,
+      payload: video.payload,
+    });
+    expect(createdVideo.statusCode).toBe(201);
+
+    // Probed media metadata is best-effort: a PDF never carries any.
+    const pdf = multipartUpload(
+      {
+        kcId: 'K03',
+        title: 'Phiếu tóm tắt rút gọn',
+        role: 'SUMMARY',
+        sortOrder: '0',
+        status: 'DRAFT',
+        reviewState: 'UNREVIEWED',
+        gradeMin: '5',
+        gradeMax: '7',
+        posterDataUrl: 'data:image/jpeg;base64,ignored-for-pdf',
+      },
+      'rut-gon.pdf',
+      Buffer.from('%PDF-1.4 test'),
+    );
+    const createdPdf = await app.inject({
+      method: 'POST',
+      url: '/api/resources',
+      cookies: teacher,
+      headers: pdf.headers,
+      payload: pdf.payload,
+    });
+    expect(createdPdf.statusCode).toBe(201);
+
+    const listed = await app.inject({ method: 'GET', url: '/api/resources', cookies: teacher });
+    const rows = (
+      listed.json() as {
+        resources: {
+          kind: string;
+          durationSeconds: number | null;
+          mediaWidth: number | null;
+          mediaHeight: number | null;
+          posterDataUrl: string | null;
+        }[];
+      }
+    ).resources.filter((row) => ['VIDEO', 'PDF'].includes(row.kind));
+    const videoRow = rows.find((row) => row.kind === 'VIDEO');
+    const pdfRow = rows.find((row) => row.kind === 'PDF');
+    expect(videoRow).toMatchObject({
+      durationSeconds: 204.8,
+      mediaWidth: 1280,
+      mediaHeight: 720,
+      posterDataUrl: poster,
+    });
+    expect(pdfRow).toMatchObject({ durationSeconds: null, posterDataUrl: null });
     await app.close();
   });
 

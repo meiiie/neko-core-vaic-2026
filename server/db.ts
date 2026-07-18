@@ -131,7 +131,10 @@ export function openDb(path: string): DatabaseSync {
       grade_min INTEGER NOT NULL DEFAULT 5,
       grade_max INTEGER NOT NULL DEFAULT 7,
       uploaded_by TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      media_width INTEGER,
+      media_height INTEGER,
+      poster_data_url TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_resources_kc ON resources(kc_id);
     CREATE TABLE IF NOT EXISTS sync_conflicts (
@@ -203,5 +206,10 @@ export function openDb(path: string): DatabaseSync {
   addResourceColumn('review_state', "TEXT NOT NULL DEFAULT 'UNREVIEWED'");
   addResourceColumn('grade_min', 'INTEGER NOT NULL DEFAULT 5');
   addResourceColumn('grade_max', 'INTEGER NOT NULL DEFAULT 7');
+  // Media metadata probed on the teacher's device before upload (frame size,
+  // poster thumbnail); duration is covered above.
+  addResourceColumn('media_width', 'INTEGER');
+  addResourceColumn('media_height', 'INTEGER');
+  addResourceColumn('poster_data_url', 'TEXT');
   return db;
 }

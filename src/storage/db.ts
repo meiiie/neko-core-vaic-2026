@@ -90,6 +90,25 @@ export interface ResourceRecord {
   gradeMax: number;
   createdAt: string;
   uploadedByName: string | null;
+  /** Probed on the teacher's device before upload; absent for pre-v0.10 rows. */
+  mediaWidth?: number | null;
+  mediaHeight?: number | null;
+  posterDataUrl?: string | null;
+}
+
+/**
+ * Where this learner last stopped inside a video, per device. Local-first on
+ * purpose: resume position is a device concern (like scroll position), so it
+ * never rides the sync outbox or blocks on the network.
+ */
+export interface ResourceProgressRecord {
+  /** `${learnerId}:${resourceId}` — progress is per learner even on shared devices. */
+  id: string;
+  learnerId: string;
+  resourceId: string;
+  positionSeconds: number;
+  durationSeconds: number;
+  updatedAt: string;
 }
 
 export const DB_NAME = 'nekopath';
@@ -103,6 +122,7 @@ export class NekoPathDb extends Dexie {
   agentSessions!: Table<AgentSessionRecord, string>;
   lessons!: Table<LessonRecord, string>;
   resources!: Table<ResourceRecord, string>;
+  resourceProgress!: Table<ResourceProgressRecord, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
@@ -123,8 +143,12 @@ export class NekoPathDb extends Dexie {
     this.version(4).stores({
       resources: 'id, kcId',
     });
+    // v5: richer resource indexes for the curated library plus per-learner
+    // video resume positions. Non-indexed fields (duration, poster) need no
+    // schema entry — Dexie stores them as-is.
     this.version(DB_SCHEMA_VERSION).stores({
       resources: 'id, kcId, status, reviewState, sortOrder',
+      resourceProgress: 'id, [learnerId+resourceId]',
     });
   }
 }

@@ -1,5 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type NekoPathDb, type ResourceRecord } from '../storage/db';
+import {
+  db,
+  type NekoPathDb,
+  type ResourceProgressRecord,
+  type ResourceRecord,
+} from '../storage/db';
+import type { VideoProbeResult } from './video-probe';
 
 /**
  * Learning resources (PDF / short video), LMS_hohulili course-download
@@ -145,40 +151,65 @@ export interface ResourceUploadMetadata {
   readonly gradeMax: number;
 }
 
+export interface UploadOptions {
+  /** Client-side probe result for videos; sent as best-effort metadata fields. */
+  readonly probe?: VideoProbeResult;
+  /** Real byte-level upload progress in [0, 1] — XMLHttpRequest, since fetch cannot report it. */
+  readonly onProgress?: (fraction: number) => void;
+  readonly database?: NekoPathDb;
+}
+
 /** Teacher upload (multipart). The server enforces role, size and type. */
 export async function uploadResource(
   kcId: string,
   metadata: ResourceUploadMetadata,
   file: File,
-  database: NekoPathDb = db,
+  options: UploadOptions = {},
 ): Promise<UploadResult> {
-  try {
-    const form = new FormData();
-    form.append('kcId', kcId);
-    form.append('title', metadata.title);
-    form.append('role', metadata.role);
-    form.append('durationSeconds', metadata.durationSeconds?.toString() ?? '');
-    form.append('transcriptVi', metadata.transcriptVi);
-    form.append('sortOrder', metadata.sortOrder.toString());
-    form.append('status', metadata.status);
-    form.append('reviewState', metadata.reviewState);
-    form.append('gradeMin', metadata.gradeMin.toString());
-    form.append('gradeMax', metadata.gradeMax.toString());
-    form.append('file', file);
-    const response = await fetch('/api/resources', {
-      method: 'POST',
-      credentials: 'include',
-      body: form,
+  const database = options.database ?? db;
+  // Fields must precede the file part: @fastify/multipart exposes only the
+  // fields it has already seen when the file stream begins.
+  const form = new FormData();
+  form.append('kcId', kcId);
+  form.append('title', metadata.title);
+  form.append('role', metadata.role);
+  const probe = options.probe;
+  // The device probe is authoritative for duration when it succeeded; the
+  // typed metadata value is the fallback for formats the probe cannot open.
+  const durationSeconds = probe?.durationSeconds ?? metadata.durationSeconds;
+  form.append('durationSeconds', durationSeconds?.toString() ?? '');
+  form.append('transcriptVi', metadata.transcriptVi);
+  form.append('sortOrder', metadata.sortOrder.toString());
+  form.append('status', metadata.status);
+  form.append('reviewState', metadata.reviewState);
+  form.append('gradeMin', metadata.gradeMin.toString());
+  form.append('gradeMax', metadata.gradeMax.toString());
+  if (probe?.width) form.append('mediaWidth', String(probe.width));
+  if (probe?.height) form.append('mediaHeight', String(probe.height));
+  if (probe?.posterDataUrl) form.append('posterDataUrl', probe.posterDataUrl);
+  form.append('file', file);
+
+  const status = await new Promise<number>((resolve) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', '/api/resources');
+    request.withCredentials = true;
+    request.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        options.onProgress?.(Math.min(1, event.loaded / event.total));
+      }
     });
-    if (response.status === 413) return 'TOO_LARGE';
-    if (response.status === 415) return 'UNSUPPORTED';
-    if (response.status === 400) return 'INVALID';
-    if (!response.ok) return 'FAILED';
-    await refreshResources(database);
-    return 'UPLOADED';
-  } catch {
-    return 'FAILED';
-  }
+    request.addEventListener('load', () => resolve(request.status));
+    request.addEventListener('error', () => resolve(0));
+    request.addEventListener('abort', () => resolve(0));
+    request.send(form);
+  });
+
+  if (status === 413) return 'TOO_LARGE';
+  if (status === 415) return 'UNSUPPORTED';
+  if (status === 400) return 'INVALID';
+  if (status < 200 || status >= 300) return 'FAILED';
+  await refreshResources(database);
+  return 'UPLOADED';
 }
 
 export async function deleteResource(
@@ -202,4 +233,41 @@ export async function deleteResource(
 export function formatBytes(byteSize: number): string {
   if (byteSize >= 1024 * 1024) return `${(byteSize / (1024 * 1024)).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(byteSize / 1024))} KB`;
+}
+
+/**
+ * Per-learner, per-device video resume position ("continue from 3:24").
+ * Local-first like scroll position: it never rides the sync outbox.
+ */
+
+export async function saveResourceProgress(
+  learnerId: string,
+  resourceId: string,
+  positionSeconds: number,
+  durationSeconds: number,
+  database: NekoPathDb = db,
+): Promise<void> {
+  if (!learnerId || !Number.isFinite(positionSeconds) || positionSeconds < 0) return;
+  try {
+    await database.resourceProgress.put({
+      id: `${learnerId}:${resourceId}`,
+      learnerId,
+      resourceId,
+      positionSeconds,
+      durationSeconds,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch {
+    // Losing a resume position must never surface as an app error.
+  }
+}
+
+export function useResourceProgress(
+  learnerId: string | null,
+  resourceId: string,
+): ResourceProgressRecord | undefined {
+  return useLiveQuery(
+    async () => (learnerId ? db.resourceProgress.get(`${learnerId}:${resourceId}`) : undefined),
+    [learnerId, resourceId],
+  );
 }

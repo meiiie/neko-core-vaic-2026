@@ -6,12 +6,22 @@ import {
   useResourcesForKc,
   type UploadResult,
 } from '../../services/resources';
+import {
+  EMPTY_PROBE,
+  formatDuration,
+  formatResolution,
+  probeVideoFile,
+  titleFromFileName,
+  type VideoProbeResult,
+} from '../../services/video-probe';
 
 /**
- * Teacher attachments for one skill: upload a compressed micro-learning
- * video (mp4/webm) or a PDF summary; students receive it on their next
- * refresh and can pin it offline. Size and type limits are enforced
- * server-side; this panel just reports them honestly.
+ * Teacher attachments for one skill, following the LMS_hohulili
+ * video-upload flow: drag-drop or pick a file, probe video metadata on this
+ * device (duration, frame size, poster) so the teacher confirms what the
+ * class receives, then upload with real byte progress. Curated metadata
+ * (role, grade band, review state) rides along; students only ever see
+ * resources that are both published and review-accepted.
  */
 
 const UPLOAD_MESSAGES: Record<Exclude<UploadResult, 'UPLOADED'>, string> = {
@@ -20,6 +30,17 @@ const UPLOAD_MESSAGES: Record<Exclude<UploadResult, 'UPLOADED'>, string> = {
   INVALID: 'Metadata chưa hợp lệ. Bản xuất bản phải được duyệt và video cần có thời lượng.',
   FAILED: 'Không tải lên được. Kiểm tra mạng rồi thử lại.',
 };
+
+const ACCEPTED_TYPES = new Set(['application/pdf', 'video/mp4', 'video/webm']);
+
+interface SelectedFile {
+  readonly file: File;
+  readonly isVideo: boolean;
+  /** null while the probe is still running; EMPTY_PROBE when it failed. */
+  readonly probe: VideoProbeResult | null;
+}
+
+type PanelState = 'idle' | 'selected' | 'uploading' | 'done' | 'error';
 
 export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
   const resources = useResourcesForKc(kcId);
@@ -33,17 +54,53 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
   const [reviewState, setReviewState] = useState<'UNREVIEWED' | 'ACCEPTED' | 'REVISE' | 'REJECTED'>(
     'UNREVIEWED',
   );
-  const [isVideo, setIsVideo] = useState(false);
-  const [state, setState] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+  const [state, setState] = useState<PanelState>('idle');
   const [message, setMessage] = useState('');
+  const [selected, setSelected] = useState<SelectedFile | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  function takeFile(file: File | undefined) {
+    if (!file || state === 'uploading') return;
+    if (!ACCEPTED_TYPES.has(file.type)) {
+      setState('error');
+      setMessage(UPLOAD_MESSAGES.UNSUPPORTED);
+      return;
+    }
+    const isVideo = file.type.startsWith('video/');
+    setSelected({ file, isVideo, probe: isVideo ? null : EMPTY_PROBE });
+    setTitle((current) => current.trim() || titleFromFileName(file.name));
+    setState('selected');
+    setMessage('');
+    if (isVideo) {
+      void probeVideoFile(file).then((probe) => {
+        setSelected((current) =>
+          current && current.file === file ? { ...current, probe } : current,
+        );
+        // The probe fills the duration for the teacher; the field stays
+        // editable as a fallback for files the browser cannot decode.
+        if (probe.durationSeconds) {
+          setDurationSeconds(String(Math.round(probe.durationSeconds)));
+        }
+      });
+    }
+  }
+
+  function clearSelection() {
+    setSelected(null);
+    setState('idle');
+    setMessage('');
+    setProgress(0);
+    if (fileRef.current) fileRef.current.value = '';
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file || state === 'uploading') return;
+    if (!selected || state === 'uploading') return;
     setState('uploading');
     setMessage('');
+    setProgress(0);
     const result = await uploadResource(
       kcId,
       {
@@ -57,19 +114,32 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
         gradeMin: Number(gradeMin),
         gradeMax: Number(gradeMax),
       },
-      file,
+      selected.file,
+      {
+        probe: selected.probe ?? undefined,
+        onProgress: setProgress,
+      },
     );
     if (result === 'UPLOADED') {
-      setState('done');
+      clearSelection();
       setTitle('');
       setDurationSeconds('');
       setTranscriptVi('');
-      if (fileRef.current) fileRef.current.value = '';
+      setState('done');
     } else {
       setState('error');
       setMessage(UPLOAD_MESSAGES[result]);
     }
   }
+
+  const probe = selected?.probe;
+  const probeMeta = [
+    selected ? formatBytes(selected.file.size) : '',
+    formatDuration(probe?.durationSeconds),
+    formatResolution(probe?.width, probe?.height),
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <section className="summary-panel resource-admin" aria-labelledby="resource-admin-heading">
@@ -80,11 +150,21 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
           {resources.map((resource) => (
             <li key={resource.id} className="resource-row">
               <div className="resource-row-head">
+                <span className={`resource-kind resource-kind-${resource.kind.toLowerCase()}`}>
+                  {resource.kind === 'VIDEO' ? 'Video' : 'PDF'}
+                </span>
                 <span className="resource-copy">
                   <strong>{resource.title}</strong>
                   <small>
-                    {resource.kind === 'VIDEO' ? 'Video' : 'PDF'} · {resource.role} ·{' '}
-                    {formatBytes(resource.byteSize)} · {resource.status} · {resource.reviewState}
+                    {[
+                      formatBytes(resource.byteSize),
+                      formatDuration(resource.durationSeconds),
+                      resource.status === 'PUBLISHED' ? 'Đã xuất bản' : 'Bản nháp',
+                      resource.reviewState === 'ACCEPTED' ? 'đã duyệt' : 'chưa duyệt xong',
+                      resource.uploadedByName ?? '',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </small>
                 </span>
                 <button
@@ -106,6 +186,67 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
       )}
 
       <form className="resource-upload" onSubmit={(event) => void submit(event)}>
+        {!selected && state !== 'uploading' ? (
+          <div
+            className={dragOver ? 'upload-zone upload-zone-active' : 'upload-zone'}
+            role="button"
+            tabIndex={0}
+            aria-label="Chọn hoặc kéo thả tệp PDF, MP4, WebM"
+            onClick={() => fileRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragOver(false);
+              takeFile(event.dataTransfer.files?.[0]);
+            }}
+          >
+            <p className="upload-zone-title">
+              Kéo thả tệp vào đây hoặc <span className="text-link">chọn tệp</span>
+            </p>
+            <p className="upload-zone-hint">PDF, MP4 hoặc WebM · tối đa 60 MB</p>
+          </div>
+        ) : null}
+        <input
+          ref={fileRef}
+          className="visually-hidden"
+          type="file"
+          accept="application/pdf,video/mp4,video/webm"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(event) => takeFile(event.target.files?.[0])}
+        />
+
+        {selected ? (
+          <div className="upload-preview">
+            {selected.isVideo && probe?.posterDataUrl ? (
+              <img className="upload-poster" src={probe.posterDataUrl} alt="" />
+            ) : null}
+            <div className="resource-copy">
+              <strong>{selected.file.name}</strong>
+              <small>
+                {selected.isVideo && probe === null
+                  ? `${formatBytes(selected.file.size)} · đang đọc thông tin video…`
+                  : probeMeta}
+              </small>
+            </div>
+            {state !== 'uploading' ? (
+              <button className="button-secondary" type="button" onClick={clearSelection}>
+                Chọn tệp khác
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <label>
           Tên hiển thị
           <input
@@ -148,10 +289,10 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
             />
           </label>
         </div>
-        {isVideo ? (
+        {selected?.isVideo ? (
           <>
             <label>
-              Thời lượng video (giây)
+              Thời lượng video (giây — tự đọc từ tệp, sửa được nếu cần)
               <input
                 required
                 min={1}
@@ -193,20 +334,29 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
             </select>
           </label>
         </div>
-        <label>
-          Chọn tệp (PDF, MP4, WebM · tối đa 60 MB)
-          <input
-            ref={fileRef}
-            required
-            type="file"
-            accept="application/pdf,video/mp4,video/webm"
-            onChange={(event) =>
-              setIsVideo(event.target.files?.[0]?.type.startsWith('video/') ?? false)
-            }
-          />
-        </label>
+
+        {state === 'uploading' ? (
+          <div
+            className="upload-progress"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+          >
+            <div
+              className="upload-progress-bar"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+            <small>Đang tải lên… {Math.round(progress * 100)}%</small>
+          </div>
+        ) : null}
+
         <div className="inline-actions">
-          <button className="button-primary" type="submit" disabled={state === 'uploading'}>
+          <button
+            className="button-primary"
+            type="submit"
+            disabled={!selected || state === 'uploading'}
+          >
             {state === 'uploading'
               ? 'Đang tải lên…'
               : status === 'PUBLISHED'

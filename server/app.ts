@@ -211,7 +211,9 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
   // resources (up to RESOURCE_MAX_BYTES) both stream through this plugin;
   // per-route validation enforces the tighter domain rules.
   void app.register(fastifyMultipart, {
-    limits: { files: 1, fields: 12, parts: 14, fileSize: RESOURCE_MAX_BYTES },
+    // 13 resource fields today (curated metadata + probed media); headroom of
+    // three keeps the next added field from silently truncating an upload.
+    limits: { files: 1, fields: 16, parts: 18, fileSize: RESOURCE_MAX_BYTES },
   });
   app.addHook('onRequest', (_request, reply, done) => {
     void reply.header('Origin-Agent-Cluster', '?1');
@@ -1334,6 +1336,10 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     grade_max: number;
     created_at: string;
     uploaded_by_name: string | null;
+    duration_seconds: number | null;
+    media_width: number | null;
+    media_height: number | null;
+    poster_data_url: string | null;
   }) => ({
     id: row.id,
     kcId: row.kc_id,
@@ -1353,7 +1359,23 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     gradeMax: row.grade_max,
     createdAt: row.created_at,
     uploadedByName: row.uploaded_by_name,
+    mediaWidth: row.media_width,
+    mediaHeight: row.media_height,
+    posterDataUrl: row.poster_data_url,
   });
+
+  // Frame size and JPEG poster probed on the teacher's device before upload.
+  // Best-effort by design: invalid values are dropped, never a reason to
+  // reject the file itself. (Duration is validated with the curated metadata.)
+  const RESOURCE_POSTER_MAX_CHARS = 64_000;
+  const probedDimension = (raw: string): number | null => {
+    const value = Number(raw);
+    return Number.isInteger(value) && value >= 16 && value <= 7680 ? value : null;
+  };
+  const probedPoster = (raw: string): string | null =>
+    /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(raw) && raw.length <= RESOURCE_POSTER_MAX_CHARS
+      ? raw
+      : null;
 
   app.get('/api/resources', (request, reply) => {
     const user = requireUser(request, reply);
@@ -1426,7 +1448,16 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       ) {
         return reply.code(400).send({ error: 'INVALID_GRADE_BAND' });
       }
-      if (kind === 'VIDEO' && (!Number.isInteger(durationSeconds) || durationSeconds! <= 0)) {
+      // Fractional seconds are the norm: the client probe reads the real
+      // duration from the file (e.g. 204.8s), so only finiteness and range
+      // are enforced — an integer requirement would reject honest values.
+      if (
+        kind === 'VIDEO' &&
+        (durationSeconds === null ||
+          !Number.isFinite(durationSeconds) ||
+          durationSeconds <= 0 ||
+          durationSeconds > 4 * 3600)
+      ) {
         return reply.code(400).send({ error: 'VIDEO_DURATION_REQUIRED' });
       }
 
@@ -1440,12 +1471,13 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         return reply.code(413).send({ error: 'FILE_TOO_LARGE' });
       }
       const byteSize = statSync(filePath).size;
+      const isVideo = kind === 'VIDEO';
       db.prepare(
         `INSERT INTO resources
          (id, kc_id, kind, role, title, file_name, mime_type, duration_seconds, transcript_vi,
           byte_size, sha256, sort_order, status, review_state, grade_min, grade_max,
-          uploaded_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          uploaded_by, created_at, media_width, media_height, poster_data_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         kcId,
@@ -1465,6 +1497,9 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         gradeMax,
         user.id,
         new Date().toISOString(),
+        isVideo ? probedDimension(fieldValue('mediaWidth')) : null,
+        isVideo ? probedDimension(fieldValue('mediaHeight')) : null,
+        isVideo ? probedPoster(fieldValue('posterDataUrl')) : null,
       );
       return reply.code(201).send({ id, byteSize });
     },

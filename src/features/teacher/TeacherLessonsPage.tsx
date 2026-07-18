@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { refreshLessons, saveLesson, useLessonList } from '../../services/lessons';
 import { TeacherResourcePanel } from './TeacherResourcePanel';
 import type { LessonRecord } from '../../storage/db';
@@ -8,6 +9,10 @@ import type { LessonRecord } from '../../storage/db';
  * the lesson under the teacher's name and every student device mirrors it on
  * the next refresh. Team-seeded drafts are the starting point, not the
  * product: this page exists so real teachers replace them.
+ *
+ * The selected skill lives in the URL (/teacher/lessons/K02) so a teacher can
+ * bookmark or share exactly the material they are working on — the
+ * LMS_hohulili course-editor routing pattern.
  */
 
 interface FormState {
@@ -122,7 +127,8 @@ function LessonForm({ lesson }: { readonly lesson: LessonRecord }) {
 
 export function TeacherLessonsPage() {
   const lessons = useLessonList();
-  const [selectedKcId, setSelectedKcId] = useState<string | null>(null);
+  const { kcId: selectedKcId } = useParams<{ kcId: string }>();
+  const navigate = useNavigate();
 
   const selected =
     lessons && lessons.length > 0
@@ -159,7 +165,7 @@ export function TeacherLessonsPage() {
                 key={lesson.kcId}
                 type="button"
                 data-selected={lesson.kcId === selected?.kcId || undefined}
-                onClick={() => setSelectedKcId(lesson.kcId)}
+                onClick={() => void navigate(`/teacher/lessons/${lesson.kcId}`, { replace: true })}
               >
                 <span>
                   <strong>{lesson.title}</strong>
@@ -181,7 +187,9 @@ export function TeacherLessonsPage() {
           {selected ? (
             <div className="lesson-admin-detail">
               <LessonForm key={`${selected.kcId}:${selected.updatedAt}`} lesson={selected} />
-              <TeacherResourcePanel kcId={selected.kcId} />
+              {/* Keyed remount resets the whole upload flow — a half-filled form
+                  must never upload under a different kcId than is on screen. */}
+              <TeacherResourcePanel key={selected.kcId} kcId={selected.kcId} />
             </div>
           ) : null}
         </section>

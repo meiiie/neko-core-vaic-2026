@@ -169,6 +169,7 @@ function AppContent() {
                 <Route path="teacher/class/:groupId" element={<TeacherGroupDetailPage />} />
                 <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
                 <Route path="teacher/lessons" element={<TeacherLessonsPage />} />
+                <Route path="teacher/lessons/:kcId" element={<TeacherLessonsPage />} />
                 <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
               </Route>
               <Route path="system" element={<SystemPage />} />

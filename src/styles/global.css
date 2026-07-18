@@ -5877,9 +5877,20 @@ html:has(.question-selection-actions) {
 
 .resource-video {
   width: 100%;
-  max-height: 22rem;
+  aspect-ratio: 16 / 9;
   border-radius: var(--radius-sm);
   background: #000;
+}
+
+.video-card {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+}
+
+.video-resume {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 .resource-upload {
@@ -5888,6 +5899,128 @@ html:has(.question-selection-actions) {
   margin-top: var(--s-4);
   padding-top: var(--s-4);
   border-top: 1px solid var(--rule);
+}
+
+.resource-kind {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0.125rem var(--s-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.resource-kind-video {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  color: var(--primary);
+}
+
+.resource-kind-pdf {
+  background: var(--surface-subtle);
+  color: var(--muted);
+  border: 1px solid var(--rule);
+}
+
+/* Drag-drop upload zone: dashed rest state, solid + tinted when a file hovers. */
+.upload-zone {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-5) var(--s-4);
+  border: 1.5px dashed var(--rule);
+  border-radius: var(--radius-md);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.upload-zone:hover,
+.upload-zone:focus-visible {
+  border-color: var(--primary);
+}
+
+.upload-zone-active {
+  border-style: solid;
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+
+.upload-zone-title {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+
+.upload-zone-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+}
+
+/* Pre-upload confirmation card: poster thumbnail at 16:9, probed metadata. */
+.upload-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.upload-preview .resource-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.upload-preview .resource-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-poster {
+  width: 6rem;
+  aspect-ratio: 16 / 9;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: #000;
+}
+
+/* Byte-true progress: a track pseudo-element under a width-driven bar. */
+.upload-progress {
+  position: relative;
+  display: grid;
+  gap: var(--s-1);
+}
+
+.upload-progress::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--rule);
+}
+
+.upload-progress-bar {
+  position: relative;
+  height: 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--primary);
+  transition: width 200ms ease;
+}
+
+.upload-progress small {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
 }
 
 .lesson-admin-detail {
