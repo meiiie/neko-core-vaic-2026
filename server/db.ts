@@ -15,6 +15,8 @@ export function openDb(path: string): DatabaseSync {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
+      email TEXT,
+      google_sub TEXT,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('STUDENT','TEACHER')),
       name TEXT NOT NULL,
@@ -97,5 +99,14 @@ export function openDb(path: string): DatabaseSync {
   if (!assignmentColumns.some((column) => column.name === 'shuffle_answers')) {
     db.exec('ALTER TABLE assignments ADD COLUMN shuffle_answers INTEGER NOT NULL DEFAULT 0;');
   }
+
+  // Additive migration for databases created before email login existed.
+  const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+  if (!userColumns.some((column) => column.name === 'email')) {
+    db.exec('ALTER TABLE users ADD COLUMN email TEXT;');
+  }
+  db.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;',
+  );
   return db;
 }

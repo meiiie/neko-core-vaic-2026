@@ -13,11 +13,14 @@ async function makeApp(options?: AppOptions) {
   return app;
 }
 
-async function loginCookie(app: Awaited<ReturnType<typeof makeApp>>, username: string) {
+const TEACHER_EMAIL = 'co.ha@nekopath.edu.vn';
+const STUDENT_EMAIL = 'an@nekopath.edu.vn';
+
+async function loginCookie(app: Awaited<ReturnType<typeof makeApp>>, email: string) {
   const response = await app.inject({
     method: 'POST',
     url: '/api/auth/login',
-    payload: { username, password: DEMO_PASSWORD },
+    payload: { email, password: DEMO_PASSWORD },
   });
   expect(response.statusCode).toBe(200);
   const cookie = response.cookies.find((c) => c.name === 'nekopath_sid');
@@ -28,7 +31,7 @@ async function loginCookie(app: Awaited<ReturnType<typeof makeApp>>, username: s
 describe('NekoPath API', () => {
   it('reports provider availability without exposing secrets', async () => {
     const app = await makeApp({ openAiApiKey: '' });
-    const teacher = await loginCookie(app, 'co.ha');
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
     const response = await app.inject({
       method: 'GET',
       url: '/api/ai/providers',
@@ -59,8 +62,8 @@ describe('NekoPath API', () => {
       openAiModel: 'gpt-test',
       fetchImpl: upstream,
     });
-    const teacher = await loginCookie(app, 'co.ha');
-    const student = await loginCookie(app, 'an.tn');
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const student = await loginCookie(app, STUDENT_EMAIL);
     const payload = {
       input: [{ role: 'user', content: 'Chào' }],
       tools: [
@@ -118,8 +121,8 @@ describe('NekoPath API', () => {
       disposeAll: vi.fn(),
     };
     const app = await makeApp({ codexManager: manager });
-    const teacher = await loginCookie(app, 'co.ha');
-    const student = await loginCookie(app, 'an.tn');
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const student = await loginCookie(app, STUDENT_EMAIL);
 
     expect(
       (
@@ -169,7 +172,7 @@ describe('NekoPath API', () => {
     const bad = await app.inject({
       method: 'POST',
       url: '/api/auth/login',
-      payload: { username: 'co.ha', password: 'wrong' },
+      payload: { email: TEACHER_EMAIL, password: 'wrong' },
     });
     expect(bad.statusCode).toBe(401);
     const me = await app.inject({ method: 'GET', url: '/api/auth/me' });
@@ -179,7 +182,7 @@ describe('NekoPath API', () => {
 
   it('logs in, seeds 41 class members and 12 bank questions', async () => {
     const app = await makeApp();
-    const cookies = await loginCookie(app, 'co.ha');
+    const cookies = await loginCookie(app, TEACHER_EMAIL);
     const roster = await app.inject({ method: 'GET', url: '/api/class/roster', cookies });
     expect(roster.statusCode).toBe(200);
     expect((roster.json() as { students: unknown[] }).students).toHaveLength(40);
@@ -190,7 +193,7 @@ describe('NekoPath API', () => {
 
   it('lets a teacher author a question and assign it; student sees and answers it', async () => {
     const app = await makeApp();
-    const teacher = await loginCookie(app, 'co.ha');
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
 
     const created = await app.inject({
       method: 'POST',
@@ -246,7 +249,7 @@ describe('NekoPath API', () => {
     expect(assigned.statusCode).toBe(201);
     const assignmentId = (assigned.json() as { id: string }).id;
 
-    const student = await loginCookie(app, 'an.tn');
+    const student = await loginCookie(app, STUDENT_EMAIL);
     const opened = await app.inject({
       method: 'POST',
       url: `/api/assignments/${assignmentId}/open`,
@@ -308,7 +311,7 @@ describe('NekoPath API', () => {
 
   it('blocks students from teacher endpoints and syncs events idempotently', async () => {
     const app = await makeApp();
-    const student = await loginCookie(app, 'an.tn');
+    const student = await loginCookie(app, STUDENT_EMAIL);
     const forbidden = await app.inject({ method: 'GET', url: '/api/questions', cookies: student });
     expect(forbidden.statusCode).toBe(403);
 

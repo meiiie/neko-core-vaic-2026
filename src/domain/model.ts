@@ -22,10 +22,14 @@ export interface Item {
   readonly id: string;
   readonly kcIds: readonly string[];
   readonly role: ItemRole;
+  /** Misconception IDs that authored answer options on this item may emit. */
+  readonly misconceptionIds?: readonly string[];
   readonly slip?: number;
   readonly guess?: number;
   readonly reviewState: ReviewState;
 }
+
+export type MethodValidity = 'VALID' | 'INVALID' | 'UNKNOWN';
 
 export interface LearnerEvent {
   readonly id: string;
@@ -34,6 +38,10 @@ export interface LearnerEvent {
   readonly sequence: number;
   readonly occurredAt: string;
   readonly correct: boolean;
+  /** Separate answer correctness from whether the observed method was pedagogically valid. */
+  readonly methodValidity?: MethodValidity;
+  /** Authored distractor signal. Never inferred from a learner/profile name. */
+  readonly misconceptionId?: string;
 }
 
 export interface MasteryState {
@@ -71,6 +79,17 @@ export const DEFAULT_DOMAIN_CONFIG: DomainConfig = {
 
 export type DiagnosisStatus = 'DIAGNOSED' | 'NEEDS_MORE_EVIDENCE' | 'OUT_OF_SCOPE' | 'FAST_PATH';
 
+export type DiagnosisDisposition =
+  'AUTO_REMEDIATE' | 'ASK_VERIFY' | 'TEACHER_REVIEW' | 'ADVANCE' | 'OUT_OF_SCOPE';
+
+export interface MisconceptionHypothesis {
+  readonly misconceptionId: string;
+  readonly kcId: string;
+  readonly verificationStatus: 'NEEDS_VERIFICATION' | 'SUPPORTED_BY_MULTIPLE_ITEMS';
+  readonly supportingEventIds: readonly string[];
+  readonly independentItemCount: number;
+}
+
 export type DiagnosisReasonCode =
   | 'ROOT_GAP_SUPPORTED'
   | 'COMPETING_ROOTS'
@@ -83,6 +102,7 @@ export type DiagnosisReasonCode =
 
 export interface DiagnosisResult {
   readonly status: DiagnosisStatus;
+  readonly disposition: DiagnosisDisposition;
   readonly learnerId: string;
   readonly targetKcId: string;
   readonly rootKcId?: string;
@@ -91,6 +111,7 @@ export interface DiagnosisResult {
   readonly nextItemId?: string;
   readonly pathKcIds: readonly string[];
   readonly reasonCodes: readonly DiagnosisReasonCode[];
+  readonly misconceptionHypotheses: readonly MisconceptionHypothesis[];
   readonly contentVersion: string;
   readonly algorithmVersion: string;
 }
@@ -111,7 +132,7 @@ export interface PathPlan {
 
 export interface TeacherGroup {
   readonly id: string;
-  readonly status: 'ACTIONABLE_ROOT' | 'QUICK_CHECK' | 'READY_TO_ADVANCE';
+  readonly status: 'ACTIONABLE_ROOT' | 'QUICK_CHECK' | 'TEACHER_REVIEW' | 'READY_TO_ADVANCE';
   readonly rootKcId?: string;
   readonly learnerIds: readonly string[];
   readonly sufficientEvidenceCount: number;
@@ -129,4 +150,26 @@ export interface ClassWideGap {
   readonly rate: number;
   readonly thresholdRate: number;
   readonly thresholdCount: number;
+}
+
+export type TeacherAttentionReasonCode =
+  'ROOT_BOTTLENECK' | 'UNCERTAINTY_QUEUE' | 'HUMAN_ESCALATION';
+
+export interface TeacherAttentionItem {
+  readonly groupId: string;
+  readonly actionId: string;
+  readonly minutes: number;
+  /** Transparent heuristic value, not a claimed learning-gain estimate. */
+  readonly attentionValue: number;
+  readonly valuePerMinute: number;
+  readonly reasonCode: TeacherAttentionReasonCode;
+}
+
+export interface TeacherAttentionPlan {
+  readonly policyVersion: 'teacher-budget-v1';
+  readonly budgetMinutes: number;
+  readonly usedMinutes: number;
+  readonly remainingMinutes: number;
+  readonly selected: readonly TeacherAttentionItem[];
+  readonly deferred: readonly TeacherAttentionItem[];
 }

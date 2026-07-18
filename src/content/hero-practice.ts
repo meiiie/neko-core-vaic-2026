@@ -194,10 +194,9 @@ export const PRACTICE_QUESTIONS: readonly PracticeQuestion[] = [
       { id: 'a', label: 'Cứ 2 bút đỏ thì có 5 bút xanh' },
       {
         id: 'b',
-        label: 'Bút xanh nhiều hơn bút đỏ đúng 3 chiếc',
-        misconceptionTag: 'ADDITIVE_COMPARISON',
-        noteVi:
-          'Tỉ số là phép so sánh NHÂN (gấp bao nhiêu lần), không phải hiệu. 4 đỏ – 10 xanh vẫn là tỉ số 2 : 5 dù hiệu là 6.',
+        label: 'Cứ 5 bút đỏ thì có 2 bút xanh',
+        misconceptionTag: 'RATIO_ORDER_REVERSED',
+        noteVi: 'Em đã đảo thứ tự: 2 : 5 là đỏ so với xanh, nên số bút đỏ được nói trước.',
       },
       {
         id: 'c',

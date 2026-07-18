@@ -17,7 +17,11 @@
   --danger: #b42318;
   --danger-soft: #fef3f2;
   --focus: #84adff;
-  --sidebar-width: 17rem;
+  --navigation-active: #e8f2ee;
+  --navigation-active-ink: #005e55;
+  --navigation-pressed: #dfece7;
+  --sidebar-width: 18rem;
+  --shell-chrome-height: 4.5rem;
   --content-max: 75rem;
   --touch-target: 2.75rem;
   --radius-sm: 0.5rem;
@@ -26,7 +30,11 @@
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 5%);
   --shadow-md: 0 0.5rem 1.5rem rgb(16 24 40 / 8%);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* System stack: 0 KB to download (offline-first) with native Vietnamese
+     shaping everywhere (Segoe UI, Roboto, SF). The Variable cut sharpens
+     small sizes on Windows 11. */
+  --font-body:
+    'Segoe UI Variable Text', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --s-1: 0.25rem;
   --s-2: 0.5rem;
   --s-3: 0.75rem;
@@ -89,14 +97,16 @@ h1,
 h2,
 h3 {
   color: var(--ink);
-  letter-spacing: -0.025em;
+  /* Gentle tracking only: tighter values make Vietnamese horn/tone marks collide. */
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
 
 h1 {
   margin-bottom: var(--s-2);
   font-size: clamp(1.875rem, 3vw, 2.5rem);
-  line-height: 1.15;
+  /* ≥1.2 keeps stacked diacritics (Ắ Ễ Ộ) clear of the line above on wrap. */
+  line-height: 1.2;
 }
 
 h2 {
@@ -444,7 +454,7 @@ button:disabled,
 
 .sidebar-head {
   display: flex;
-  min-height: 5rem;
+  min-height: var(--shell-chrome-height);
   align-items: center;
   padding: var(--s-4) var(--s-5);
   border-bottom: 1px solid var(--rule);
@@ -455,45 +465,56 @@ button:disabled,
   flex-direction: column;
 }
 
+.brand-lockup {
+  font-weight: 700;
+}
+
 .brand-lockup small {
   color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.25rem;
 }
 
 .sidebar-nav {
   display: flex;
   flex: 1;
+  min-height: 0;
   flex-direction: column;
   gap: var(--s-1);
+  overflow-y: auto;
   padding: var(--s-6) var(--s-3);
 }
 
 .sidebar-label {
   margin: 0 0 var(--s-2);
-  padding: 0 var(--s-3);
-  color: #98a2b3;
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  padding: 0 var(--s-4);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
 }
 
 .sidebar-label--secondary {
   margin-top: var(--s-6);
+  padding-top: var(--s-6);
+  border-top: 1px solid var(--rule);
 }
 
 .sidebar-nav a {
-  display: grid;
-  min-height: var(--touch-target);
-  grid-template-columns: 2rem 1fr;
+  display: flex;
+  min-height: 3rem;
   align-items: center;
-  gap: var(--s-2);
-  padding: var(--s-2) var(--s-3);
+  padding: var(--s-3) var(--s-4);
   border-radius: var(--radius-sm);
   color: var(--muted-strong);
+  font-size: 1rem;
   font-weight: 600;
+  line-height: 1.5rem;
   text-decoration: none;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 
 .sidebar-nav a:hover {
@@ -502,29 +523,46 @@ button:disabled,
 }
 
 .sidebar-nav a[aria-current='page'] {
-  background: var(--primary-soft);
-  color: var(--primary);
+  background: var(--navigation-active);
+  color: var(--navigation-active-ink);
+  font-weight: 700;
+  box-shadow: none;
 }
 
-.nav-index {
-  color: #98a2b3;
-  font-size: 0.6875rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+.sidebar-nav a[aria-current='page']:hover {
+  background: var(--navigation-active);
+  color: var(--navigation-active-ink);
 }
 
-.sidebar-nav a[aria-current='page'] .nav-index {
-  color: var(--primary);
+.sidebar-nav a:active {
+  background: var(--navigation-pressed);
 }
 
 .sidebar-account {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  flex-shrink: 0;
   gap: var(--s-3);
   padding: var(--s-4);
   border-top: 1px solid var(--rule);
+}
+
+.sidebar-account .account-avatar {
+  background: var(--navigation-active);
+  color: var(--navigation-active-ink);
+  font-weight: 700;
+}
+
+.sidebar-account .account-copy strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.sidebar-account .account-copy span {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 .sidebar-account button {
@@ -533,10 +571,66 @@ button:disabled,
   padding: 0 var(--s-2);
   border: 0;
   background: transparent;
-  color: var(--primary);
+  color: var(--navigation-active-ink);
   cursor: pointer;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 700;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 21rem) {
+  .sidebar-account-action-detail {
+    display: none;
+  }
+}
+
+/* Sidebar foot: one quiet answer to "is my work safe?". Replaces the former
+   three-badge status bar. Sample-data disclosure lives next to the data it
+   describes (teacher aggregate footnotes), not on the product chrome. */
+
+.sidebar-foot {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-4) var(--s-5);
+  border-top: 1px solid var(--rule);
+}
+
+.sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.sidebar-status::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--evidence);
+}
+
+.sidebar-status[data-tone='review'] {
+  color: var(--review);
+}
+
+.sidebar-status[data-tone='review']::before {
+  background: var(--review);
+}
+
+.sidebar-status--action {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
 }
 
 .product-workspace {
@@ -544,18 +638,6 @@ button:disabled,
   margin-left: var(--sidebar-width);
 }
 
-.workspace-status {
-  display: flex;
-  min-height: 4rem;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--s-2);
-  padding: 0 clamp(1rem, 4vw, 3rem);
-  border-bottom: 1px solid var(--rule);
-  background: rgb(255 255 255 / 92%);
-}
-
-.environment-label,
 .status-label {
   display: inline-flex;
   min-height: 1.75rem;
@@ -711,40 +793,72 @@ button:disabled,
 
 /* Student overview */
 
+.page-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
 .continue-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--s-5);
-  padding: var(--s-5);
-  border: 1px solid #b2ccff;
+  padding: var(--s-5) var(--s-6);
+  border: 1px solid var(--rule);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
-.continue-marker {
+.hero-icon {
   display: grid;
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 3rem;
+  height: 3rem;
   place-items: center;
-  border-radius: var(--radius-md);
-  background: var(--primary);
-  color: white;
-  font-weight: 800;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
-.continue-copy h2,
-.continue-copy p {
+.hero-icon svg {
+  margin-left: 2px; /* optically centre the triangle */
+}
+
+.hero-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
   margin-bottom: var(--s-1);
 }
 
-.continue-copy > p:not(.eyebrow) {
-  color: var(--muted);
+.hero-label {
+  color: var(--primary);
   font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25rem;
 }
 
-.compact-progress,
+.hero-meta {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.continue-copy h2 {
+  margin-bottom: var(--s-1);
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+.continue-copy > p:not(.hero-label-row) {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
 .progress-track {
   height: 0.5rem;
   overflow: hidden;
@@ -752,12 +866,6 @@ button:disabled,
   background: #eaecf0;
 }
 
-.compact-progress {
-  max-width: 28rem;
-  margin-top: var(--s-3);
-}
-
-.compact-progress span,
 .progress-track span {
   display: block;
   height: 100%;
@@ -772,49 +880,28 @@ button:disabled,
   gap: var(--s-5);
 }
 
-.learning-focus {
-  margin-bottom: var(--s-3);
-  padding: var(--s-5);
-  border-radius: var(--radius-sm);
-  background: var(--surface-subtle);
+.panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
 }
 
-.learning-focus > span,
-.learning-focus > strong {
-  display: block;
-}
-
-.learning-focus > span {
-  margin-bottom: var(--s-1);
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-
-.learning-focus > strong {
-  margin-bottom: var(--s-2);
-  font-size: 1.125rem;
-}
-
-.learning-focus p {
+.panel-top h2 {
   margin-bottom: 0;
-  color: var(--muted-strong);
 }
 
-.metric-number {
-  display: block;
-  margin: var(--s-5) 0 0;
-  color: var(--primary);
-  font-size: 3rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+.focus-line {
+  margin-bottom: var(--s-2);
+  font-size: 1.0625rem;
+  line-height: 1.625rem;
 }
 
 .mini-facts {
   display: grid;
   gap: var(--s-3);
-  margin: var(--s-5) 0 0;
-  padding-top: var(--s-5);
-  border-top: 1px solid var(--rule);
+  margin: var(--s-4) 0 0;
 }
 
 .mini-facts div,
@@ -1785,11 +1872,6 @@ details li {
     margin-left: 0;
   }
 
-  .workspace-status {
-    min-height: 3.25rem;
-    padding: 0 var(--s-4);
-  }
-
   .product-workspace > main {
     padding: var(--s-6) var(--s-4) var(--s-10);
   }
@@ -2706,22 +2788,30 @@ details li {
 
 /* ---------- Neko dock (right-hand agent panel) ---------- */
 
-.neko-toggle {
-  margin-left: 0.5rem;
-  padding: 0.375rem 0.875rem;
-  border: 1px solid var(--rule-strong, #d0d5dd);
+/* Fixed launcher (assistant convention: bottom-right, hidden while the dock
+   is open). The mark alone is not the label — the text names it. */
+
+.neko-launcher {
+  position: fixed;
+  right: var(--s-6);
+  bottom: var(--s-6);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-4);
+  border: 1px solid var(--rule-strong);
   border-radius: 999px;
-  background: var(--surface, #fff);
-  color: var(--ink, #101828);
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   font-weight: 700;
   font-size: 0.875rem;
+  box-shadow: var(--shadow-md);
 }
 
-.neko-toggle[aria-pressed='true'] {
-  border-color: #0c1220;
-  background: #0c1220;
-  color: #6ee7b7;
+.neko-launcher:hover {
+  background: var(--surface-subtle);
 }
 
 .neko-dock {
@@ -3041,4 +3131,321 @@ details li {
   cursor: pointer;
   font-weight: 600;
   color: var(--muted-strong, #475467);
+}
+
+/* ---------- Auth (centred sign-in card) ---------- */
+
+/* Sign-in. Rhythm: one macro unit (--s-6, 24px) separates every zone —
+   brand / heading pair / field / action / fineprint — while related pairs sit
+   at 4–8px (proximity). Field and button share a 3rem control height and the
+   same edges, so the card reads as one balanced column. Type: title
+   1.5625rem = 1rem × 1.25² (major third); UI ramp 13/14/16px with
+   line-heights on the 4px grid, ≥1.4 on small sizes so Vietnamese stacked
+   diacritics (ắ ễ ộ) never clip. */
+
+.auth {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  /* Extra bottom padding lifts the card to the optical centre (~46%). */
+  padding: var(--s-6) var(--s-6) calc(var(--s-6) + 6vh);
+  background:
+    radial-gradient(60rem 40rem at 50% -10%, var(--evidence-soft), transparent 70%), var(--canvas);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 25rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 1.25rem;
+  box-shadow: 0 1.5rem 3rem rgb(16 24 40 / 8%);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.auth-title {
+  margin: var(--s-6) 0 var(--s-1);
+  font-size: 1.5625rem;
+  line-height: 2rem;
+  letter-spacing: -0.015em;
+  text-align: center;
+}
+
+.auth-subtitle {
+  margin: 0 0 var(--s-6);
+  color: var(--muted);
+  line-height: 1.5rem;
+  text-align: center;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+  color: var(--muted-strong);
+}
+
+.auth-error {
+  margin: var(--s-3) 0 0;
+  color: var(--danger);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.auth-submit {
+  display: block;
+  width: 100%;
+  min-height: 3rem;
+  margin-top: var(--s-6);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    transform 100ms ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.auth-submit:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.auth-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.auth-fineprint {
+  margin: var(--s-6) 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-submit,
+  .auth-combo-field input,
+  .auth-combo-chevron {
+    transition: none;
+  }
+}
+
+/* Update prompt (app-level toast) */
+
+.update-prompt {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--rule, #e4e7ec);
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+  box-shadow: 0 0.75rem 2rem rgb(16 24 40 / 15%);
+}
+
+.update-prompt p {
+  margin: 0;
+  font-weight: 650;
+}
+
+/* Sign-in status states */
+
+.auth-loading {
+  padding: var(--s-6) 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.auth-retry {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Sign-in combobox: the class roll drops down anchored to the field. */
+
+.auth-combobox {
+  position: relative;
+}
+
+.auth-combo-field {
+  position: relative;
+  display: block;
+}
+
+.auth-combo-field input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 2.75rem 0 1rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1rem; /* 16px floor also prevents iOS focus zoom */
+  font-weight: 400;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.auth-combo-field input::placeholder {
+  color: var(--muted);
+}
+
+.auth-combo-field input:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+  cursor: text;
+}
+
+.auth-combo-chevron {
+  position: absolute;
+  top: 50%;
+  right: 0.875rem;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: transform 160ms var(--ease-out);
+}
+
+.auth-combo-field[data-open] .auth-combo-chevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.auth-dropdown {
+  position: absolute;
+  top: calc(100% + var(--s-2));
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: min(16rem, 45dvh);
+  margin: 0;
+  padding: var(--s-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 1rem 2.5rem rgb(16 24 40 / 14%);
+  transform-origin: top center;
+}
+
+.auth-roll-label {
+  position: sticky;
+  top: calc(-1 * var(--s-1));
+  z-index: 1;
+  margin: 0;
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-roll-group {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-option {
+  display: flex;
+  min-height: var(--touch-target);
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.auth-option[data-active] {
+  background: var(--primary-soft);
+}
+
+.auth-option[aria-selected='true'] .auth-option-name {
+  font-weight: 700;
+}
+
+.auth-option-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.auth-option-name {
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+.auth-option-sub {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.125rem;
+}
+
+.auth-option-check {
+  margin-left: auto;
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.auth-roll-empty {
+  padding: var(--s-4) var(--s-3);
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-dropdown {
+    animation: auth-drop 140ms ease-out;
+  }
+
+  @keyframes auth-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem) scale(0.99);
+    }
+  }
 }

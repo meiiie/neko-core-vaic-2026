@@ -8,11 +8,14 @@ import {
   type Item,
   type LearnerEvent,
   type MasteryState,
+  type MisconceptionHypothesis,
   type PathPlan,
+  type TeacherAttentionItem,
+  type TeacherAttentionPlan,
   type TeacherGroup,
 } from './model';
 
-export const ALGORITHM_VERSION = 'root-frontier-v1';
+export const ALGORITHM_VERSION = 'root-frontier-v2-dve';
 
 function compareIds(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -179,7 +182,9 @@ function sameEvent(left: LearnerEvent, right: LearnerEvent): boolean {
     left.itemId === right.itemId &&
     left.sequence === right.sequence &&
     left.occurredAt === right.occurredAt &&
-    left.correct === right.correct
+    left.correct === right.correct &&
+    left.methodValidity === right.methodValidity &&
+    left.misconceptionId === right.misconceptionId
   );
 }
 
@@ -194,6 +199,15 @@ export function canonicalizeEvents(events: readonly LearnerEvent[]): LearnerEven
     }
     if (Number.isNaN(Date.parse(event.occurredAt))) {
       throw new Error(`Invalid occurredAt for event ${event.id}`);
+    }
+    if (
+      event.methodValidity !== undefined &&
+      !['VALID', 'INVALID', 'UNKNOWN'].includes(event.methodValidity)
+    ) {
+      throw new Error(`Invalid methodValidity for event ${event.id}`);
+    }
+    if (event.misconceptionId !== undefined && !event.misconceptionId.trim()) {
+      throw new Error(`Invalid misconceptionId for event ${event.id}`);
     }
 
     const existing = byId.get(event.id);
@@ -223,12 +237,35 @@ function validateItems(graph: CurriculumGraph, items: readonly Item[]): Map<stri
     for (const kcId of item.kcIds) {
       if (!nodeIds.has(kcId)) throw new Error(`Item ${item.id} references unknown KC ${kcId}`);
     }
+    if (item.misconceptionIds) {
+      if (item.misconceptionIds.some((id) => !id.trim())) {
+        throw new Error(`Item ${item.id} has an empty misconception id`);
+      }
+      if (new Set(item.misconceptionIds).size !== item.misconceptionIds.length) {
+        throw new Error(`Item ${item.id} has duplicate misconception ids`);
+      }
+    }
     assertProbability(`slip for ${item.id}`, item.slip ?? DEFAULT_DOMAIN_CONFIG.defaultSlip);
     assertProbability(`guess for ${item.id}`, item.guess ?? DEFAULT_DOMAIN_CONFIG.defaultGuess);
     itemMap.set(item.id, item);
   }
 
   return itemMap;
+}
+
+function validateEventEvidence(item: Item, event: LearnerEvent): void {
+  if (!event.misconceptionId) return;
+  if (!item.misconceptionIds?.includes(event.misconceptionId)) {
+    throw new Error(
+      `Event ${event.id} reports misconception ${event.misconceptionId} outside item ${item.id}`,
+    );
+  }
+  if (item.kcIds.length !== 1) {
+    throw new Error(`Misconception evidence requires a single-KC item: ${item.id}`);
+  }
+  if (event.correct && event.methodValidity !== 'INVALID') {
+    throw new Error(`Correct event ${event.id} needs an invalid method to support a misconception`);
+  }
 }
 
 function bktUpdate(
@@ -274,13 +311,15 @@ export function computeMastery(
   for (const event of canonicalEvents) {
     const item = itemMap.get(event.itemId);
     if (!item) throw new Error(`Event ${event.id} references unknown item ${event.itemId}`);
+    validateEventEvidence(item, event);
     const slip = item.slip ?? config.defaultSlip;
     const guess = item.guess ?? config.defaultGuess;
+    const observationCorrect = event.correct && event.methodValidity !== 'INVALID';
     for (const kcId of item.kcIds) {
       const state = working.get(kcId)!;
       state.probability = bktUpdate(
         state.probability,
-        event.correct,
+        observationCorrect,
         slip,
         guess,
         config.learnProbability,
@@ -301,6 +340,64 @@ export function computeMastery(
       },
     ]),
   );
+}
+
+export function inferMisconceptionHypotheses(
+  graph: CurriculumGraph,
+  items: readonly Item[],
+  events: readonly LearnerEvent[],
+  minIndependentItems = 2,
+): MisconceptionHypothesis[] {
+  topologicalOrder(graph);
+  if (!Number.isInteger(minIndependentItems) || minIndependentItems < 1) {
+    throw new Error('minIndependentItems must be a positive integer');
+  }
+  const itemMap = validateItems(graph, items);
+  const buckets = new Map<
+    string,
+    { misconceptionId: string; kcId: string; eventIds: string[]; itemIds: Set<string> }
+  >();
+
+  const canonicalEvents = canonicalizeEvents(events);
+  if (new Set(canonicalEvents.map((event) => event.learnerId)).size > 1) {
+    throw new Error('inferMisconceptionHypotheses accepts one learner at a time');
+  }
+  for (const event of canonicalEvents) {
+    const item = itemMap.get(event.itemId);
+    if (!item) throw new Error(`Event ${event.id} references unknown item ${event.itemId}`);
+    validateEventEvidence(item, event);
+    if (!event.misconceptionId) continue;
+    const kcId = item.kcIds[0]!;
+    const key = `${kcId}:${event.misconceptionId}`;
+    const bucket = buckets.get(key) ?? {
+      misconceptionId: event.misconceptionId,
+      kcId,
+      eventIds: [],
+      itemIds: new Set<string>(),
+    };
+    bucket.eventIds.push(event.id);
+    bucket.itemIds.add(item.id);
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.values()]
+    .map((bucket): MisconceptionHypothesis => ({
+      misconceptionId: bucket.misconceptionId,
+      kcId: bucket.kcId,
+      verificationStatus:
+        bucket.itemIds.size >= minIndependentItems
+          ? 'SUPPORTED_BY_MULTIPLE_ITEMS'
+          : 'NEEDS_VERIFICATION',
+      supportingEventIds: sortedUnique(bucket.eventIds),
+      independentItemCount: bucket.itemIds.size,
+    }))
+    .sort(
+      (left, right) =>
+        Number(right.verificationStatus === 'SUPPORTED_BY_MULTIPLE_ITEMS') -
+          Number(left.verificationStatus === 'SUPPORTED_BY_MULTIPLE_ITEMS') ||
+        right.independentItemCount - left.independentItemCount ||
+        compareIds(left.misconceptionId, right.misconceptionId),
+    );
 }
 
 function entropy(probability: number): number {
@@ -377,15 +474,29 @@ function isSufficientlyMastered(state: MasteryState, config: DomainConfig): bool
   );
 }
 
-function emptyResult(input: DiagnosisInput, status: DiagnosisResult['status']): DiagnosisResult {
+function emptyResult(
+  input: DiagnosisInput,
+  status: DiagnosisResult['status'],
+  misconceptionHypotheses: readonly MisconceptionHypothesis[] = [],
+): DiagnosisResult {
+  const disposition =
+    status === 'DIAGNOSED'
+      ? 'AUTO_REMEDIATE'
+      : status === 'FAST_PATH'
+        ? 'ADVANCE'
+        : status === 'OUT_OF_SCOPE'
+          ? 'OUT_OF_SCOPE'
+          : 'TEACHER_REVIEW';
   return {
     status,
+    disposition,
     learnerId: input.learnerId,
     targetKcId: input.targetKcId,
     competingKcIds: [],
     evidenceEventIds: [],
     pathKcIds: [],
     reasonCodes: [],
+    misconceptionHypotheses,
     contentVersion: input.graph.version,
     algorithmVersion: ALGORITHM_VERSION,
   };
@@ -406,6 +517,11 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
     input.events.filter((event) => event.learnerId === input.learnerId),
   );
   const mastery = computeMastery(input.graph, input.items, learnerEvents, config);
+  const misconceptionHypotheses = inferMisconceptionHypotheses(
+    input.graph,
+    input.items,
+    learnerEvents,
+  );
   const ancestors = ancestorIds(input.graph, input.targetKcId);
   const targetAndPrerequisites = [input.targetKcId, ...ancestors];
 
@@ -422,7 +538,7 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
       )
       .sort((left, right) => compareIds(left.id, right.id))[0];
     return {
-      ...emptyResult(input, 'FAST_PATH'),
+      ...emptyResult(input, 'FAST_PATH', misconceptionHypotheses),
       evidenceEventIds: sortedUnique(
         targetAndPrerequisites.flatMap((kcId) => mastery.get(kcId)!.evidenceEventIds),
       ),
@@ -464,7 +580,8 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
           ? selectProbe(competingKcIds, input.items, learnerEvents, mastery, config)
           : undefined;
       return {
-        ...emptyResult(input, 'NEEDS_MORE_EVIDENCE'),
+        ...emptyResult(input, 'NEEDS_MORE_EVIDENCE', misconceptionHypotheses),
+        disposition: nextItemId ? 'ASK_VERIFY' : 'TEACHER_REVIEW',
         competingKcIds,
         evidenceEventIds: sortedUnique(
           competingKcIds.flatMap((kcId) => mastery.get(kcId)!.evidenceEventIds),
@@ -487,14 +604,14 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
     );
     if (path.graphPathKcIds.length === 0) {
       return {
-        ...emptyResult(input, 'OUT_OF_SCOPE'),
+        ...emptyResult(input, 'OUT_OF_SCOPE', misconceptionHypotheses),
         rootKcId: best,
         evidenceEventIds: mastery.get(best)!.evidenceEventIds,
         reasonCodes: ['NO_VALID_PATH'],
       };
     }
     return {
-      ...emptyResult(input, 'DIAGNOSED'),
+      ...emptyResult(input, 'DIAGNOSED', misconceptionHypotheses),
       rootKcId: best,
       evidenceEventIds: mastery.get(best)!.evidenceEventIds,
       pathKcIds: path.practiceKcIds,
@@ -520,7 +637,8 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
     ? selectProbe(uncertainCandidates, input.items, learnerEvents, mastery, config)
     : undefined;
   return {
-    ...emptyResult(input, 'NEEDS_MORE_EVIDENCE'),
+    ...emptyResult(input, 'NEEDS_MORE_EVIDENCE', misconceptionHypotheses),
+    disposition: nextItemId ? 'ASK_VERIFY' : 'TEACHER_REVIEW',
     competingKcIds: uncertainCandidates,
     evidenceEventIds: sortedUnique(
       uncertainCandidates.flatMap((kcId) => mastery.get(kcId)!.evidenceEventIds),
@@ -553,7 +671,9 @@ export function groupForTeacher(
         ? `root:${diagnosis.rootKcId}`
         : diagnosis.status === 'FAST_PATH'
           ? 'ready'
-          : 'quick-check';
+          : diagnosis.disposition === 'ASK_VERIFY'
+            ? 'quick-check'
+            : 'teacher-review';
     const bucket = buckets.get(key) ?? [];
     bucket.push(diagnosis);
     buckets.set(key, bucket);
@@ -566,7 +686,9 @@ export function groupForTeacher(
         ? 'ACTIONABLE_ROOT'
         : id === 'ready'
           ? 'READY_TO_ADVANCE'
-          : 'QUICK_CHECK';
+          : id === 'quick-check'
+            ? 'QUICK_CHECK'
+            : 'TEACHER_REVIEW';
       const blockedDescendantCount = rootKcId ? descendantIds(graph, rootKcId).length : 0;
       const learnerIds = sortedUnique(members.map((member) => member.learnerId));
       return {
@@ -587,7 +709,9 @@ export function groupForTeacher(
           ? `RETEACH_${rootKcId}`
           : id === 'ready'
             ? 'OFFER_TRANSFER_CHALLENGE'
-            : 'RUN_QUICK_CHECK',
+            : id === 'quick-check'
+              ? 'RUN_QUICK_CHECK'
+              : 'REVIEW_DIAGNOSIS',
       };
     })
     .sort(
@@ -628,4 +752,118 @@ export function detectClassWideGaps(
       thresholdCount,
     }))
     .sort((left, right) => right.rate - left.rate || compareIds(left.rootKcId, right.rootKcId));
+}
+
+interface AttentionSelection {
+  readonly value: number;
+  readonly groupIds: readonly string[];
+}
+
+function selectionKey(selection: AttentionSelection): string {
+  return [...selection.groupIds].sort(compareIds).join('|');
+}
+
+function betterSelection(
+  candidate: AttentionSelection,
+  current: AttentionSelection | undefined,
+): boolean {
+  if (!current) return true;
+  return (
+    candidate.value > current.value ||
+    (candidate.value === current.value && selectionKey(candidate) < selectionKey(current))
+  );
+}
+
+export function allocateTeacherAttention(
+  groups: readonly TeacherGroup[],
+  budgetMinutes: number,
+  actionMinutes: Readonly<Record<string, number>>,
+): TeacherAttentionPlan {
+  if (!Number.isInteger(budgetMinutes) || budgetMinutes < 0) {
+    throw new Error('budgetMinutes must be a non-negative integer');
+  }
+  if (new Set(groups.map((group) => group.id)).size !== groups.length) {
+    throw new Error('Teacher groups need unique ids');
+  }
+
+  const candidates: TeacherAttentionItem[] = groups
+    .filter((group) => group.status !== 'READY_TO_ADVANCE')
+    .map((group): TeacherAttentionItem => {
+      const minutes = actionMinutes[group.suggestedActionId];
+      if (!Number.isInteger(minutes) || minutes < 1) {
+        throw new Error(`Missing positive minute estimate for ${group.suggestedActionId}`);
+      }
+      const attentionValue =
+        group.status === 'ACTIONABLE_ROOT' ? group.priorityScore : group.totalLearnerCount;
+      const reasonCode =
+        group.status === 'ACTIONABLE_ROOT'
+          ? 'ROOT_BOTTLENECK'
+          : group.status === 'TEACHER_REVIEW'
+            ? 'HUMAN_ESCALATION'
+            : 'UNCERTAINTY_QUEUE';
+      return {
+        groupId: group.id,
+        actionId: group.suggestedActionId,
+        minutes,
+        attentionValue,
+        valuePerMinute: attentionValue / minutes,
+        reasonCode,
+      };
+    })
+    .filter((candidate) => candidate.attentionValue > 0);
+
+  const byId = new Map(candidates.map((candidate) => [candidate.groupId, candidate]));
+  const states: Array<AttentionSelection | undefined> = Array.from({
+    length: budgetMinutes + 1,
+  });
+  states[0] = { value: 0, groupIds: [] };
+
+  for (const candidate of candidates) {
+    for (let used = budgetMinutes - candidate.minutes; used >= 0; used -= 1) {
+      const state = states[used];
+      if (!state) continue;
+      const nextUsed = used + candidate.minutes;
+      const proposal: AttentionSelection = {
+        value: state.value + candidate.attentionValue,
+        groupIds: [...state.groupIds, candidate.groupId],
+      };
+      if (betterSelection(proposal, states[nextUsed])) states[nextUsed] = proposal;
+    }
+  }
+
+  let bestUsed = 0;
+  let best = states[0]!;
+  for (let used = 1; used < states.length; used += 1) {
+    const state = states[used];
+    if (!state) continue;
+    if (
+      state.value > best.value ||
+      (state.value === best.value && used < bestUsed) ||
+      (state.value === best.value && used === bestUsed && selectionKey(state) < selectionKey(best))
+    ) {
+      best = state;
+      bestUsed = used;
+    }
+  }
+
+  const selectedIds = new Set(best.groupIds);
+  const selected = groups
+    .map((group) => byId.get(group.id))
+    .filter((candidate): candidate is TeacherAttentionItem =>
+      Boolean(candidate && selectedIds.has(candidate.groupId)),
+    );
+  const deferred = groups
+    .map((group) => byId.get(group.id))
+    .filter((candidate): candidate is TeacherAttentionItem =>
+      Boolean(candidate && !selectedIds.has(candidate.groupId)),
+    );
+
+  return {
+    policyVersion: 'teacher-budget-v1',
+    budgetMinutes,
+    usedMinutes: bestUsed,
+    remainingMinutes: budgetMinutes - bestUsed,
+    selected,
+    deferred,
+  };
 }

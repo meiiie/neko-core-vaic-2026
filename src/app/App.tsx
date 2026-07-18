@@ -1,17 +1,57 @@
+import { lazy, Suspense } from 'react';
 import { Link, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
-import { PathPage } from '../features/evidence-path/PathPage';
-import { AssignmentsPage, AssignmentTakePage } from '../features/student/AssignmentsPage';
-import { LearnPage } from '../features/student/LearnPage';
-import { PracticePage } from '../features/student/PracticePage';
-import { StudentDashboardPage } from '../features/student/StudentDashboardPage';
-import { SystemPage } from '../features/system/SystemPage';
-import { TeacherAssignmentsPage } from '../features/teacher/TeacherAssignmentsPage';
-import { TeacherClassPage } from '../features/teacher/TeacherClassPage';
-import { TeacherPage } from '../features/teacher/TeacherPage';
-import { TeacherQuestionsPage } from '../features/teacher/TeacherQuestionsPage';
 import { SessionProvider, useSession, type Role } from './session';
+import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { LoginPage } from './pages/LoginPage';
+
+const PathPage = lazy(() =>
+  import('../features/evidence-path/PathPage').then(({ PathPage }) => ({ default: PathPage })),
+);
+const AssignmentsPage = lazy(() =>
+  import('../features/student/AssignmentsPage').then(({ AssignmentsPage }) => ({
+    default: AssignmentsPage,
+  })),
+);
+const AssignmentTakePage = lazy(() =>
+  import('../features/student/AssignmentsPage').then(({ AssignmentTakePage }) => ({
+    default: AssignmentTakePage,
+  })),
+);
+const LearnPage = lazy(() =>
+  import('../features/student/LearnPage').then(({ LearnPage }) => ({ default: LearnPage })),
+);
+const PracticePage = lazy(() =>
+  import('../features/student/PracticePage').then(({ PracticePage }) => ({
+    default: PracticePage,
+  })),
+);
+const StudentDashboardPage = lazy(() =>
+  import('../features/student/StudentDashboardPage').then(({ StudentDashboardPage }) => ({
+    default: StudentDashboardPage,
+  })),
+);
+const SystemPage = lazy(() =>
+  import('../features/system/SystemPage').then(({ SystemPage }) => ({ default: SystemPage })),
+);
+const TeacherAssignmentsPage = lazy(() =>
+  import('../features/teacher/TeacherAssignmentsPage').then(({ TeacherAssignmentsPage }) => ({
+    default: TeacherAssignmentsPage,
+  })),
+);
+const TeacherClassPage = lazy(() =>
+  import('../features/teacher/TeacherClassPage').then(({ TeacherClassPage }) => ({
+    default: TeacherClassPage,
+  })),
+);
+const TeacherPage = lazy(() =>
+  import('../features/teacher/TeacherPage').then(({ TeacherPage }) => ({ default: TeacherPage })),
+);
+const TeacherQuestionsPage = lazy(() =>
+  import('../features/teacher/TeacherQuestionsPage').then(({ TeacherQuestionsPage }) => ({
+    default: TeacherQuestionsPage,
+  })),
+);
 
 function RequireSession() {
   const { account, ready } = useSession();
@@ -54,30 +94,35 @@ function NotFoundPage() {
 export function App() {
   return (
     <SessionProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route element={<RequireSession />}>
-          <Route element={<AppLayout />}>
-            <Route index element={<WorkspaceHome />} />
-            <Route element={<RequireRole role="STUDENT" />}>
-              <Route path="student" element={<StudentDashboardPage />} />
-              <Route path="student/check-in" element={<LearnPage />} />
-              <Route path="student/practice" element={<PracticePage />} />
-              <Route path="student/assignments" element={<AssignmentsPage />} />
-              <Route path="student/assignments/:assignmentId" element={<AssignmentTakePage />} />
-              <Route path="student/path" element={<PathPage />} />
+      <UpdatePrompt />
+      <Suspense
+        fallback={<div className="page-loading" aria-label="Đang tải không gian làm việc" />}
+      >
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route element={<RequireSession />}>
+            <Route element={<AppLayout />}>
+              <Route index element={<WorkspaceHome />} />
+              <Route element={<RequireRole role="STUDENT" />}>
+                <Route path="student" element={<StudentDashboardPage />} />
+                <Route path="student/check-in" element={<LearnPage />} />
+                <Route path="student/practice" element={<PracticePage />} />
+                <Route path="student/assignments" element={<AssignmentsPage />} />
+                <Route path="student/assignments/:assignmentId" element={<AssignmentTakePage />} />
+                <Route path="student/path" element={<PathPage />} />
+              </Route>
+              <Route element={<RequireRole role="TEACHER" />}>
+                <Route path="teacher" element={<TeacherPage />} />
+                <Route path="teacher/class" element={<TeacherClassPage />} />
+                <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
+                <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
+              </Route>
+              <Route path="system" element={<SystemPage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
-            <Route element={<RequireRole role="TEACHER" />}>
-              <Route path="teacher" element={<TeacherPage />} />
-              <Route path="teacher/class" element={<TeacherClassPage />} />
-              <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
-              <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
-            </Route>
-            <Route path="system" element={<SystemPage />} />
-            <Route path="*" element={<NotFoundPage />} />
           </Route>
-        </Route>
-      </Routes>
+        </Routes>
+      </Suspense>
     </SessionProvider>
   );
 }

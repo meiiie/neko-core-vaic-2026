@@ -58,59 +58,9 @@ function toAccount(user: ApiUser): Account {
 export interface SessionState {
   readonly account: Account | null;
   readonly ready: boolean;
-  readonly signIn: (username: string, password: string) => Promise<string | null>;
-  /** Server-less entry (static/recovery deploy): local synthetic profiles only. */
-  readonly enterLocalMode: (profileId: string) => void;
+  readonly signIn: (email: string, password: string) => Promise<string | null>;
   readonly signOut: () => Promise<void>;
 }
-
-/** Built-in profiles for the no-server recovery mode. Synthetic, like the seed. */
-export const LOCAL_PROFILES: readonly Account[] = [
-  {
-    id: 'local-teacher-ha',
-    role: 'TEACHER',
-    name: 'Nguyễn Thu Hà',
-    initials: 'TH',
-    shortName: 'Cô Hà',
-    subtitle: 'Giáo viên Toán • Lớp 7A (cục bộ)',
-  },
-  {
-    id: 'local-student-an',
-    role: 'STUDENT',
-    name: 'Trần Ngọc An',
-    initials: 'NA',
-    shortName: 'An',
-    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
-    learnerId: 'an',
-  },
-  {
-    id: 'local-student-binh',
-    role: 'STUDENT',
-    name: 'Lê Thanh Bình',
-    initials: 'TB',
-    shortName: 'Bình',
-    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
-    learnerId: 'binh',
-  },
-  {
-    id: 'local-student-chi',
-    role: 'STUDENT',
-    name: 'Nguyễn Minh Chi',
-    initials: 'MC',
-    shortName: 'Chi',
-    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
-    learnerId: 'chi',
-  },
-  {
-    id: 'local-student-minh',
-    role: 'STUDENT',
-    name: 'Phạm Quang Minh',
-    initials: 'QM',
-    shortName: 'Minh',
-    subtitle: 'Học sinh • Lớp 7A (cục bộ)',
-    learnerId: 'minh',
-  },
-];
 
 const CACHE_KEY = 'nekopath.session-cache.v1';
 
@@ -170,17 +120,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async (username: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       if (!response.ok) {
         return response.status === 401
-          ? 'Sai tên đăng nhập hoặc mật khẩu.'
+          ? 'Email hoặc mật khẩu chưa đúng.'
           : 'Máy chủ từ chối yêu cầu đăng nhập.';
       }
       const body = (await response.json()) as { user: ApiUser };
@@ -191,13 +141,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       return 'Không kết nối được máy chủ. Kiểm tra mạng hoặc dùng thiết bị đã đăng nhập trước đó.';
     }
-  }, []);
-
-  const enterLocalMode = useCallback((profileId: string) => {
-    const profile = LOCAL_PROFILES.find((candidate) => candidate.id === profileId);
-    if (!profile) return;
-    setAccount(profile);
-    writeCache(profile);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -214,8 +157,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [account?.id]);
 
   const value = useMemo<SessionState>(
-    () => ({ account, ready, signIn, enterLocalMode, signOut }),
-    [account, ready, signIn, enterLocalMode, signOut],
+    () => ({ account, ready, signIn, signOut }),
+    [account, ready, signIn, signOut],
   );
 
   return <DemoSessionContext.Provider value={value}>{children}</DemoSessionContext.Provider>;

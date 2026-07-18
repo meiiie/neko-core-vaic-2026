@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe('NekoDock agent session', () => {
   it('keeps context for a real offline follow-up and exposes Stop only while busy', async () => {
-    installApiStub('co.ha');
+    installApiStub('co.ha@nekopath.edu.vn');
     const user = userEvent.setup();
     render(
       <SessionProvider>

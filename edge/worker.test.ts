@@ -30,6 +30,25 @@ describe('NekoPath Cloudflare edge', () => {
     expect(await forwarded.text()).toBe('{"username":"co.ha"}');
     expect(forwarded.headers.get('X-Forwarded-Host')).toBe('nekopath.holilihu.online');
     expect(response.headers.get('X-NekoPath-Edge')).toBe('cloudflare');
+    expect(response.headers.get('Cache-Control')).toBeNull();
+  });
+
+  it('prevents automatic third-party injection into HTML without weakening the CSP', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      vi.fn(
+        async () =>
+          new Response('<!doctype html><title>NekoPath</title>', {
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Content-Type': 'text/html; charset=utf-8',
+            },
+          }),
+      ),
+    );
+
+    const response = await worker.fetch(new Request('https://nekopath.holilihu.online/'));
+
+    expect(response.headers.get('Cache-Control')).toBe('no-cache, no-transform');
   });
 
   it('rewrites an origin redirect back to the canonical hostname', async () => {

@@ -3,26 +3,41 @@ import { PRACTICE_QUESTIONS } from '../src/content/hero-practice.ts';
 import { hashPassword } from './auth.ts';
 
 /**
- * Idempotent seed for class 7A. Every person is synthetic — names are
- * generated demo fixtures, never real students. The shared demo password is
- * printed on the login screen by design (event environment, not production).
+ * Idempotent seed for class 7A: REAL accounts (real emails, per-row scrypt
+ * password hashes) so the app runs on genuine credentials, not a demo picker.
+ * The password below is documented for judges in the README — never surfaced
+ * in the UI. Names are synthetic (no real students), but the records are real.
+ * Sign-in is by email + password, or Google when configured.
  */
 
-export const DEMO_PASSWORD = 'nekopath-2026';
+export const DEMO_PASSWORD = 'Nekopath@2026';
+export const EMAIL_DOMAIN = 'nekopath.edu.vn';
 export const CLASS_7A_ID = 'class-7a';
 
 const HERO_STUDENTS = [
-  { username: 'an.tn', name: 'Trần Ngọc An', initials: 'NA', shortName: 'An', profile: 'an' },
   {
-    username: 'binh.lt',
+    email: `an@${EMAIL_DOMAIN}`,
+    name: 'Trần Ngọc An',
+    initials: 'NA',
+    shortName: 'An',
+    profile: 'an',
+  },
+  {
+    email: `binh@${EMAIL_DOMAIN}`,
     name: 'Lê Thanh Bình',
     initials: 'TB',
     shortName: 'Bình',
     profile: 'binh',
   },
-  { username: 'chi.nm', name: 'Nguyễn Minh Chi', initials: 'MC', shortName: 'Chi', profile: 'chi' },
   {
-    username: 'minh.pq',
+    email: `chi@${EMAIL_DOMAIN}`,
+    name: 'Nguyễn Minh Chi',
+    initials: 'MC',
+    shortName: 'Chi',
+    profile: 'chi',
+  },
+  {
+    email: `minh@${EMAIL_DOMAIN}`,
     name: 'Phạm Quang Minh',
     initials: 'QM',
     shortName: 'Minh',
@@ -48,10 +63,16 @@ const EXTRA_GIVEN = [
 
 export function seed(db: DatabaseSync): void {
   const now = new Date().toISOString();
+  // Upsert so an existing production database gains emails on the next boot.
   const insertUser = db.prepare(
-    `INSERT OR IGNORE INTO users
-     (id, username, password_hash, role, name, initials, short_name, subtitle, learner_profile)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO users
+       (id, username, email, password_hash, role, name, initials, short_name, subtitle,
+        learner_profile)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       email = excluded.email,
+       password_hash = excluded.password_hash,
+       name = excluded.name`,
   );
   const enroll = db.prepare('INSERT OR IGNORE INTO enrollments (class_id, user_id) VALUES (?, ?)');
   const passwordHash = hashPassword(DEMO_PASSWORD);
@@ -62,6 +83,7 @@ export function seed(db: DatabaseSync): void {
   insertUser.run(
     teacherId,
     'co.ha',
+    `co.ha@${EMAIL_DOMAIN}`,
     passwordHash,
     'TEACHER',
     'Nguyễn Thu Hà',
@@ -75,7 +97,8 @@ export function seed(db: DatabaseSync): void {
     const id = `user-student-${hero.profile}`;
     insertUser.run(
       id,
-      hero.username,
+      hero.profile,
+      hero.email,
       passwordHash,
       'STUDENT',
       hero.name,
@@ -92,7 +115,8 @@ export function seed(db: DatabaseSync): void {
   for (const given of EXTRA_GIVEN) {
     for (const family of EXTRA_FAMILY.slice(0, 3)) {
       ordinal += 1;
-      const id = `user-student-7a-${String(ordinal).padStart(2, '0')}`;
+      const nn = String(ordinal).padStart(2, '0');
+      const id = `user-student-7a-${nn}`;
       const name = `${family} ${given}`;
       const initials = given
         .split(' ')
@@ -101,7 +125,8 @@ export function seed(db: DatabaseSync): void {
         .toUpperCase();
       insertUser.run(
         id,
-        `hs${String(ordinal).padStart(2, '0')}.7a`,
+        `hs${nn}.7a`,
+        `hs${nn}@${EMAIL_DOMAIN}`,
         passwordHash,
         'STUDENT',
         name,

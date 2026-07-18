@@ -6,6 +6,7 @@ import {
   contentGraphSchema,
   curriculumGraphDraft,
   HERO_ITEMS,
+  HERO_MISCONCEPTIONS,
   HERO_QUESTIONS,
 } from './index';
 
@@ -36,6 +37,18 @@ describe('curriculum draft gate', () => {
         question.hypothesisLabel.toLocaleLowerCase('vi').includes('chưa được giáo viên duyệt'),
       ),
     ).toBe(true);
+  });
+
+  it('keeps every authored distractor inside the declared misconception vocabulary', () => {
+    const definitions = new Set(HERO_MISCONCEPTIONS.map((definition) => definition.id));
+    const items = new Map(HERO_ITEMS.map((item) => [item.id, item]));
+    for (const question of HERO_QUESTIONS) {
+      for (const choice of question.choices) {
+        if (!choice.misconceptionId) continue;
+        expect(definitions.has(choice.misconceptionId)).toBe(true);
+        expect(items.get(question.itemId)?.misconceptionIds).toContain(choice.misconceptionId);
+      }
+    }
   });
 
   it('rejects duplicate IDs, unknown sources and cyclic edges', () => {

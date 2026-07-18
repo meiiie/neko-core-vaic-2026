@@ -28,12 +28,25 @@ export function verifyPassword(password: string, stored: string): boolean {
 export interface SessionUser {
   id: string;
   username: string;
+  email: string | null;
   role: 'STUDENT' | 'TEACHER';
   name: string;
   initials: string;
   shortName: string;
   subtitle: string;
   learnerProfile: string | null;
+}
+
+export interface Credentials {
+  id: string;
+  passwordHash: string;
+}
+
+export function credentialsByEmail(db: DatabaseSync, email: string): Credentials | null {
+  const row = db
+    .prepare('SELECT id, password_hash FROM users WHERE email = ? COLLATE NOCASE')
+    .get(email.trim()) as { id: string; password_hash: string } | undefined;
+  return row ? { id: row.id, passwordHash: row.password_hash } : null;
 }
 
 export function createSession(db: DatabaseSync, userId: string): string {
@@ -55,7 +68,7 @@ export function destroySession(db: DatabaseSync, sessionId: string): void {
 export function userForSession(db: DatabaseSync, sessionId: string): SessionUser | null {
   const row = db
     .prepare(
-      `SELECT u.id, u.username, u.role, u.name, u.initials, u.short_name, u.subtitle,
+      `SELECT u.id, u.username, u.email, u.role, u.name, u.initials, u.short_name, u.subtitle,
               u.learner_profile, s.expires_at
        FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
     )
@@ -63,6 +76,7 @@ export function userForSession(db: DatabaseSync, sessionId: string): SessionUser
     | {
         id: string;
         username: string;
+        email: string | null;
         role: 'STUDENT' | 'TEACHER';
         name: string;
         initials: string;
@@ -80,6 +94,7 @@ export function userForSession(db: DatabaseSync, sessionId: string): SessionUser
   return {
     id: row.id,
     username: row.username,
+    email: row.email,
     role: row.role,
     name: row.name,
     initials: row.initials,

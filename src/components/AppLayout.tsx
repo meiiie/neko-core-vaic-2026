@@ -1,10 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession, type Role } from '../app/session';
-import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { registerSyncTriggers } from '../services/sync';
-import { OnlineStatusBadge } from './OnlineStatusBadge';
-import { SyncBadge } from './SyncBadge';
+import { ConnectionStatus } from './ConnectionStatus';
 import { BrandMark } from './BrandMark';
 
 const NekoDock = lazy(async () => {
@@ -15,23 +13,22 @@ const NekoDock = lazy(async () => {
 interface NavItem {
   readonly to: string;
   readonly label: string;
-  readonly index: string;
   readonly end?: boolean;
 }
 
 const NAVIGATION: Record<Role, readonly NavItem[]> = {
   STUDENT: [
-    { to: '/student', label: 'Tổng quan', index: '01', end: true },
-    { to: '/student/check-in', label: 'Bài kiểm tra', index: '02' },
-    { to: '/student/practice', label: 'Luyện tập', index: '03' },
-    { to: '/student/assignments', label: 'Bài được giao', index: '04' },
-    { to: '/student/path', label: 'Lộ trình của tôi', index: '05' },
+    { to: '/student', label: 'Hôm nay', end: true },
+    { to: '/student/check-in', label: 'Kiểm tra thích ứng' },
+    { to: '/student/path', label: 'Lộ trình học' },
+    { to: '/student/practice', label: 'Luyện tập' },
+    { to: '/student/assignments', label: 'Bài được giao' },
   ],
   TEACHER: [
-    { to: '/teacher', label: 'Tổng quan lớp', index: '01', end: true },
-    { to: '/teacher/class', label: 'Nhóm cần hỗ trợ', index: '02' },
-    { to: '/teacher/questions', label: 'Ngân hàng câu hỏi', index: '03' },
-    { to: '/teacher/assignments', label: 'Giao bài', index: '04' },
+    { to: '/teacher', label: 'Tổng quan lớp', end: true },
+    { to: '/teacher/class', label: 'Nhóm cần hỗ trợ' },
+    { to: '/teacher/questions', label: 'Ngân hàng câu hỏi' },
+    { to: '/teacher/assignments', label: 'Giao bài' },
   ],
 };
 
@@ -99,6 +96,9 @@ export function AppLayout() {
   useEffect(() => {
     if (!isMobile || !mobileOpen) return;
 
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
     const handleDrawerKeydown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -128,7 +128,10 @@ export function AppLayout() {
     };
 
     document.addEventListener('keydown', handleDrawerKeydown);
-    return () => document.removeEventListener('keydown', handleDrawerKeydown);
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.removeEventListener('keydown', handleDrawerKeydown);
+    };
   }, [closeMobileNavigation, isMobile, mobileOpen]);
 
   useEffect(() => {
@@ -209,7 +212,7 @@ export function AppLayout() {
         </div>
 
         <nav className="sidebar-nav" aria-label="Điều hướng chính">
-          <p className="sidebar-label">Không gian làm việc</p>
+          <p className="sidebar-label">{isTeacher ? 'Lớp học' : 'Học tập'}</p>
           {NAVIGATION[account.role].map((item) => (
             <NavLink
               key={item.to}
@@ -218,21 +221,19 @@ export function AppLayout() {
               tabIndex={closedMobileTabIndex}
               onClick={selectMobileRoute}
             >
-              <span className="nav-index" aria-hidden="true">
-                {item.index}
-              </span>
               <span>{item.label}</span>
             </NavLink>
           ))}
 
           <p className="sidebar-label sidebar-label--secondary">Thiết bị</p>
           <NavLink to="/system" tabIndex={closedMobileTabIndex} onClick={selectMobileRoute}>
-            <span className="nav-index" aria-hidden="true">
-              06
-            </span>
             <span>Dữ liệu &amp; ngoại tuyến</span>
           </NavLink>
         </nav>
+
+        <div className="sidebar-foot">
+          <ConnectionStatus />
+        </div>
 
         <div className="sidebar-account">
           <span className="account-avatar" aria-hidden="true">
@@ -244,11 +245,11 @@ export function AppLayout() {
           </span>
           <button
             type="button"
-            aria-label="Đổi tài khoản"
+            aria-label="Đổi hồ sơ"
             tabIndex={closedMobileTabIndex}
             onClick={() => void exitWorkspace()}
           >
-            Đổi
+            Đổi<span className="sidebar-account-action-detail"> hồ sơ</span>
           </button>
         </div>
       </aside>
@@ -268,26 +269,23 @@ export function AppLayout() {
         data-neko-open={(isTeacher && nekoOpen) || undefined}
         inert={isMobile && mobileOpen ? true : undefined}
       >
-        <header className="workspace-status">
-          <span className="environment-label">Dữ liệu mẫu</span>
-          <SyncBadge />
-          <OnlineStatusBadge />
-          {isTeacher ? (
-            <button
-              type="button"
-              className="neko-toggle"
-              aria-pressed={nekoOpen}
-              onClick={toggleNeko}
-            >
-              ✦ Neko
-            </button>
-          ) : null}
-        </header>
-        <UpdatePrompt />
         <main ref={mainRef} id="main-content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
+
+      {isTeacher && !nekoOpen ? (
+        <button
+          type="button"
+          className="neko-launcher"
+          aria-label="Mở trợ lý Neko"
+          inert={isMobile && mobileOpen ? true : undefined}
+          onClick={toggleNeko}
+        >
+          <BrandMark size={20} />
+          <span>Neko</span>
+        </button>
+      ) : null}
 
       {isTeacher && nekoLoaded ? (
         <Suspense fallback={null}>
