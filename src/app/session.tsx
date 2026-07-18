@@ -28,6 +28,7 @@ export interface Account {
   readonly initials: string;
   readonly shortName: string;
   readonly subtitle: string;
+  readonly className?: string;
   /** Stable opaque storage/inference key. Every student uses the API user ID. */
   readonly learnerId?: string;
   /** Optional synthetic evidence fixture. Never used as the learner's storage key. */
@@ -52,6 +53,7 @@ interface ApiUser {
   initials: string;
   shortName: string;
   subtitle: string;
+  className: string | null;
   learnerProfile: string | null;
 }
 
@@ -68,6 +70,7 @@ function toAccount(user: ApiUser): Account {
     initials: user.initials,
     shortName: user.shortName,
     subtitle: user.subtitle,
+    ...(user.className?.trim() ? { className: user.className.trim() } : {}),
     ...(user.role === 'STUDENT' ? { learnerId: user.id } : {}),
     ...(simulationProfileId ? { simulationProfileId } : {}),
   };
@@ -116,6 +119,9 @@ function normalizeAccount(value: unknown): Account | null {
     initials: parsed.initials,
     shortName: parsed.shortName,
     subtitle: parsed.subtitle,
+    ...(typeof parsed.className === 'string' && parsed.className.trim()
+      ? { className: parsed.className.trim() }
+      : {}),
     ...(parsed.role === 'STUDENT' ? { learnerId: parsed.id } : {}),
     ...(simulationProfileId ? { simulationProfileId } : {}),
   };

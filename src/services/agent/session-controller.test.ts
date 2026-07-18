@@ -1,11 +1,15 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { installApiStub } from '../../test/api-stub';
 import type { AgentProvider } from './loop';
 import { AgentSessionController } from './session-controller';
 import { RuleBasedProvider } from './providers';
 import { AGENT_TOOLS } from './tools';
 import type { AgentTool } from './tools';
+
+beforeEach(() => installApiStub('co.ha@nekopath.edu.vn'));
+afterEach(() => vi.unstubAllGlobals());
 
 const factTool: AgentTool = {
   name: 'fact',

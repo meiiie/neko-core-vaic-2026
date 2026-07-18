@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import { storedHeroRecords } from '../../test/hero-evidence';
 import { PathPage } from './PathPage';
 
 vi.mock('../../app/session', () => ({
@@ -22,6 +23,7 @@ vi.mock('../../app/adapters/student-context', () => ({
   }),
   useStudentEvents: () => ({
     records: [
+      ...storedHeroRecords('minh'),
       {
         id: 'answer-transfer',
         learnerId: 'user-student-minh',

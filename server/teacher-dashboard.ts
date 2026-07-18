@@ -156,7 +156,7 @@ export function buildTeacherDashboard(
               ev.occurred_at, ev.payload
        FROM events ev
        JOIN enrollments e ON e.user_id = ev.learner_id
-       WHERE e.class_id = ?
+       WHERE e.class_id = ? AND ev.kind <> 'SEEDED_EVIDENCE'
        ORDER BY ev.learner_id, ev.sequence, ev.occurred_at, ev.id`,
     )
     .all(classId) as unknown as EventRow[];

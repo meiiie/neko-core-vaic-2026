@@ -15,6 +15,7 @@ function Probe() {
       <output data-testid="device-profiles">{deviceProfiles.length}</output>
       <output data-testid="learner-id">{account?.learnerId ?? 'none'}</output>
       <output data-testid="simulation-profile">{account?.simulationProfileId ?? 'none'}</output>
+      <output data-testid="class-name">{account?.className ?? 'none'}</output>
       <output data-testid="sign-in-error">{signInError}</output>
       <output data-testid="offline-eligible">{offlineEligible}</output>
       <button
@@ -60,6 +61,7 @@ const CACHED_AN = {
   initials: 'NA',
   shortName: 'An',
   subtitle: 'Học sinh • Lớp 7A',
+  className: 'Lớp 7A',
   learnerId: 'an',
 } as const;
 
@@ -113,6 +115,7 @@ describe('API-backed session', () => {
 
     screen.getByRole('button', { name: 'in-good' }).click();
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));
+    expect(screen.getByTestId('class-name').textContent).toBe('Lớp 7A');
     expect(screen.getByTestId('learner-id').textContent).toBe('user-student-an');
     expect(screen.getByTestId('simulation-profile').textContent).toBe('an');
     expect(window.localStorage.getItem('nekopath.session-cache.v1')).toContain('an');
