@@ -46,6 +46,7 @@ describe('teacher diagnosis override', () => {
       </MemoryRouter>,
     );
 
+    expect(await screen.findByRole('heading', { name: 'Căn cứ của từng học sinh' })).toBeTruthy();
     await user.click(await screen.findByText('Điều chỉnh gợi ý của hệ thống'));
     const heading = await screen.findByRole('heading', {
       name: 'Điều chỉnh gợi ý cho một học sinh',
