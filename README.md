@@ -113,6 +113,11 @@ Design decisions that matter:
   with a disclosed synthetic evaluation suite — the UI renders runtime results, never hard-coded
   outcomes.
 - **Sessions over tokens.** HttpOnly, SameSite session cookies instead of JWT-in-localStorage.
+- **Offline entry without offline credentials.** After a successful server login, the device keeps
+  only a sanitized profile (email, local `id`, name, initials, `shortName`, role, subtitle and the
+  optional local learner key). If the directory is unreachable, users may reopen only profiles
+  already confirmed on that device; no password, session cookie or API response is copied into web
+  storage or the service-worker cache.
 - **Zero native dependencies.** `node:sqlite` keeps the image small and the Docker build
   reproducible; the Docker build is the release gate.
 - **System font stack.** Zero download on 2G and native Vietnamese diacritic shaping on every

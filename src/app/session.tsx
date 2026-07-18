@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { fetchWithDeadline } from '../services/fetch-with-deadline';
+import { bindBrowserProfile, markBrowserSignedOut } from '../services/profile-binding';
 
 /**
  * Real API-backed session (HttpOnly cookie, server-side session store).
@@ -27,8 +28,19 @@ export interface Account {
   readonly learnerId?: 'an' | 'binh' | 'chi' | 'minh';
 }
 
+export interface DeviceProfile extends Account {
+  readonly email: string;
+}
+
+export interface SignInFailure {
+  readonly message: string;
+  /** True only when no authoritative server response was received. */
+  readonly offlineEligible: boolean;
+}
+
 interface ApiUser {
   id: string;
+  email: string | null;
   role: Role;
   name: string;
   initials: string;
@@ -55,12 +67,15 @@ function toAccount(user: ApiUser): Account {
 
 export interface SessionState {
   readonly account: Account | null;
+  readonly deviceProfiles: readonly DeviceProfile[];
   readonly ready: boolean;
-  readonly signIn: (email: string, password: string) => Promise<string | null>;
+  readonly resumeOffline: (email: string) => boolean;
+  readonly signIn: (email: string, password: string) => Promise<SignInFailure | null>;
   readonly signOut: () => void;
 }
 
 const CACHE_KEY = 'nekopath.session-cache.v1';
+export const DEVICE_PROFILES_KEY = 'nekopath.device-profiles.v1';
 export const SESSION_RESTORE_DEADLINE_MS = 3_000;
 export const SIGN_IN_DEADLINE_MS = 8_000;
 
@@ -82,10 +97,59 @@ function writeCache(account: Account | null): void {
   }
 }
 
+function isDeviceProfile(value: unknown): value is DeviceProfile {
+  if (!value || typeof value !== 'object') return false;
+  const profile = value as Partial<DeviceProfile>;
+  const learnerIds = ['an', 'binh', 'chi', 'minh'];
+  return (
+    typeof profile.email === 'string' &&
+    profile.email.includes('@') &&
+    typeof profile.id === 'string' &&
+    (profile.role === 'STUDENT' || profile.role === 'TEACHER') &&
+    typeof profile.name === 'string' &&
+    typeof profile.initials === 'string' &&
+    typeof profile.shortName === 'string' &&
+    typeof profile.subtitle === 'string' &&
+    (profile.learnerId === undefined || learnerIds.includes(profile.learnerId))
+  );
+}
+
+function readDeviceProfiles(): DeviceProfile[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(DEVICE_PROFILES_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isDeviceProfile);
+  } catch {
+    return [];
+  }
+}
+
+function storeDeviceProfiles(profiles: readonly DeviceProfile[]): void {
+  try {
+    window.localStorage.setItem(DEVICE_PROFILES_KEY, JSON.stringify(profiles));
+  } catch {
+    // Device profiles only improve offline entry; the server session still works without them.
+  }
+}
+
+function upsertDeviceProfile(
+  profiles: readonly DeviceProfile[],
+  profile: DeviceProfile,
+): DeviceProfile[] {
+  const email = profile.email.toLocaleLowerCase('vi');
+  const next = [
+    ...profiles.filter((candidate) => candidate.email.toLocaleLowerCase('vi') !== email),
+    profile,
+  ];
+  storeDeviceProfiles(next);
+  return next;
+}
+
 const DemoSessionContext = createContext<SessionState | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
+  const [deviceProfiles, setDeviceProfiles] = useState<DeviceProfile[]>(readDeviceProfiles);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -102,20 +166,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const body = (await response.json()) as { user: ApiUser };
           const next = toAccount(body.user);
+          bindBrowserProfile(next.id);
           setAccount(next);
           writeCache(next);
+          if (body.user.email) {
+            setDeviceProfiles((current) =>
+              upsertDeviceProfile(current, { ...next, email: body.user.email ?? '' }),
+            );
+          }
         } else if (response.status === 401) {
+          markBrowserSignedOut();
           setAccount(null);
           writeCache(null);
         } else {
           // Server unhealthy (5xx / proxy error): behave like offline and
           // keep the cached identity so local-first work can continue.
-          setAccount(readCache());
+          const cached = readCache();
+          if (cached) bindBrowserProfile(cached.id);
+          setAccount(cached);
         }
       } catch {
         // Network unreachable: fall back to the cached identity so the
         // local-first core keeps working offline.
-        if (!cancelled) setAccount(readCache());
+        if (!cancelled) {
+          const cached = readCache();
+          if (cached) bindBrowserProfile(cached.id);
+          setAccount(cached);
+        }
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -136,24 +213,54 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         deadlineMs: SIGN_IN_DEADLINE_MS,
       });
       if (!response.ok) {
-        return response.status === 401
-          ? 'Email hoặc mật khẩu chưa đúng.'
-          : 'Máy chủ từ chối yêu cầu đăng nhập.';
+        return {
+          message:
+            response.status === 401
+              ? 'Email hoặc mật khẩu chưa đúng.'
+              : 'Máy chủ từ chối yêu cầu đăng nhập.',
+          offlineEligible: false,
+        };
       }
       const body = (await response.json()) as { user: ApiUser };
       const next = toAccount(body.user);
+      bindBrowserProfile(next.id);
       setAccount(next);
       writeCache(next);
+      setDeviceProfiles((current) =>
+        upsertDeviceProfile(current, { ...next, email: body.user.email ?? email }),
+      );
       return null;
     } catch (error) {
       if (error instanceof DOMException && error.name === 'TimeoutError') {
-        return 'Đăng nhập mất quá nhiều thời gian. Vui lòng thử lại.';
+        return {
+          message: 'Đăng nhập mất quá nhiều thời gian. Vui lòng thử lại.',
+          offlineEligible: true,
+        };
       }
-      return 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
+      return {
+        message: 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.',
+        offlineEligible: true,
+      };
     }
   }, []);
 
+  const resumeOffline = useCallback(
+    (email: string) => {
+      const normalizedEmail = email.toLocaleLowerCase('vi');
+      const profile = deviceProfiles.find(
+        (candidate) => candidate.email.toLocaleLowerCase('vi') === normalizedEmail,
+      );
+      if (!profile) return false;
+      bindBrowserProfile(profile.id);
+      setAccount(profile);
+      writeCache(profile);
+      return true;
+    },
+    [deviceProfiles],
+  );
+
   const signOut = useCallback(() => {
+    markBrowserSignedOut();
     setAccount(null);
     writeCache(null);
     void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {
@@ -162,8 +269,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SessionState>(
-    () => ({ account, ready, signIn, signOut }),
-    [account, ready, signIn, signOut],
+    () => ({ account, deviceProfiles, ready, resumeOffline, signIn, signOut }),
+    [account, deviceProfiles, ready, resumeOffline, signIn, signOut],
   );
 
   return <DemoSessionContext.Provider value={value}>{children}</DemoSessionContext.Provider>;

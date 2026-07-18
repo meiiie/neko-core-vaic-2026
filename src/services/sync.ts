@@ -1,6 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type LearnerEventRecord, type NekoPathDb } from '../storage/db';
 import { learnerEventSchema, type AppendResult } from '../storage/event-repository';
+import { fetchWithDeadline } from './fetch-with-deadline';
+import { readBoundProfileId, SIGNED_OUT_PROFILE } from './profile-binding';
 import {
   duePendingOutbox,
   markOutboxConflict,
@@ -17,6 +19,48 @@ import {
  */
 
 let flushInFlight = false;
+const SESSION_CHECK_DEADLINE_MS = 3_000;
+
+interface SyncSessionUser {
+  readonly id: string;
+  readonly role: 'STUDENT' | 'TEACHER';
+  readonly learnerProfile: string | null;
+}
+
+async function verifiedSyncUser(): Promise<
+  | { user: SyncSessionUser }
+  | { skipped: 'PROFILE_UNBOUND' | 'SESSION_MISMATCH' | 'AUTH_UNVERIFIED' }
+> {
+  const boundProfileId = readBoundProfileId();
+  if (!boundProfileId) return { skipped: 'PROFILE_UNBOUND' };
+  if (boundProfileId === SIGNED_OUT_PROFILE) return { skipped: 'SESSION_MISMATCH' };
+
+  try {
+    const response = await fetchWithDeadline('/api/auth/me', {
+      credentials: 'include',
+      deadlineMs: SESSION_CHECK_DEADLINE_MS,
+    });
+    if (!response.ok) {
+      return {
+        skipped:
+          response.status === 401 || response.status === 409
+            ? 'SESSION_MISMATCH'
+            : 'AUTH_UNVERIFIED',
+      };
+    }
+    const body = (await response.json()) as { user?: Partial<SyncSessionUser> };
+    if (
+      body.user?.id !== boundProfileId ||
+      (body.user.role !== 'STUDENT' && body.user.role !== 'TEACHER') ||
+      (body.user.learnerProfile !== null && typeof body.user.learnerProfile !== 'string')
+    ) {
+      return { skipped: 'SESSION_MISMATCH' };
+    }
+    return { user: body.user as SyncSessionUser };
+  } catch {
+    return { skipped: 'AUTH_UNVERIFIED' };
+  }
+}
 
 export async function flushOutbox(
   database: NekoPathDb = db,
@@ -39,14 +83,25 @@ export async function flushOutbox(
       );
       return { pushed: 0 };
     }
+    const verified = await verifiedSyncUser();
+    if ('skipped' in verified) return verified;
+    const learnerId = verified.user.learnerProfile;
+    if (verified.user.role !== 'STUDENT' || !learnerId) {
+      return { skipped: 'NO_LEARNER_PROFILE' };
+    }
+    const matchingEvents = events.filter((event) => event.learnerId === learnerId);
+    if (matchingEvents.length === 0) return { skipped: 'NO_DUE_EVENTS_FOR_PROFILE' };
+    const matchingIds = new Set(matchingEvents.map((event) => event.id));
+    const matchingDue = due.filter((row) => matchingIds.has(row.eventId));
     try {
       const response = await fetch('/api/events', {
         method: 'POST',
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          events: events.map((event) => ({
+          events: matchingEvents.map((event) => ({
             id: event.id,
+            learnerId: event.learnerId,
             itemId: event.itemId,
             sequence: event.sequence,
             occurredAt: event.occurredAt,
@@ -55,17 +110,20 @@ export async function flushOutbox(
           })),
         }),
       });
+      if (response.status === 401 || response.status === 403 || response.status === 409) {
+        return { skipped: 'SESSION_MISMATCH' };
+      }
       if (!response.ok) throw new Error(String(response.status));
       const body = (await response.json().catch(() => ({}))) as { conflictIds?: string[] };
       const conflictIds = new Set(body.conflictIds ?? []);
       await markOutboxConflict([...conflictIds], database);
       await markOutboxSent(
-        due.map((row) => row.eventId).filter((id) => !conflictIds.has(id)),
+        matchingDue.map((row) => row.eventId).filter((id) => !conflictIds.has(id)),
         database,
       );
-      return { pushed: events.length - conflictIds.size };
+      return { pushed: matchingEvents.length - conflictIds.size };
     } catch {
-      await markOutboxRetry(due, database);
+      await markOutboxRetry(matchingDue, database);
       return { skipped: 'PUSH_FAILED' };
     }
   } finally {

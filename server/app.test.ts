@@ -23,8 +23,10 @@ async function loginCookie(app: Awaited<ReturnType<typeof makeApp>>, email: stri
   });
   expect(response.statusCode).toBe(200);
   const cookie = response.cookies.find((c) => c.name === 'nekopath_sid');
+  const profile = response.cookies.find((c) => c.name === 'nekopath_profile');
   expect(cookie).toBeTruthy();
-  return { nekopath_sid: cookie!.value };
+  expect(profile).toBeTruthy();
+  return { nekopath_sid: cookie!.value, nekopath_profile: profile!.value };
 }
 
 describe('NekoPath API', () => {
@@ -178,6 +180,7 @@ describe('NekoPath API', () => {
 
     const event = {
       id: 'evt-local-1',
+      learnerId: 'an',
       itemId: 'K02-CHECK-1',
       sequence: 1,
       occurredAt: new Date().toISOString(),
@@ -208,6 +211,7 @@ describe('NekoPath API', () => {
     const student = await loginCookie(app, STUDENT_EMAIL);
     const original = {
       id: 'evt-clash-1',
+      learnerId: 'an',
       itemId: 'K02-CHECK-1',
       sequence: 1,
       occurredAt: '2026-07-18T03:00:00.000Z',
@@ -240,6 +244,39 @@ describe('NekoPath API', () => {
       payload: { events: [original] },
     });
     expect((summary.json() as { conflictIds: string[] }).conflictIds).toEqual([]);
+    await app.close();
+  });
+
+  it('rejects stale profile bindings and cross-profile event batches', async () => {
+    const app = await makeApp();
+    const student = await loginCookie(app, STUDENT_EMAIL);
+    const staleBinding = { ...student, nekopath_profile: 'user-student-chi' };
+
+    const staleRead = await app.inject({
+      method: 'GET',
+      url: '/api/assignments',
+      cookies: staleBinding,
+    });
+    expect(staleRead.statusCode).toBe(409);
+    expect(staleRead.json()).toMatchObject({ error: 'SESSION_PROFILE_MISMATCH' });
+
+    const crossProfileEvent = {
+      id: 'evt-cross-profile',
+      learnerId: 'chi',
+      itemId: 'K02-CHECK-1',
+      sequence: 1,
+      occurredAt: new Date().toISOString(),
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    };
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: { events: [crossProfileEvent] },
+    });
+    expect(rejected.statusCode).toBe(403);
+    expect(rejected.json()).toMatchObject({ error: 'EVENT_PROFILE_MISMATCH' });
     await app.close();
   });
 });

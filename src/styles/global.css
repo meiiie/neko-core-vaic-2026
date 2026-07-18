@@ -3876,7 +3876,9 @@ html:has(.question-selection-actions) {
 }
 
 .auth-retry {
-  min-height: auto;
+  display: inline-flex;
+  min-height: var(--touch-target);
+  align-items: center;
   padding: 0;
   border: 0;
   background: none;
@@ -3884,6 +3886,28 @@ html:has(.question-selection-actions) {
   font-weight: 700;
   text-decoration: underline;
   cursor: pointer;
+}
+
+.auth-device-note {
+  display: grid;
+  gap: var(--s-1);
+  margin: 0 0 var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid color-mix(in srgb, var(--review) 28%, var(--rule));
+  border-radius: var(--radius-md);
+  background: var(--review-soft);
+  color: var(--muted-strong);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.auth-device-note strong {
+  color: var(--ink);
+}
+
+.auth-device-note .auth-retry {
+  width: fit-content;
+  color: var(--review);
 }
 
 /* Sign-in combobox: the class roll drops down anchored to the field. */

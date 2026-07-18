@@ -20,6 +20,7 @@ import { CLASS_7A_ID } from './seed.ts';
  */
 
 const SESSION_COOKIE = 'nekopath_sid';
+const PROFILE_BINDING_COOKIE = 'nekopath_profile';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -55,6 +56,7 @@ const assignmentSchema = z.object({
 
 const eventSchema = z.object({
   id: z.string().min(1),
+  learnerId: z.string().min(1),
   itemId: z.string().min(1),
   assignmentId: z.string().nullable().optional(),
   sequence: z.number().int().nonnegative(),
@@ -118,6 +120,11 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       void reply.code(401).send({ error: 'UNAUTHENTICATED' });
       return null;
     }
+    const boundProfileId = request.cookies[PROFILE_BINDING_COOKIE];
+    if (boundProfileId && boundProfileId !== user.id) {
+      void reply.code(409).send({ error: 'SESSION_PROFILE_MISMATCH' });
+      return null;
+    }
     return user;
   }
 
@@ -136,6 +143,15 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     const sessionId = createSession(db, userId);
     void reply.setCookie(SESSION_COOKIE, sessionId, {
       httpOnly: true,
+      sameSite: 'lax',
+      secure: isProduction,
+      path: '/',
+      maxAge: 60 * 60 * 12,
+    });
+    // This browser-visible value grants no access. It only lets every protected
+    // endpoint reject a stale HttpOnly session after an offline profile switch.
+    void reply.setCookie(PROFILE_BINDING_COOKIE, userId, {
+      httpOnly: false,
       sameSite: 'lax',
       secure: isProduction,
       path: '/',
@@ -177,12 +193,13 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     const sid = request.cookies[SESSION_COOKIE];
     if (sid) destroySession(db, sid);
     void reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    void reply.clearCookie(PROFILE_BINDING_COOKIE, { path: '/' });
     return { ok: true };
   });
 
   app.get('/api/auth/me', (request, reply) => {
-    const user = currentUser(request);
-    if (!user) return reply.code(401).send({ error: 'UNAUTHENTICATED' });
+    const user = requireUser(request, reply);
+    if (!user) return;
     return { user };
   });
 
@@ -531,6 +548,13 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!user) return;
     const parsed = z.object({ events: z.array(eventSchema).max(200) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
+    if (
+      user.role !== 'STUDENT' ||
+      !user.learnerProfile ||
+      parsed.data.events.some((event) => event.learnerId !== user.learnerProfile)
+    ) {
+      return reply.code(403).send({ error: 'EVENT_PROFILE_MISMATCH' });
+    }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
