@@ -1,5 +1,5 @@
-import graphDraftJson from './graph.v1.json';
-import { contentGraphSchema, toCurriculumCatalog, toDomainGraph } from './schema';
+import graphDraftJson from './graph.v1.json' with { type: 'json' };
+import { contentGraphSchema, toCurriculumCatalog, toDomainGraph } from './schema.ts';
 
 /**
  * The parsed, versioned curriculum draft is the single runtime source for

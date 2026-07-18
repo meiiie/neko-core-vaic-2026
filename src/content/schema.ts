@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { topologicalOrder, type CurriculumGraph, type ReviewState } from '../domain';
+import { topologicalOrder, type CurriculumGraph, type ReviewState } from '../domain/index.ts';
 
 export interface CurriculumAnchorView {
   readonly grade: number;
