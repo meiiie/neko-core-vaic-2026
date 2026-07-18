@@ -1,9 +1,10 @@
 import fastifyCookie from '@fastify/cookie';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
+import { HERO_GRAPH } from '../src/content/hero-demo.ts';
 import { CodexAccountManager } from './ai/codex-account-manager.ts';
 import { registerCodexRoutes, type CodexManagerPort } from './ai/codex-routes.ts';
 import { registerResponsesRoutes } from './ai/responses.ts';
@@ -14,7 +15,11 @@ import {
   userForSession,
   verifyPassword,
 } from './auth.ts';
+import { LESSON_SUMMARIES } from '../src/content/lessons.v1.ts';
 import { CLASS_7A_ID } from './seed.ts';
+import { buildTeacherDashboard } from './teacher-dashboard.ts';
+
+const LESSON_KC_IDS = new Set(LESSON_SUMMARIES.map((lesson) => lesson.kcId));
 
 /**
  * NekoPath API — one Fastify unit (master plan §9). The server owns identity,
@@ -24,6 +29,7 @@ import { CLASS_7A_ID } from './seed.ts';
  */
 
 const SESSION_COOKIE = 'nekopath_sid';
+const PROFILE_BINDING_COOKIE = 'nekopath_profile';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -51,14 +57,29 @@ const questionSchema = z.object({
 
 const assignmentSchema = z.object({
   title: z.string().min(3).max(120),
+  teacherMessage: z.string().max(500).default(''),
   questionIds: z.array(z.string().min(1)).min(1).max(20),
+  learnerIds: z
+    .array(z.string().min(1))
+    .max(40)
+    .default([])
+    .refine((ids) => new Set(ids).size === ids.length),
   dueAt: z.string().datetime().nullable().default(null),
   allowRetake: z.boolean().default(false),
   shuffleAnswers: z.boolean().default(false),
 });
 
+const lessonSchema = z.object({
+  title: z.string().min(4).max(120),
+  keyPoints: z.array(z.string().min(4).max(300)).min(1).max(6),
+  exampleProblem: z.string().min(8).max(500),
+  exampleSteps: z.array(z.string().min(4).max(300)).min(1).max(8),
+  commonMistake: z.string().min(8).max(500),
+});
+
 const eventSchema = z.object({
   id: z.string().min(1),
+  learnerId: z.string().min(1),
   itemId: z.string().min(1),
   assignmentId: z.string().nullable().optional(),
   sequence: z.number().int().nonnegative(),
@@ -66,6 +87,29 @@ const eventSchema = z.object({
   kind: z.string().min(1),
   payload: z.string(),
 });
+
+const teacherOverrideSchema = z
+  .object({
+    learnerId: z.string().min(1),
+    targetKcId: z.string().min(1),
+    decision: z.enum(['SET_ROOT', 'NEEDS_MORE_EVIDENCE']),
+    rootKcId: z.string().min(1).optional(),
+    reason: z.string().trim().min(8).max(240),
+  })
+  .superRefine((value, context) => {
+    if (value.decision === 'SET_ROOT' && !value.rootKcId) {
+      context.addIssue({ code: 'custom', path: ['rootKcId'], message: 'ROOT_REQUIRED' });
+    }
+    if (value.decision === 'NEEDS_MORE_EVIDENCE' && value.rootKcId) {
+      context.addIssue({ code: 'custom', path: ['rootKcId'], message: 'ROOT_NOT_ALLOWED' });
+    }
+  });
+
+const eventPageQuerySchema = z.object({
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+
+const EVENT_PAGE_SIZE = 200;
 
 interface QuestionRow {
   id: string;
@@ -134,6 +178,11 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       void reply.code(401).send({ error: 'UNAUTHENTICATED' });
       return null;
     }
+    const boundProfileId = request.cookies[PROFILE_BINDING_COOKIE];
+    if (boundProfileId && boundProfileId !== user.id) {
+      void reply.code(409).send({ error: 'SESSION_PROFILE_MISMATCH' });
+      return null;
+    }
     return user;
   }
 
@@ -165,12 +214,33 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
   registerCodexRoutes(app, codexManager, requireTeacher);
   app.addHook('onClose', async () => codexManager.disposeAll());
 
+  function recipientIds(value: string): string[] {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((id) => typeof id === 'string') ? parsed : [];
+  }
+
+  function canOpenAssignment(user: { id: string; role: 'STUDENT' | 'TEACHER' }, value: string) {
+    if (user.role === 'TEACHER') return true;
+    const recipients = recipientIds(value);
+    return recipients.length === 0 || recipients.includes(user.id);
+  }
+
   const isProduction = process.env.NODE_ENV === 'production';
+  const useSecureCookies = isProduction && process.env.COOKIE_SECURE !== 'false';
 
   function startSession(reply: FastifyReply, userId: string) {
     const sessionId = createSession(db, userId);
     void reply.setCookie(SESSION_COOKIE, sessionId, {
       httpOnly: true,
+      sameSite: 'lax',
+      secure: useSecureCookies,
+      path: '/',
+      maxAge: 60 * 60 * 12,
+    });
+    // This browser-visible value grants no access. It only lets every protected
+    // endpoint reject a stale HttpOnly session after an offline profile switch.
+    void reply.setCookie(PROFILE_BINDING_COOKIE, userId, {
+      httpOnly: false,
       sameSite: 'lax',
       secure: isProduction,
       path: '/',
@@ -216,12 +286,13 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       destroySession(db, sid);
     }
     void reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    void reply.clearCookie(PROFILE_BINDING_COOKIE, { path: '/' });
     return { ok: true };
   });
 
   app.get('/api/auth/me', (request, reply) => {
-    const user = currentUser(request);
-    if (!user) return reply.code(401).send({ error: 'UNAUTHENTICATED' });
+    const user = requireUser(request, reply);
+    if (!user) return;
     return { user };
   });
 
@@ -236,6 +307,50 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       )
       .all(CLASS_7A_ID);
     return { classId: CLASS_7A_ID, students: rows };
+  });
+
+  app.get('/api/teacher/dashboard', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    return buildTeacherDashboard(db, CLASS_7A_ID, user.id);
+  });
+
+  app.post('/api/teacher/overrides', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    const parsed = teacherOverrideSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', detail: parsed.error.issues });
+    }
+    const body = parsed.data;
+    const knownKcIds = new Set(HERO_GRAPH.nodes.map((node) => node.id));
+    if (!knownKcIds.has(body.targetKcId) || (body.rootKcId && !knownKcIds.has(body.rootKcId))) {
+      return reply.code(400).send({ error: 'UNKNOWN_KC' });
+    }
+    const enrolled = db
+      .prepare('SELECT 1 FROM enrollments WHERE class_id = ? AND user_id = ?')
+      .get(CLASS_7A_ID, body.learnerId);
+    if (!enrolled) return reply.code(404).send({ error: 'LEARNER_NOT_FOUND' });
+
+    const id = `override-${randomUUID()}`;
+    const updatedAt = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO teacher_overrides
+       (id, teacher_id, class_id, learner_id, target_kc_id, decision, root_kc_id, reason,
+        updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      user.id,
+      CLASS_7A_ID,
+      body.learnerId,
+      body.targetKcId,
+      body.decision,
+      body.rootKcId ?? null,
+      body.reason,
+      updatedAt,
+    );
+    return reply.code(201).send({ id, updatedAt });
   });
 
   app.get('/api/questions', (request, reply) => {
@@ -325,12 +440,24 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     if (known.length !== parsed.data.questionIds.length) {
       return reply.code(400).send({ error: 'UNKNOWN_QUESTION_ID' });
     }
+    if (parsed.data.learnerIds.length > 0) {
+      const enrolled = db
+        .prepare(
+          `SELECT u.id FROM enrollments e JOIN users u ON u.id = e.user_id
+           WHERE e.class_id = ? AND u.role = 'STUDENT'
+             AND u.id IN (${parsed.data.learnerIds.map(() => '?').join(',')})`,
+        )
+        .all(CLASS_7A_ID, ...parsed.data.learnerIds) as { id: string }[];
+      if (enrolled.length !== parsed.data.learnerIds.length) {
+        return reply.code(400).send({ error: 'UNKNOWN_LEARNER_ID' });
+      }
+    }
     const id = `assignment-${randomUUID()}`;
     db.prepare(
       `INSERT INTO assignments
        (id, class_id, teacher_id, title, question_ids_json, created_at, due_at, allow_retake,
-        shuffle_answers)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        shuffle_answers, recipient_ids_json, teacher_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       CLASS_7A_ID,
@@ -341,6 +468,8 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       parsed.data.dueAt,
       parsed.data.allowRetake ? 1 : 0,
       parsed.data.shuffleAnswers ? 1 : 0,
+      JSON.stringify(parsed.data.learnerIds),
+      parsed.data.teacherMessage.trim(),
     );
     return reply.code(201).send({ id });
   });
@@ -359,63 +488,81 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       due_at: string | null;
       allow_retake: number;
       shuffle_answers: number;
+      recipient_ids_json: string;
+      teacher_message: string;
     }[];
-    const rosterCount = (
-      db.prepare('SELECT COUNT(*) AS n FROM enrollments WHERE class_id = ?').get(CLASS_7A_ID) as {
+    const classRosterCount = (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM enrollments e JOIN users u ON u.id = e.user_id
+           WHERE e.class_id = ? AND u.role = 'STUDENT'`,
+        )
+        .get(CLASS_7A_ID) as {
         n: number;
       }
     ).n;
-    const assignments = rows.map((row) => {
-      const questionIds = JSON.parse(row.question_ids_json) as string[];
-      const submitted = (
-        db
-          .prepare('SELECT COUNT(DISTINCT learner_id) AS n FROM events WHERE assignment_id = ?')
-          .get(row.id) as { n: number }
-      ).n;
-      const progress = db
-        .prepare(
-          `SELECT learner_id AS learnerId, COUNT(DISTINCT item_id) AS answered
+    const assignments = rows
+      .filter((row) => canOpenAssignment(user, row.recipient_ids_json))
+      .map((row) => {
+        const questionIds = JSON.parse(row.question_ids_json) as string[];
+        const recipients = recipientIds(row.recipient_ids_json);
+        const recipientNames = recipients.map((learnerId) => {
+          const learner = db.prepare('SELECT name FROM users WHERE id = ?').get(learnerId) as
+            { name: string } | undefined;
+          return learner?.name ?? learnerId;
+        });
+        const submitted = (
+          db
+            .prepare('SELECT COUNT(DISTINCT learner_id) AS n FROM events WHERE assignment_id = ?')
+            .get(row.id) as { n: number }
+        ).n;
+        const progress = db
+          .prepare(
+            `SELECT learner_id AS learnerId, COUNT(DISTINCT item_id) AS answered
            FROM events WHERE assignment_id = ? GROUP BY learner_id`,
-        )
-        .all(row.id) as { learnerId: string; answered: number }[];
-      const opened = (
-        db
-          .prepare('SELECT COUNT(*) AS n FROM assignment_views WHERE assignment_id = ?')
-          .get(row.id) as { n: number }
-      ).n;
-      const completed = progress.filter((entry) => entry.answered >= questionIds.length).length;
-      const kcIds = [
-        ...new Set(
-          questionIds.flatMap((questionId) => {
-            const question = db
-              .prepare('SELECT kc_id FROM questions WHERE id = ?')
-              .get(questionId) as { kc_id: string } | undefined;
-            return question ? [question.kc_id] : [];
-          }),
-        ),
-      ];
-      const myAnswers = (
-        db
-          .prepare('SELECT COUNT(*) AS n FROM events WHERE assignment_id = ? AND learner_id = ?')
-          .get(row.id, user.id) as { n: number }
-      ).n;
-      return {
-        id: row.id,
-        title: row.title,
-        createdAt: row.created_at,
-        dueAt: row.due_at,
-        allowRetake: Boolean(row.allow_retake),
-        shuffleAnswers: Boolean(row.shuffle_answers),
-        questionCount: questionIds.length,
-        kcIds,
-        openedLearnerCount: opened,
-        inProgressLearnerCount: Math.max(0, progress.length - completed),
-        completedLearnerCount: completed,
-        submittedLearnerCount: submitted,
-        rosterCount,
-        myAnswerCount: myAnswers,
-      };
-    });
+          )
+          .all(row.id) as { learnerId: string; answered: number }[];
+        const opened = (
+          db
+            .prepare('SELECT COUNT(*) AS n FROM assignment_views WHERE assignment_id = ?')
+            .get(row.id) as { n: number }
+        ).n;
+        const completed = progress.filter((entry) => entry.answered >= questionIds.length).length;
+        const kcIds = [
+          ...new Set(
+            questionIds.flatMap((questionId) => {
+              const question = db
+                .prepare('SELECT kc_id FROM questions WHERE id = ?')
+                .get(questionId) as { kc_id: string } | undefined;
+              return question ? [question.kc_id] : [];
+            }),
+          ),
+        ];
+        const myAnswers = (
+          db
+            .prepare('SELECT COUNT(*) AS n FROM events WHERE assignment_id = ? AND learner_id = ?')
+            .get(row.id, user.id) as { n: number }
+        ).n;
+        return {
+          id: row.id,
+          title: row.title,
+          teacherMessage: row.teacher_message,
+          createdAt: row.created_at,
+          dueAt: row.due_at,
+          allowRetake: Boolean(row.allow_retake),
+          shuffleAnswers: Boolean(row.shuffle_answers),
+          questionCount: questionIds.length,
+          kcIds,
+          openedLearnerCount: opened,
+          inProgressLearnerCount: Math.max(0, progress.length - completed),
+          completedLearnerCount: completed,
+          submittedLearnerCount: submitted,
+          rosterCount: recipients.length > 0 ? recipients.length : classRosterCount,
+          recipientCount: recipients.length > 0 ? recipients.length : classRosterCount,
+          ...(user.role === 'TEACHER' ? { recipientNames } : {}),
+          myAnswerCount: myAnswers,
+        };
+      });
     return { assignments };
   });
 
@@ -424,8 +571,13 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     if (!user) return;
     if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
     const { id } = request.params as { id: string };
-    const exists = db.prepare('SELECT id FROM assignments WHERE id = ?').get(id);
+    const exists = db
+      .prepare('SELECT id, recipient_ids_json FROM assignments WHERE id = ?')
+      .get(id) as { id: string; recipient_ids_json: string } | undefined;
     if (!exists) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (!canOpenAssignment(user, exists.recipient_ids_json)) {
+      return reply.code(403).send({ error: 'FORBIDDEN' });
+    }
     db.prepare(
       `INSERT OR IGNORE INTO assignment_views (assignment_id, learner_id, opened_at)
        VALUES (?, ?, ?)`,
@@ -444,9 +596,14 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
           question_ids_json: string;
           allow_retake: number;
           shuffle_answers: number;
+          recipient_ids_json: string;
+          teacher_message: string;
         }
       | undefined;
     if (!row) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (!canOpenAssignment(user, row.recipient_ids_json)) {
+      return reply.code(403).send({ error: 'FORBIDDEN' });
+    }
     const questionIds = JSON.parse(row.question_ids_json) as string[];
     const answeredIds =
       user.role === 'STUDENT' && !row.allow_retake
@@ -484,6 +641,7 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     return {
       id: row.id,
       title: row.title,
+      teacherMessage: row.teacher_message,
       allowRetake: Boolean(row.allow_retake),
       shuffleAnswers: Boolean(row.shuffle_answers),
       questions,
@@ -494,16 +652,28 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
   app.post('/api/assignments/:id/answers', (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return;
+    if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
     const { id } = request.params as { id: string };
     const body = z
       .object({ questionId: z.string().min(1), choiceId: z.string().min(1) })
       .safeParse(request.body);
     if (!body.success) return reply.code(400).send({ error: 'INVALID_BODY' });
     const assignment = db
-      .prepare('SELECT question_ids_json, due_at, allow_retake FROM assignments WHERE id = ?')
+      .prepare(
+        'SELECT question_ids_json, due_at, allow_retake, recipient_ids_json FROM assignments WHERE id = ?',
+      )
       .get(id) as
-      { question_ids_json: string; due_at: string | null; allow_retake: number } | undefined;
+      | {
+          question_ids_json: string;
+          due_at: string | null;
+          allow_retake: number;
+          recipient_ids_json: string;
+        }
+      | undefined;
     if (!assignment) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (!canOpenAssignment(user, assignment.recipient_ids_json)) {
+      return reply.code(403).send({ error: 'FORBIDDEN' });
+    }
     const questionIds = JSON.parse(assignment.question_ids_json) as string[];
     if (!questionIds.includes(body.data.questionId)) {
       return reply.code(400).send({ error: 'QUESTION_NOT_IN_ASSIGNMENT' });
@@ -525,51 +695,240 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     if (!question) return reply.code(404).send({ error: 'QUESTION_NOT_FOUND' });
 
     const correct = question.correct_choice_id === body.data.choiceId;
+    const choices = JSON.parse(question.choices_json) as {
+      id: string;
+      noteVi?: string;
+      misconceptionTag?: string;
+    }[];
+    const picked = choices.find((choice) => choice.id === body.data.choiceId);
+    if (!picked) return reply.code(400).send({ error: 'INVALID_CHOICE' });
+    const misconceptionId = !correct ? picked?.misconceptionTag : undefined;
     const sequence = (
-      db.prepare('SELECT COUNT(*) AS n FROM events WHERE learner_id = ?').get(user.id) as {
-        n: number;
+      db
+        .prepare(
+          'SELECT COALESCE(MAX(sequence), 0) AS maxSequence FROM events WHERE learner_id = ?',
+        )
+        .get(user.id) as {
+        maxSequence: number;
       }
-    ).n;
+    ).maxSequence;
+    const eventId = `evt-${randomUUID()}`;
+    const occurredAt = new Date().toISOString();
+    const payload = JSON.stringify({
+      choiceId: body.data.choiceId,
+      correct,
+      methodValidity: misconceptionId ? 'INVALID' : 'UNKNOWN',
+      ...(misconceptionId ? { misconceptionId } : {}),
+    });
     db.prepare(
       `INSERT OR IGNORE INTO events
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
        VALUES (?, ?, ?, ?, ?, ?, 'ASSIGNMENT_ANSWER', ?, ?)`,
     ).run(
-      `evt-${randomUUID()}`,
+      eventId,
       user.id,
       body.data.questionId,
       id,
       sequence + 1,
-      new Date().toISOString(),
-      JSON.stringify({ choiceId: body.data.choiceId, correct }),
+      occurredAt,
+      payload,
       new Date().toISOString(),
     );
-    const choices = JSON.parse(question.choices_json) as {
-      id: string;
-      noteVi?: string;
-    }[];
-    const picked = choices.find((choice) => choice.id === body.data.choiceId);
     return {
       correct,
       correctChoiceId: question.correct_choice_id,
       explanation: question.explanation,
       note: picked?.noteVi ?? null,
       hints: JSON.parse(question.hints_json) as string[],
+      event: {
+        id: eventId,
+        learnerId: user.id,
+        itemId: body.data.questionId,
+        sequence: sequence + 1,
+        occurredAt,
+        kind: 'ASSIGNMENT_ANSWER',
+        payload,
+      },
     };
   });
 
-  /** Idempotent batch sync of locally recorded practice events. */
+  /**
+   * Paginated, account-scoped event history for restoring a student's
+   * append-only evidence log on another device.
+   */
+  app.get('/api/events', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
+    const query = eventPageQuerySchema.safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: 'INVALID_QUERY' });
+    const rows = db
+      .prepare(
+        `SELECT id, learner_id, item_id, sequence, occurred_at, kind, payload
+         FROM events
+         WHERE learner_id = ?
+         ORDER BY rowid ASC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(user.id, EVENT_PAGE_SIZE + 1, query.data.offset) as {
+      id: string;
+      learner_id: string;
+      item_id: string;
+      sequence: number;
+      occurred_at: string;
+      kind: string;
+      payload: string;
+    }[];
+    const hasMore = rows.length > EVENT_PAGE_SIZE;
+    const events = rows.slice(0, EVENT_PAGE_SIZE).map((row) => ({
+      id: row.id,
+      learnerId: row.learner_id,
+      itemId: row.item_id,
+      sequence: row.sequence,
+      occurredAt: row.occurred_at,
+      kind: row.kind,
+      payload: row.payload,
+    }));
+    return {
+      events,
+      nextOffset: hasMore ? query.data.offset + EVENT_PAGE_SIZE : null,
+    };
+  });
+
+  /**
+   * Lesson materials. The server is the source of truth; the client mirrors
+   * rows into IndexedDB so students can read them offline. Team-seeded rows
+   * start as DRAFT; a teacher edit publishes the row in their name.
+   */
+  app.get('/api/lessons', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    const rows = db
+      .prepare(
+        `SELECT l.kc_id, l.title, l.key_points_json, l.example_problem, l.example_steps_json,
+                l.common_mistake, l.status, l.updated_at, u.name AS updated_by_name
+         FROM lessons l LEFT JOIN users u ON u.id = l.updated_by
+         ORDER BY l.kc_id`,
+      )
+      .all() as {
+      kc_id: string;
+      title: string;
+      key_points_json: string;
+      example_problem: string;
+      example_steps_json: string;
+      common_mistake: string;
+      status: string;
+      updated_at: string;
+      updated_by_name: string | null;
+    }[];
+    return {
+      lessons: rows.map((row) => ({
+        kcId: row.kc_id,
+        title: row.title,
+        keyPoints: JSON.parse(row.key_points_json) as string[],
+        exampleProblem: row.example_problem,
+        exampleSteps: JSON.parse(row.example_steps_json) as string[],
+        commonMistake: row.common_mistake,
+        status: row.status,
+        updatedAt: row.updated_at,
+        updatedByName: row.updated_by_name,
+      })),
+    };
+  });
+
+  app.put('/api/lessons/:kcId', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    const { kcId } = request.params as { kcId: string };
+    if (!LESSON_KC_IDS.has(kcId)) return reply.code(404).send({ error: 'UNKNOWN_KC' });
+    const parsed = lessonSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', detail: parsed.error.issues });
+    }
+    const body = parsed.data;
+    db.prepare(
+      `INSERT INTO lessons
+       (kc_id, title, key_points_json, example_problem, example_steps_json, common_mistake,
+        status, updated_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'PUBLISHED', ?, ?)
+       ON CONFLICT(kc_id) DO UPDATE SET
+         title = excluded.title,
+         key_points_json = excluded.key_points_json,
+         example_problem = excluded.example_problem,
+         example_steps_json = excluded.example_steps_json,
+         common_mistake = excluded.common_mistake,
+         status = 'PUBLISHED',
+         updated_by = excluded.updated_by,
+         updated_at = excluded.updated_at`,
+    ).run(
+      kcId,
+      body.title,
+      JSON.stringify(body.keyPoints),
+      body.exampleProblem,
+      JSON.stringify(body.exampleSteps),
+      body.commonMistake,
+      user.id,
+      new Date().toISOString(),
+    );
+    return { ok: true };
+  });
+
+  /**
+   * Idempotent batch sync of locally recorded practice events. A retried
+   * event with the same content is acknowledged silently; the same event ID
+   * with DIFFERENT content is never overwritten — both fingerprints are
+   * quarantined in sync_conflicts and the ID is reported back so the client
+   * stops retrying it.
+   */
   app.post('/api/events', (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return;
     const parsed = z.object({ events: z.array(eventSchema).max(200) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
+    if (
+      user.role !== 'STUDENT' ||
+      parsed.data.events.some((event) => event.learnerId !== user.id)
+    ) {
+      return reply.code(403).send({ error: 'EVENT_ACCOUNT_MISMATCH' });
+    }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
+    const selectExisting = db.prepare(
+      `SELECT learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload
+       FROM events WHERE id = ?`,
+    );
+    const insertConflict = db.prepare(
+      `INSERT OR IGNORE INTO sync_conflicts
+       (event_id, learner_id, server_fingerprint, client_fingerprint, first_seen_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    const fingerprint = (row: {
+      learnerId: string;
+      itemId: string;
+      assignmentId?: string | null;
+      sequence: number;
+      occurredAt: string;
+      kind: string;
+      payload: string;
+    }) =>
+      createHash('sha256')
+        .update(
+          JSON.stringify([
+            row.learnerId,
+            row.itemId,
+            row.assignmentId ?? null,
+            row.sequence,
+            row.occurredAt,
+            row.kind,
+            row.payload,
+          ]),
+        )
+        .digest('hex');
     let accepted = 0;
+    const conflictIds: string[] = [];
     for (const event of parsed.data.events) {
       const result = insert.run(
         event.id,
@@ -582,9 +941,37 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         event.payload,
         new Date().toISOString(),
       );
-      accepted += Number(result.changes);
+      if (Number(result.changes) > 0) {
+        accepted += 1;
+        continue;
+      }
+      const existing = selectExisting.get(event.id) as
+        | {
+            learner_id: string;
+            item_id: string;
+            assignment_id: string | null;
+            sequence: number;
+            occurred_at: string;
+            kind: string;
+            payload: string;
+          }
+        | undefined;
+      if (!existing) continue;
+      const serverPrint = fingerprint({
+        learnerId: existing.learner_id,
+        itemId: existing.item_id,
+        assignmentId: existing.assignment_id,
+        sequence: existing.sequence,
+        occurredAt: existing.occurred_at,
+        kind: existing.kind,
+        payload: existing.payload,
+      });
+      const clientPrint = fingerprint(event);
+      if (serverPrint === clientPrint) continue; // harmless retry
+      insertConflict.run(event.id, user.id, serverPrint, clientPrint, new Date().toISOString());
+      conflictIds.push(event.id);
     }
-    return { accepted, received: parsed.data.events.length };
+    return { accepted, conflictIds, received: parsed.data.events.length };
   });
 
   return app;

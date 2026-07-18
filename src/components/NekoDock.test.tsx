@@ -197,7 +197,7 @@ describe('NekoDock agent session', () => {
     await user.click(screen.getByRole('button', { name: 'Gửi' }));
 
     expect(await screen.findByText('Luyện tập Phân số bằng nhau')).toBeTruthy();
-    expect(screen.getByText(/Giao 2 câu cho lớp 7A/)).toBeTruthy();
+    expect(screen.getByText(/Giao 5 câu cho lớp 7A/)).toBeTruthy();
     expect(
       fetchImpl.mock.calls.some(
         ([request, init]) =>

@@ -62,12 +62,17 @@ security boundary.
 ## Product capabilities
 
 **Student workspace** — adaptive check-in that spends a bounded question budget, an evidence-based
-learning path with explicit reasons per step, mastery-driven practice, and teacher-assigned
-homework with due dates and retake policy.
+learning path with explicit reasons per step, per-skill lesson summaries that open offline from
+the device mirror, mastery-driven practice with a three-level hint ladder, and teacher-assigned
+homework with due dates and retake policy. Evidence follows the account: a student's append-only
+history rehydrates on any device they sign into.
 
-**Teacher workspace** — class overview grouped by need, misconception verification queue,
-question authoring, assignment creation and monitoring, all computed from the same deterministic
-domain core the student surfaces use.
+**Teacher workspace** — class overview grouped by need over real synced records, per-learner
+evidence tracing (every decision opens down to the answers behind it), misconception verification
+queue, question authoring, **lesson-material authoring** (team-seeded drafts the teacher edits and
+publishes under their own name, distributed to student devices for offline reading), and
+assignment creation and monitoring — all computed from the same deterministic domain core the
+student surfaces use.
 
 **Neko assistant** — a persistent, evidence-first console docked on the right. Its canonical
 memory compacts under estimated token pressure rather than expiring after a fixed number of turns.
@@ -84,7 +89,7 @@ flowchart LR
   subgraph Device["Learner / teacher device"]
     UI["React 19 PWA<br/>Vite, TypeScript strict"]
     SW["Service worker<br/>precache + runtime cache"]
-    IDB[("IndexedDB (Dexie)<br/>events · overrides · outbox")]
+    IDB[("IndexedDB (Dexie)<br/>events · overrides · outbox · lesson mirror")]
     Agent["Neko agent harness<br/>rule · Ollama · WebLLM Gemma"]
     UI --- SW
     UI --- IDB
@@ -98,7 +103,7 @@ flowchart LR
   subgraph Origin["GCP VM · Docker Compose"]
     Caddy["Caddy (TLS)"]
     API["Fastify 5<br/>session cookies, scrypt"]
-    DB[("SQLite (node:sqlite)<br/>users · questions · assignments · events")]
+    DB[("SQLite (node:sqlite)<br/>users · questions · assignments · lessons · events")]
     Caddy --> API --> DB
   end
 
@@ -114,6 +119,11 @@ Design decisions that matter:
   with a disclosed synthetic evaluation suite — the UI renders runtime results, never hard-coded
   outcomes.
 - **Sessions over tokens.** HttpOnly, SameSite session cookies instead of JWT-in-localStorage.
+- **Offline entry without offline credentials.** After a successful server login, the device keeps
+  only a sanitized profile (email, local `id`, name, initials, `shortName`, role, subtitle and the
+  optional local learner key). If the directory is unreachable, users may reopen only profiles
+  already confirmed on that device; no password, session cookie or API response is copied into web
+  storage or the service-worker cache.
 - **Zero native dependencies.** `node:sqlite` keeps the image small and the Docker build
   reproducible; the Docker build is the release gate.
 - **System font stack.** Zero download on 2G and native Vietnamese diacritic shaping on every
@@ -122,7 +132,8 @@ Design decisions that matter:
 ### Where the AI actually is
 
 NekoPath's core AI is not a chatbot. It is a **probabilistic learner model plus a
-graph-constrained decision engine**, running entirely on the device:
+graph-constrained decision engine**. Student diagnosis runs on the device; the server-backed
+teacher dashboard invokes the same pure domain core over account-scoped evidence:
 
 1. A Bayesian Knowledge Tracing–style learner model (versioned slip/guess/learn parameters,
    deterministic over the canonicalized event log) updates mastery estimates after every answer.
@@ -151,20 +162,25 @@ npm ci
 npm run seed     # create and seed the local SQLite database
 npm run server   # Fastify API on port 3001
 npm run dev      # Vite dev server (proxies /api to the local API)
-npm run test     # 94 application tests (Vitest)
-npm run eval     # 28 disclosed synthetic evaluation tests
+npm run test     # 167 application and integration tests (Vitest)
+npm run eval     # 29 disclosed synthetic evaluation tests
 npm run build    # type-checked production build
+npm run verify   # complete local verification in one command
 ```
 
-The full local gate mirrors CI: `format:check`, `lint`, `typecheck`, `test`, `build`.
+`npm run verify` runs format, lint, typecheck, application tests, eval and build. CI repeats those
+steps and additionally validates operations scripts and the generated PWA artifacts.
 
 ## Quality and release engineering
 
 - **CI** (`.github/workflows/ci.yml`): SHA-pinned actions, least-privilege permissions, the
   complete gate on every push and pull request.
-- **Deploy** (`.github/workflows/deploy.yml`): manual `workflow_dispatch` to the production VM;
-  the Docker build is the release gate. The in-product version surface reports the immutable Git
-  SHA; `/api/healthz` reports liveness and server time.
+- **Deploy** (`.github/workflows/deploy.yml`): the pipeline is the **only** sanctioned release
+  path (`gh workflow run deploy.yml`) — keyless GitHub OIDC/Google Workload Identity Federation,
+  IAP-tunneled from GitHub's runners, serialized, smoke-tested; the Docker build is the release
+  gate. Hand SSH is reported break-glass only (see
+  [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md)). The in-product version surface
+  reports the immutable Git SHA; `/api/healthz` reports liveness and server time.
 - **Versioning**: semantic versions, annotated tags, and published
   [GitHub Releases](https://github.com/meiiie/neko-core-vaic-2026/releases); history in
   [CHANGELOG.md](CHANGELOG.md).
@@ -202,6 +218,10 @@ labs/           Image-generation lab with asset register and review rubric
 | [Agentic vertical slice](docs/superpowers/plans/2026-07-18-neko-agentic-vertical-slice.md) | Implementation and verification record |
 | [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md) | Production topology and verification |
 | [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Submission video script with claim discipline |
+| [PROBLEM_FIT_AUDIT.md](docs/PROBLEM_FIT_AUDIT.md) | Requirement-by-requirement technical audit with measurements |
+| [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) | Team delivery rules benchmarked against industry practice |
+| [ARCHITECTURE_REVIEW_VS_LMS.md](docs/ARCHITECTURE_REVIEW_VS_LMS.md) | Honest architecture review against the team's mature LMS |
+| [CURRICULUM_SCOPE_DECISIONS.md](docs/CURRICULUM_SCOPE_DECISIONS.md) | Team-lead-approved curriculum scope and architecture decisions |
 | [ops/RUNBOOK.md](ops/RUNBOOK.md) | Operations: deploy, accounts, recovery |
 
 ## Team and AI collaboration
@@ -219,8 +239,11 @@ hypothesis and is labeled as such throughout the documentation.
 NekoPath là trợ giảng thích ứng cho lớp học đa trình độ: lần theo lỗi hiện tại của học sinh về
 đúng lỗ hổng kiến thức gốc sớm nhất có thể can thiệp, chủ động **hỏi thêm khi chưa đủ bằng
 chứng** thay vì gán nhãn sai, và trao cho giáo viên một kế hoạch can thiệp xếp ưu tiên trong
-ngân sách 15 phút. Ứng dụng là PWA **cục bộ trước**: chẩn đoán, lộ trình và luyện tập cốt lõi
-tiếp tục khi mất mạng rồi tự đồng bộ sự kiện khi có kết nối; các thao tác do máy chủ sở hữu vẫn
+ngân sách 15 phút. Giáo viên tự soạn câu hỏi, giao bài và **biên soạn học liệu tóm tắt theo từng
+kỹ năng** — tài liệu xuất bản dưới tên giáo viên và được phát tới thiết bị học sinh để đọc cả
+khi mất mạng. Ứng dụng là PWA **cục bộ trước**: chẩn đoán, lộ trình và luyện tập cốt lõi tiếp
+tục khi mất mạng rồi tự đồng bộ sự kiện khi có kết nối (chống trùng lặp, cách ly xung đột); lịch
+sử học theo tài khoản nên đổi thiết bị vẫn khôi phục được. Các thao tác do máy chủ sở hữu vẫn
 cần mạng. Lát cắt Toán 7 được biên soạn theo định hướng GDPT 2018 nhưng còn chờ giáo viên được
 nêu tên duyệt chính thức. Đăng nhập trình diễn bằng cách chọn tên trong danh sách lớp, không cần
 gõ mật khẩu và không được xem là ranh giới định danh bảo mật cho triển khai trường học thật.

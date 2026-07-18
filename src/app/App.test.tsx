@@ -3,7 +3,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installApiStub } from '../test/api-stub';
+import { installApiStub, TEACHER_DASHBOARD_FIXTURE } from '../test/api-stub';
+import { db } from '../storage/db';
 import { App } from './App';
 
 function installMobileViewport() {
@@ -108,12 +109,75 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(await screen.findByRole('link', { name: /Ngân hàng câu hỏi/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Giao bài/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Bài kiểm tra/ })).toBeNull();
-    expect(screen.getByText('Đã đánh giá')).toBeTruthy();
+    expect(await screen.findByText('Đã đánh giá')).toBeTruthy();
     expect(screen.getByText('Cần đánh giá thêm')).toBeTruthy();
     expect(screen.getByText('Phân bổ thời gian giáo viên')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Kế hoạch trong 15 phút' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Giải thích chỉ số Đã đánh giá' })).toBeTruthy();
     expect(screen.queryByText('Đủ bằng chứng')).toBeNull();
+  });
+
+  it('opens a support group on a dedicated detail page', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/teacher/class']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bài học có học sinh cần ôn' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Bài: Phân số bằng nhau' })).toBeTruthy();
+    expect(screen.queryByText('Trần Ngọc An')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Xem gói bài ôn đề xuất' })).toBeNull();
+
+    await user.click(
+      screen.getByRole('link', { name: 'Xem học sinh và gợi ý ôn bài Phân số bằng nhau' }),
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bài: Phân số bằng nhau' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Quay lại các bài cần ôn' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Học sinh đang sai ở đâu?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Căn cứ của từng học sinh' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Xem gói bài ôn đề xuất' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tải danh sách' })).toBeTruthy();
+
+    await user.click(screen.getByText('Xem câu trả lời'));
+    expect(screen.getByRole('columnheader', { name: 'Đã chọn' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: '4/5' })).toBeTruthy();
+    expect(screen.getAllByRole('cell', { name: '4/6' }).length).toBeGreaterThan(0);
+  });
+
+  it('does not replace an empty backend event log with synthetic groups', async () => {
+    installApiStub('co.ha@nekopath.edu.vn', {
+      ...TEACHER_DASHBOARD_FIXTURE,
+      latestAnswerAt: null,
+      evaluatedLearnerCount: 0,
+      answerEventCount: 0,
+      groups: [],
+      classWideGaps: [],
+      attentionPlan: {
+        ...TEACHER_DASHBOARD_FIXTURE.attentionPlan,
+        usedMinutes: 0,
+        remainingMinutes: 15,
+        selected: [],
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={['/teacher/class']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Chưa thể xác định bài học cần ôn' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Giao bài kiểm tra nhanh' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Bài: Phân số bằng nhau' })).toBeNull();
   });
 
   it('redirects protected routes to login when the server has no session', async () => {
@@ -197,6 +261,151 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(directoryAttempts).toBe(2);
   });
 
+  it('keeps the adaptive check-in focused and uses student-facing language', async () => {
+    installApiStub('chi@nekopath.edu.vn');
+    await db.events.clear();
+    await db.outbox.clear();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/student/check-in']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bài kiểm tra nền tảng' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Điều hướng chính' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Thoát bài' })).toBeTruthy();
+    expect(screen.getByText('Tiến trình đánh giá')).toBeTruthy();
+    expect(screen.queryByText(/tối đa 3 câu/i)).toBeNull();
+    expect(screen.queryByText('Chọn một đáp án')).toBeNull();
+    expect(screen.queryByText('Cần thêm bằng chứng')).toBeNull();
+    expect(screen.queryByText('Đang phân biệt')).toBeNull();
+    expect(screen.getByText('Kỹ năng đang đánh giá')).toBeTruthy();
+    expect(screen.getByText('Hệ thống cần thêm câu trả lời để đánh giá chính xác.')).toBeTruthy();
+    expect(screen.getByText('Chọn một đáp án để tiếp tục')).toBeTruthy();
+    expect(screen.getByText('Vì sao?')).toBeTruthy();
+
+    const primary = screen.getByRole('button', { name: 'Xác nhận và tiếp tục' });
+    expect((primary as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('radio', { name: /3:5/ }));
+    expect((primary as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText('Chọn một đáp án để tiếp tục')).toBeNull();
+
+    await user.click(primary);
+    expect(
+      await screen.findByText('Đã lưu. Hệ thống sẽ chọn câu tiếp theo phù hợp với kết quả của em.'),
+    ).toBeTruthy();
+  });
+
+  it('enters through a previously confirmed device profile when the class directory is offline', async () => {
+    window.localStorage.setItem(
+      'nekopath.device-profiles.v1',
+      JSON.stringify([
+        {
+          email: 'an@nekopath.edu.vn',
+          id: 'user-student-an',
+          role: 'STUDENT',
+          name: 'Trần Ngọc An',
+          initials: 'NA',
+          shortName: 'An',
+          subtitle: 'Học sinh • Lớp 7A',
+          learnerId: 'an',
+        },
+      ]),
+    );
+    window.localStorage.setItem('nekopath.last-email.v1', 'an@nekopath.edu.vn');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/auth/me')) {
+        return new Response(JSON.stringify({ error: 'UNAUTHENTICATED' }), { status: 401 });
+      }
+      if (url.endsWith('/api/auth/directory')) throw new TypeError('network down');
+      if (url.endsWith('/api/auth/logout')) return new Response(JSON.stringify({ ok: true }));
+      return new Response('{}', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Đang dùng hồ sơ đã lưu trên thiết bị')).toBeTruthy();
+    expect(
+      (screen.getByRole('combobox', { name: 'Chọn tên của bạn' }) as HTMLInputElement).value,
+    ).toBe('Trần Ngọc An');
+    await user.click(screen.getByRole('button', { name: 'Vào ngoại tuyến' }));
+
+    expect(await screen.findByRole('navigation', { name: 'Điều hướng chính' })).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/auth/login'))).toBe(
+      false,
+    );
+  });
+
+  it('falls back to a confirmed profile when the network drops after loading the directory', async () => {
+    window.localStorage.setItem(
+      'nekopath.device-profiles.v1',
+      JSON.stringify([
+        {
+          email: 'an@nekopath.edu.vn',
+          id: 'user-student-an',
+          role: 'STUDENT',
+          name: 'Trần Ngọc An',
+          initials: 'NA',
+          shortName: 'An',
+          subtitle: 'Học sinh • Lớp 7A',
+          learnerId: 'an',
+        },
+      ]),
+    );
+    window.localStorage.setItem('nekopath.last-email.v1', 'an@nekopath.edu.vn');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/auth/me')) {
+        return new Response(JSON.stringify({ error: 'UNAUTHENTICATED' }), { status: 401 });
+      }
+      if (url.endsWith('/api/auth/directory')) {
+        return new Response(
+          JSON.stringify({
+            accounts: [
+              {
+                email: 'an@nekopath.edu.vn',
+                name: 'Trần Ngọc An',
+                role: 'STUDENT',
+                subtitle: 'Học sinh • Lớp 7A',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.endsWith('/api/auth/login')) throw new TypeError('network down');
+      return new Response('{}', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Đăng nhập' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+
+    expect(await screen.findByRole('navigation', { name: 'Điều hướng chính' })).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/api/auth/login')),
+    ).toHaveLength(1);
+    expect(document.cookie).toContain('nekopath_profile=user-student-an');
+  });
+
   it('keeps mobile drawer focus and exit behavior continuous', async () => {
     installMobileViewport();
     installApiStub('co.ha@nekopath.edu.vn');
@@ -249,8 +458,10 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(sidebar?.hasAttribute('inert')).toBe(true);
 
     await user.click(menu);
-    await user.click(await screen.findByRole('link', { name: /Nhóm cần hỗ trợ/ }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Nhóm cần hỗ trợ' })).toBeTruthy();
+    await user.click(await screen.findByRole('link', { name: /Bài học cần ôn/ }));
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bài học có học sinh cần ôn' }),
+    ).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.id).toBe('main-content'));
     expect(sidebar?.hasAttribute('inert')).toBe(true);
   });

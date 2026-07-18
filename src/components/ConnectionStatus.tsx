@@ -15,7 +15,11 @@ function timeAgoVi(iso: string): string {
  * Only the states needing attention take the review tone; the normal state
  * stays muted. Full detail lives on the Dữ liệu & ngoại tuyến page.
  */
-export function ConnectionStatus() {
+export function ConnectionStatus({
+  serverAuthoritative = false,
+}: {
+  serverAuthoritative?: boolean;
+}) {
   const [online, setOnline] = useState<boolean>(() => navigator.onLine);
   const sync = useSyncStatus();
 
@@ -33,7 +37,17 @@ export function ConnectionStatus() {
   if (!online) {
     return (
       <p className="sidebar-status" data-tone="review" role="status">
-        Ngoại tuyến — bài làm lưu trên thiết bị
+        {serverAuthoritative
+          ? 'Ngoại tuyến — chưa cập nhật dữ liệu lớp'
+          : 'Ngoại tuyến — bài làm lưu trên thiết bị'}
+      </p>
+    );
+  }
+
+  if (serverAuthoritative) {
+    return (
+      <p className="sidebar-status" role="status">
+        Dữ liệu lớp từ máy chủ
       </p>
     );
   }

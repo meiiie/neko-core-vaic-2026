@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import {
+  buildConfirmedAssignmentRecord,
+  type ConfirmedAssignmentEvent,
+} from '../../app/adapters/hero-tutor';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { useSession } from '../../app/session';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
+import { recordConfirmedAnswer } from '../../services/sync';
 
 interface ApiAssignment {
   id: string;
   title: string;
+  teacherMessage: string;
   questionCount: number;
   myAnswerCount: number;
 }
@@ -16,6 +25,7 @@ interface ApiChoice {
 interface ApiAssignmentDetail {
   id: string;
   title: string;
+  teacherMessage: string;
   questions: { id: string; kcId: string; prompt: string; choices: ApiChoice[] }[];
 }
 
@@ -25,6 +35,7 @@ interface GradeResult {
   explanation: string;
   note: string | null;
   hints: string[];
+  event: ConfirmedAssignmentEvent;
 }
 
 /** Student view: assignments handed out by the teacher, fetched live. */
@@ -69,6 +80,12 @@ export function AssignmentsPage() {
             <span>
               {assignment.questionCount} câu · em đã trả lời {assignment.myAnswerCount} lần
             </span>
+            {assignment.teacherMessage ? (
+              <div className="student-assignment-message">
+                <strong>Lời nhắn của giáo viên</strong>
+                <p>{assignment.teacherMessage}</p>
+              </div>
+            ) : null}
             <Link className="button-primary" to={`/student/assignments/${assignment.id}`}>
               {assignment.myAnswerCount > 0 ? 'Làm tiếp' : 'Bắt đầu làm'}
             </Link>
@@ -81,6 +98,13 @@ export function AssignmentsPage() {
 
 /** Take one assignment: server grades each answer and returns real feedback. */
 export function AssignmentTakePage() {
+  const { account } = useSession();
+  const learnerContext = studentContextForAccount(account);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
   const { assignmentId } = useParams<{ assignmentId: string }>();
   const [detail, setDetail] = useState<ApiAssignmentDetail | null>(null);
   const [error, setError] = useState(false);
@@ -88,6 +112,7 @@ export function AssignmentTakePage() {
   const [choiceId, setChoiceId] = useState<string | null>(null);
   const [grade, setGrade] = useState<GradeResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [evidenceSaveError, setEvidenceSaveError] = useState(false);
 
   useEffect(() => {
     if (!assignmentId) return;
@@ -112,6 +137,10 @@ export function AssignmentTakePage() {
     };
   }, [assignmentId]);
 
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
+
   if (error) {
     return (
       <div className="page-stack">
@@ -124,7 +153,12 @@ export function AssignmentTakePage() {
       </div>
     );
   }
-  if (!detail) return <div className="page-loading" aria-label="Đang tải bài được giao" />;
+  if (!detail || !learnerContext || localRecords === undefined) {
+    return <div className="page-loading" aria-label="Đang tải bài được giao" />;
+  }
+
+  const activeLearnerContext = learnerContext;
+  const activeLocalRecords = localRecords;
 
   const question = detail.questions[index];
   const finished = index >= detail.questions.length;
@@ -132,6 +166,7 @@ export function AssignmentTakePage() {
   async function submit() {
     if (!question || !choiceId || busy) return;
     setBusy(true);
+    setEvidenceSaveError(false);
     try {
       const response = await fetch(`/api/assignments/${detail?.id}/answers`, {
         method: 'POST',
@@ -140,7 +175,21 @@ export function AssignmentTakePage() {
         body: JSON.stringify({ questionId: question.id, choiceId }),
       });
       if (!response.ok) throw new Error(String(response.status));
-      setGrade((await response.json()) as GradeResult);
+      const result = (await response.json()) as GradeResult;
+      try {
+        const record = buildConfirmedAssignmentRecord(
+          activeLearnerContext,
+          result.event,
+          activeLocalRecords.length,
+        );
+        if (!record) throw new Error('EVENT_ACCOUNT_MISMATCH');
+        await recordConfirmedAnswer(record);
+      } catch {
+        // The server already accepted the answer. Keep its feedback visible,
+        // but never pretend the local diagnosis evidence was saved.
+        setEvidenceSaveError(true);
+      }
+      setGrade(result);
     } catch {
       setGrade(null);
       setError(true);
@@ -167,6 +216,13 @@ export function AssignmentTakePage() {
           Câu {Math.min(index + 1, detail.questions.length)}/{detail.questions.length}
         </span>
       </header>
+
+      {detail.teacherMessage ? (
+        <aside className="student-assignment-message student-assignment-message--detail">
+          <strong>Lời nhắn của giáo viên</strong>
+          <p>{detail.teacherMessage}</p>
+        </aside>
+      ) : null}
 
       {finished ? (
         <section className="completion-panel">
@@ -248,6 +304,12 @@ export function AssignmentTakePage() {
                   <p className="eyebrow">Gợi ý</p>
                   <p>{grade.hints[0]}</p>
                 </div>
+              ) : null}
+              {evidenceSaveError ? (
+                <p className="error-message" role="alert">
+                  Kết quả đã được nộp cho giáo viên, nhưng thiết bị chưa lưu được bằng chứng để cập
+                  nhật lộ trình cá nhân.
+                </p>
               ) : null}
               <button className="button-primary" type="button" onClick={next}>
                 {index + 1 < detail.questions.length ? 'Câu tiếp theo' : 'Hoàn tất'}

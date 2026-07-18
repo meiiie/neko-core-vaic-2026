@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installApiStub } from '../../test/api-stub';
 import {
   AGENT_SYSTEM_PROMPT,
   runAgent,
@@ -16,21 +17,25 @@ import {
 } from './providers';
 import { AGENT_TOOLS, toolByName } from './tools';
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 function collect(): { events: AgentTraceEvent[]; onTrace: (e: AgentTraceEvent) => void } {
   const events: AgentTraceEvent[] = [];
   return { events, onTrace: (e) => events.push(e) };
 }
+
+beforeEach(() => {
+  installApiStub('co.ha@nekopath.edu.vn');
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('agent tools (deterministic facts)', () => {
   it('class overview exposes groups, priority and the K02 class-wide gap', async () => {
     const result = await toolByName('tong_quan_lop')!.run({});
     expect(result.ok).toBe(true);
     const data = result.data as { siSo: number; loHongToanLop: { kienThuc: string }[] };
-    expect(data.siSo).toBe(40);
+    expect(data.siSo).toBe(2);
     expect(data.loHongToanLop.map((gap) => gap.kienThuc)).toContain('Phân số bằng nhau');
   });
 
@@ -73,6 +78,7 @@ describe('agent loop with the rule-based brain', () => {
   });
 
   it('proposes from the real question bank, asks approval, then creates an assignment', async () => {
+    const baseFetch = globalThis.fetch;
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith('/api/questions')) {
@@ -98,7 +104,7 @@ describe('agent loop with the rule-based brain', () => {
       if (url.endsWith('/api/assignments') && init?.method === 'POST') {
         return Response.json({ id: 'assignment-created' }, { status: 201 });
       }
-      return Response.json({ error: 'NOT_FOUND' }, { status: 404 });
+      return baseFetch(input, init);
     });
     vi.stubGlobal('fetch', fetchImpl);
     const approve = vi.fn(async () => true);

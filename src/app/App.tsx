@@ -22,6 +22,9 @@ const AssignmentTakePage = lazy(() =>
 const LearnPage = lazy(() =>
   import('../features/student/LearnPage').then(({ LearnPage }) => ({ default: LearnPage })),
 );
+const LessonPage = lazy(() =>
+  import('../features/student/LessonPage').then(({ LessonPage }) => ({ default: LessonPage })),
+);
 const PracticePage = lazy(() =>
   import('../features/student/PracticePage').then(({ PracticePage }) => ({
     default: PracticePage,
@@ -45,8 +48,18 @@ const TeacherClassPage = lazy(() =>
     default: TeacherClassPage,
   })),
 );
+const TeacherGroupDetailPage = lazy(() =>
+  import('../features/teacher/TeacherGroupDetailPage').then(({ TeacherGroupDetailPage }) => ({
+    default: TeacherGroupDetailPage,
+  })),
+);
 const TeacherPage = lazy(() =>
   import('../features/teacher/TeacherPage').then(({ TeacherPage }) => ({ default: TeacherPage })),
+);
+const TeacherLessonsPage = lazy(() =>
+  import('../features/teacher/TeacherLessonsPage').then(({ TeacherLessonsPage }) => ({
+    default: TeacherLessonsPage,
+  })),
 );
 const TeacherQuestionsPage = lazy(() =>
   import('../features/teacher/TeacherQuestionsPage').then(({ TeacherQuestionsPage }) => ({
@@ -128,11 +141,14 @@ function AppContent() {
                 <Route path="student/assignments" element={<AssignmentsPage />} />
                 <Route path="student/assignments/:assignmentId" element={<AssignmentTakePage />} />
                 <Route path="student/path" element={<PathPage />} />
+                <Route path="student/lesson/:kcId" element={<LessonPage />} />
               </Route>
               <Route element={<RequireRole role="TEACHER" />}>
                 <Route path="teacher" element={<TeacherPage />} />
                 <Route path="teacher/class" element={<TeacherClassPage />} />
+                <Route path="teacher/class/:groupId" element={<TeacherGroupDetailPage />} />
                 <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
+                <Route path="teacher/lessons" element={<TeacherLessonsPage />} />
                 <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
               </Route>
               <Route path="system" element={<SystemPage />} />

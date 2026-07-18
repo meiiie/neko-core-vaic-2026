@@ -1,6 +1,11 @@
 # NekoPath deployment status
 
-Ngày xác minh: 2026-07-17 · Trạng thái: **production full-stack đang live**.
+Ngày xác minh: 2026-07-18 (v0.8.0) · Trạng thái: **production full-stack đang live, release
+qua pipeline**.
+
+Từ v0.8.0, mọi release đi qua GitHub Actions (`gh workflow run deploy.yml` — keyless WIF,
+IAP tunnel, tuần tự hoá, smoke test tự động); SSH tay chỉ còn là break-glass có báo cáo. Xem
+`docs/ENGINEERING_STANDARDS.md`.
 
 ## Canonical production route
 
@@ -28,7 +33,8 @@ Browser
 | IP tĩnh | `34.142.197.144` (`nekopath-production-ip`) |
 | Ứng dụng | `/opt/nekopath` · Docker Compose (`app`, `caddy`) |
 | Lưu trữ | 20 GB persistent disk; SQLite và Caddy state dùng Docker named volumes |
-| Network | Firewall chỉ mở TCP 80/443 và UDP 443 với tag `nekopath-web` |
+| Network | Public TCP 80/443 + UDP 443; SSH chỉ đi qua IAP tới đúng VM |
+| CD identity | GitHub OIDC → Workload Identity Federation; không có GCP JSON key |
 | Backup trước cutover | `/var/backups/nekopath/data-pre-cutover-20260717.tgz` |
 
 Không copy FPT/API key hoặc `.env` cá nhân lên host. Bản hiện tại chạy deterministic core và mock LLM profile; chỉ bật inference server-side sau gate đánh giá riêng.
@@ -44,7 +50,9 @@ Smoke test trực tiếp trên canonical domain đã đạt:
 - cookie có `HttpOnly`, `Secure`, `SameSite=Lax`;
 - phiên `/api/auth/me` và `POST /api/auth/logout` hoạt động (`200`).
 
-Trước khi deploy, gate local đã đạt lint, typecheck, 69 tests, 23 deterministic eval và Wrangler dry-run.
+Gate tại v0.8.0: lint, format, typecheck, 167 application/integration tests, 29 deterministic
+eval tests và production build đều đạt (`npm run verify`); CI Linux xanh trên đúng SHA release;
+deploy v0.8.0 chạy trọn qua pipeline với smoke test canonical URL tự động.
 
 ## Quy ước vận hành
 
@@ -62,6 +70,26 @@ Trước khi deploy, gate local đã đạt lint, typecheck, 69 tests, 23 determ
 - Canonical smoke checks passed at `https://nekopath.holilihu.online`: HTTP 200; `X-NekoPath-Edge: cloudflare`; `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet`; canonical, Open Graph and Twitter metadata; manifest and NekoPath PWA icons; PNG logo mark and 1200x630 social share image.
 
 The no-index policy is intentional: this public judging demo contains synthetic classroom data and is not presented as a real school service or public curriculum resource.
+
+## Keyless CD and access hardening (2026-07-18 ICT)
+
+- PR [#13](https://github.com/meiiie/neko-core-vaic-2026/pull/13) replaced the missing JSON-key
+  secret with GitHub OIDC → Google Workload Identity Federation. The provider is restricted to the
+  immutable repository/owner IDs, `main`, `workflow_dispatch` and the exact deploy workflow path.
+- Production deploy runs
+  [29638155768](https://github.com/meiiie/neko-core-vaic-2026/actions/runs/29638155768) and
+  [29638420458](https://github.com/meiiie/neko-core-vaic-2026/actions/runs/29638420458) passed OIDC
+  authentication, IAP/OS Login, the Docker release gate and canonical smoke checks. The deployed
+  artifact was verified to contain its source commit.
+- The deploy service account has no user-managed keys. OS Login is enabled only on
+  `nekopath-production`; an allow rule admits IAP's `35.235.240.0/20` range at priority 900, then a
+  VM-tag-scoped deny rule blocks all other port-22 traffic at priority 1000. Direct SSH timed out,
+  while IAP SSH and canonical HTTPS remained healthy.
+- Every future deploy creates a no-downtime SQLite Online Backup snapshot first. The snapshot is
+  integrity-checked, compressed, root-only and named with UTC time plus source commit. A live
+  production-path smoke generated an 18,266-byte archive without stopping the app. An isolated
+  restore then recovered a 131,072-byte database, passed `quick_check` and opened all nine tables;
+  its temporary container, volume and files were removed afterward.
 
 ## Recovery
 

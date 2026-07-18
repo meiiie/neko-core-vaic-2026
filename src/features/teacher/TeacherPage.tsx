@@ -42,16 +42,37 @@ function MetricCard({ id, label, value, supportingText, hint, emphasis }: Metric
 
 export function TeacherPage() {
   const { account } = useSession();
-  const { dashboard } = useTeacherDashboard();
+  const { dashboard, loading, error, refresh } = useTeacherDashboard();
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
   const topGroup = groups[0];
   const gap = dashboard.classWideGaps[0];
-  const classSize = dashboard.learners.length;
-  const evaluatedTotal = groups.reduce((total, group) => total + group.sufficientEvidenceCount, 0);
-  const needsMoreQuestions =
-    groups.find((group) => group.status === 'QUICK_CHECK')?.totalLearnerCount ?? 0;
+  const classSize = dashboard.rosterCount;
+  const evaluatedTotal = dashboard.evaluatedLearnerCount;
+  const needsMoreQuestions = Math.max(0, classSize - evaluatedTotal);
   const supportGroups = groups.filter((group) => group.priorityScore > 0);
   const now = new Date();
+  const groupPath = (groupId: string) => `/teacher/class/${encodeURIComponent(groupId)}`;
+
+  if (loading) {
+    return (
+      <section className="empty-state" role="status">
+        <h1>Đang lấy tình hình lớp</h1>
+        <p>Hệ thống đang đọc dữ liệu mới nhất từ máy chủ.</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="empty-state" role="alert">
+        <h1>Chưa tải được tình hình lớp</h1>
+        <p>{error}</p>
+        <button className="button-secondary" type="button" onClick={() => void refresh()}>
+          Thử tải lại
+        </button>
+      </section>
+    );
+  }
 
   return (
     <div className="page-stack teacher-page">
@@ -60,7 +81,7 @@ export function TeacherPage() {
           {greetingVi(now.getHours())}, {account?.shortName}
         </h1>
         <p className="page-meta">
-          {todayVi(now)} · Toán 7 · Lớp 7A · {classSize} học sinh
+          {todayVi(now)} · Toán 7 · {dashboard.className} · {classSize} học sinh
         </p>
       </header>
 
@@ -81,6 +102,17 @@ export function TeacherPage() {
           emphasis="attention"
         />
       </section>
+
+      {dashboard.answerEventCount === 0 ? (
+        <section className="summary-panel teacher-no-evidence" role="status">
+          <p className="eyebrow">Dữ liệu từ máy chủ</p>
+          <h2>Chưa có bài làm để phân nhóm học sinh</h2>
+          <p>Giao một bài kiểm tra nhanh để hệ thống có căn cứ tạo nhóm cần hỗ trợ.</p>
+          <Link className="button-primary" to="/teacher/assignments">
+            Giao bài kiểm tra nhanh
+          </Link>
+        </section>
+      ) : null}
 
       {gap || topGroup ? (
         <section className="teacher-decision-block" aria-labelledby="teacher-decision-heading">
@@ -134,48 +166,50 @@ export function TeacherPage() {
             ) : null}
           </div>
 
-          <Link className="button-primary" to={`/teacher/class?group=${topGroup?.id ?? ''}`}>
+          <Link
+            className="button-primary"
+            to={topGroup ? groupPath(topGroup.id) : '/teacher/class'}
+          >
             Xem nhóm cần hỗ trợ
           </Link>
         </section>
       ) : null}
 
-      <section className="today-panel" aria-labelledby="today-heading">
-        <header>
-          <p className="eyebrow">Phân bổ thời gian giáo viên</p>
-          <h2 id="today-heading">Kế hoạch trong {dashboard.attentionPlan.budgetMinutes} phút</h2>
-        </header>
-        <div className="today-action-list">
-          {dashboard.attentionPlan.selected.map((allocation, index) => {
-            const group = groups.find((candidate) => candidate.id === allocation.groupId);
-            const destination =
-              group?.status === 'QUICK_CHECK'
-                ? '/teacher/class?status=QUICK_CHECK'
-                : `/teacher/class?group=${encodeURIComponent(allocation.groupId)}`;
-            return (
-              <Link key={allocation.groupId} to={destination}>
-                <span className="today-action-index" aria-hidden="true">
-                  {String(index + 1).padStart(2, '0')}
-                </span>
-                <span>
-                  <strong>{teacherActionLabel(allocation.actionId)}</strong>
-                  <small>
-                    {allocation.minutes} phút · {allocation.attentionValue} điểm hành động
-                    {group ? ` · ${group.totalLearnerCount} học sinh` : ''}
-                  </small>
-                </span>
-                <span aria-hidden="true">→</span>
-              </Link>
-            );
-          })}
-        </div>
-        <p className="data-footnote">
-          Đã phân bổ {dashboard.attentionPlan.usedMinutes}/{dashboard.attentionPlan.budgetMinutes}{' '}
-          phút; còn {dashboard.attentionPlan.remainingMinutes} phút. Điểm hành động là quy tắc minh
-          bạch từ số học sinh, mức chặn kiến thức và nhu cầu xác minh — không phải dự báo learning
-          gain.
-        </p>
-      </section>
+      {dashboard.attentionPlan.selected.length > 0 ? (
+        <section className="today-panel" aria-labelledby="today-heading">
+          <header>
+            <p className="eyebrow">Phân bổ thời gian giáo viên</p>
+            <h2 id="today-heading">Kế hoạch trong {dashboard.attentionPlan.budgetMinutes} phút</h2>
+          </header>
+          <div className="today-action-list">
+            {dashboard.attentionPlan.selected.map((allocation, index) => {
+              const group = groups.find((candidate) => candidate.id === allocation.groupId);
+              const destination = group ? groupPath(group.id) : '/teacher/class';
+              return (
+                <Link key={allocation.groupId} to={destination}>
+                  <span className="today-action-index" aria-hidden="true">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span>
+                    <strong>{teacherActionLabel(allocation.actionId)}</strong>
+                    <small>
+                      {allocation.minutes} phút · {allocation.attentionValue} điểm hành động
+                      {group ? ` · ${group.totalLearnerCount} học sinh` : ''}
+                    </small>
+                  </span>
+                  <span aria-hidden="true">→</span>
+                </Link>
+              );
+            })}
+          </div>
+          <p className="data-footnote">
+            Đã phân bổ {dashboard.attentionPlan.usedMinutes}/{dashboard.attentionPlan.budgetMinutes}{' '}
+            phút; còn {dashboard.attentionPlan.remainingMinutes} phút. Điểm hành động là quy tắc
+            minh bạch từ số học sinh, mức chặn kiến thức và nhu cầu xác minh — không phải dự báo
+            learning gain.
+          </p>
+        </section>
+      ) : null}
 
       <section className="summary-panel">
         <header className="panel-heading">
@@ -189,7 +223,7 @@ export function TeacherPage() {
         </header>
         <div className="group-preview-list">
           {groups.slice(0, 3).map((group) => (
-            <Link key={group.id} to={`/teacher/class?group=${encodeURIComponent(group.id)}`}>
+            <Link key={group.id} to={groupPath(group.id)}>
               <span>
                 <strong>
                   {group.rootKcId ? kcName(group.rootKcId) : TEACHER_GROUP_LABELS[group.status]}
@@ -206,7 +240,10 @@ export function TeacherPage() {
       </section>
 
       <p className="data-footnote">
-        Lớp 7A hiện dùng dữ liệu mẫu để đánh giá luồng sản phẩm; không chứa thông tin cá nhân thật.
+        Dữ liệu lớp được đọc từ máy chủ
+        {dashboard.latestAnswerAt
+          ? `; bài làm mới nhất lúc ${new Date(dashboard.latestAnswerAt).toLocaleString('vi-VN')}.`
+          : '; chưa có câu trả lời nào được ghi nhận.'}
       </p>
     </div>
   );

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { PRACTICE_QUESTIONS } from '../src/content/hero-practice.ts';
+import { LESSON_SUMMARIES } from '../src/content/lessons.v1.ts';
 import { hashPassword } from './auth.ts';
 
 /**
@@ -156,6 +157,26 @@ export function seed(db: DatabaseSync): void {
       question.correctChoiceId,
       JSON.stringify(question.hints),
       question.explanationVi,
+      now,
+    );
+  }
+
+  // Lesson summaries: team drafts become editable rows the teacher owns.
+  // INSERT OR IGNORE — a teacher's edits are never overwritten by a reseed.
+  const insertLesson = db.prepare(
+    `INSERT OR IGNORE INTO lessons
+     (kc_id, title, key_points_json, example_problem, example_steps_json, common_mistake,
+      status, updated_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'DRAFT', NULL, ?)`,
+  );
+  for (const lesson of LESSON_SUMMARIES) {
+    insertLesson.run(
+      lesson.kcId,
+      lesson.titleVi,
+      JSON.stringify(lesson.keyPointsVi),
+      lesson.workedExampleVi.problem,
+      JSON.stringify(lesson.workedExampleVi.steps),
+      lesson.commonMistakeVi,
       now,
     );
   }

@@ -36,7 +36,8 @@ export interface OverrideRecord extends TeacherDiagnosisOverride {
 
 export interface OutboxRecord {
   eventId: string;
-  status: 'PENDING' | 'SENT' | 'FAILED';
+  /** CONFLICT: the server holds a different record under this ID; never retried, never shown as synced. */
+  status: 'PENDING' | 'SENT' | 'FAILED' | 'CONFLICT';
   createdAt: string;
   nextRetryAt: string;
 }
@@ -52,8 +53,25 @@ export interface AgentSessionRecord {
   updatedAt: string;
 }
 
+/**
+ * Local mirror of a server-owned lesson row, kept so students can read
+ * materials offline. The server is the source of truth; the mirror refreshes
+ * on app start and reconnect.
+ */
+export interface LessonRecord {
+  kcId: string;
+  title: string;
+  keyPoints: string[];
+  exampleProblem: string;
+  exampleSteps: string[];
+  commonMistake: string;
+  status: 'DRAFT' | 'PUBLISHED';
+  updatedAt: string;
+  updatedByName: string | null;
+}
+
 export const DB_NAME = 'nekopath';
-export const DB_SCHEMA_VERSION = 2;
+export const DB_SCHEMA_VERSION = 3;
 
 export class NekoPathDb extends Dexie {
   meta!: Table<MetaRecord, string>;
@@ -61,6 +79,7 @@ export class NekoPathDb extends Dexie {
   overrides!: Table<OverrideRecord, string>;
   outbox!: Table<OutboxRecord, string>;
   agentSessions!: Table<AgentSessionRecord, string>;
+  lessons!: Table<LessonRecord, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
@@ -70,12 +89,12 @@ export class NekoPathDb extends Dexie {
       overrides: 'id, learnerId, targetKcId, updatedAt',
       outbox: 'eventId, status, createdAt, nextRetryAt',
     });
+    this.version(2).stores({
+      lessons: 'kcId',
+    });
     this.version(DB_SCHEMA_VERSION).stores({
-      meta: 'key',
-      events: 'id, [learnerId+sequence], learnerId, itemId, occurredAt',
-      overrides: 'id, learnerId, targetKcId, updatedAt',
-      outbox: 'eventId, status, createdAt, nextRetryAt',
       agentSessions: 'id, accountId, providerId, updatedAt',
+      lessons: 'kcId',
     });
   }
 }

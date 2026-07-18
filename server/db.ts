@@ -2,9 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 /**
  * SQLite persistence via Node 24's built-in driver — no native dependency.
- * The browser stays the runtime of record for diagnosis (local-first, per the
- * organizer's offline constraint); this database owns identity, authored
- * questions, assignments and the synced event log.
+ * SQLite is the server authority for identity, authored questions,
+ * assignments, answer evidence and teacher adjustments. The client may cache
+ * data for resilience, but it must not invent teacher-facing evidence.
  */
 
 export function openDb(path: string): DatabaseSync {
@@ -62,7 +62,9 @@ export function openDb(path: string): DatabaseSync {
       created_at TEXT NOT NULL,
       due_at TEXT,
       allow_retake INTEGER NOT NULL DEFAULT 1,
-      shuffle_answers INTEGER NOT NULL DEFAULT 0
+      shuffle_answers INTEGER NOT NULL DEFAULT 0,
+      recipient_ids_json TEXT NOT NULL DEFAULT '[]',
+      teacher_message TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS assignment_views (
       assignment_id TEXT NOT NULL REFERENCES assignments(id),
@@ -83,6 +85,38 @@ export function openDb(path: string): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_events_learner ON events(learner_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_events_assignment ON events(assignment_id);
+    CREATE TABLE IF NOT EXISTS teacher_overrides (
+      id TEXT PRIMARY KEY,
+      teacher_id TEXT NOT NULL REFERENCES users(id),
+      class_id TEXT NOT NULL REFERENCES classes(id),
+      learner_id TEXT NOT NULL REFERENCES users(id),
+      target_kc_id TEXT NOT NULL,
+      decision TEXT NOT NULL CHECK (decision IN ('SET_ROOT','NEEDS_MORE_EVIDENCE')),
+      root_kc_id TEXT,
+      reason TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_teacher_overrides_lookup
+      ON teacher_overrides(class_id, learner_id, target_kc_id, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS lessons (
+      kc_id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      key_points_json TEXT NOT NULL,
+      example_problem TEXT NOT NULL,
+      example_steps_json TEXT NOT NULL,
+      common_mistake TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'DRAFT',
+      updated_by TEXT,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+      event_id TEXT NOT NULL,
+      learner_id TEXT NOT NULL,
+      server_fingerprint TEXT NOT NULL,
+      client_fingerprint TEXT NOT NULL,
+      first_seen_at TEXT NOT NULL,
+      PRIMARY KEY (event_id, client_fingerprint)
+    );
   `);
 
   // Small additive migrations keep an existing event database usable during the UI refinement.
@@ -98,6 +132,12 @@ export function openDb(path: string): DatabaseSync {
   }
   if (!assignmentColumns.some((column) => column.name === 'shuffle_answers')) {
     db.exec('ALTER TABLE assignments ADD COLUMN shuffle_answers INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!assignmentColumns.some((column) => column.name === 'recipient_ids_json')) {
+    db.exec("ALTER TABLE assignments ADD COLUMN recipient_ids_json TEXT NOT NULL DEFAULT '[]';");
+  }
+  if (!assignmentColumns.some((column) => column.name === 'teacher_message')) {
+    db.exec("ALTER TABLE assignments ADD COLUMN teacher_message TEXT NOT NULL DEFAULT '';");
   }
 
   // Additive migration for databases created before email login existed.

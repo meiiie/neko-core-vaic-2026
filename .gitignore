@@ -22,6 +22,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+gha-creds-*.json
 
 # Server runtime data
 server/data/

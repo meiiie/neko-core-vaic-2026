@@ -1,4 +1,3 @@
-import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -7,12 +6,14 @@ import {
   kcName,
   questionForItem,
 } from '../../app/adapters/hero-tutor';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { nextPracticeQuestion } from '../../app/adapters/practice-selection';
 import { useSession } from '../../app/session';
-import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
+import { type PracticeQuestion } from '../../content';
+import { useLesson } from '../../services/lessons';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
-import { queueEventForSync } from '../../services/sync';
-import type { LearnerEventRecord } from '../../storage/db';
-import { appendEvent, listEventsByLearner } from '../../storage/event-repository';
+import { recordAnswer } from '../../services/sync';
 
 type Phase = 'answering' | 'feedback';
 
@@ -24,25 +25,10 @@ interface FeedbackState {
   readonly question: PracticeQuestion | null;
 }
 
-/** Pick the practice question of this KC with the fewest recorded attempts. */
-function nextQuestion(
-  kcId: string,
-  records: readonly LearnerEventRecord[],
-): PracticeQuestion | undefined {
-  const questions = practiceQuestionsForKc(kcId);
-  if (questions.length === 0) return undefined;
-  const attempts = new Map<string, number>();
-  for (const record of records) {
-    attempts.set(record.itemId, (attempts.get(record.itemId) ?? 0) + 1);
-  }
-  return [...questions].sort(
-    (a, b) => (attempts.get(a.itemId) ?? 0) - (attempts.get(b.itemId) ?? 0),
-  )[0];
-}
-
 export function PracticePage() {
   const { account } = useSession();
-  const learnerId = account?.learnerId ?? 'chi';
+  const learnerContext = studentContextForAccount(account);
+  const learnerId = learnerContext?.learnerId ?? '';
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('answering');
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
@@ -55,10 +41,18 @@ export function PracticePage() {
   } | null>(null);
   const savingRef = useRef(false);
 
-  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
 
-  const result = localRecords === undefined ? null : diagnoseHero(learnerId, localRecords);
+  const result =
+    localRecords === undefined || !learnerContext
+      ? null
+      : diagnoseHero(learnerContext, localRecords);
   const rootKcId = result?.status === 'DIAGNOSED' ? result.rootKcId : undefined;
+  const rootLesson = useLesson(rootKcId ?? '');
   const explainKey = rootKcId ? `${learnerId}-${rootKcId}` : null;
   const explain = explainState && explainState.key === explainKey ? explainState.reply : null;
 
@@ -85,13 +79,18 @@ export function PracticePage() {
     };
   }, [explainKey, rootKcId]);
 
-  if (localRecords === undefined || result === null) {
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
+
+  if (localRecords === undefined || !learnerContext || result === null) {
     return <div className="page-loading" aria-label="Đang tải bài luyện tập" />;
   }
+  const activeLearnerContext = learnerContext;
 
   // During feedback the answered question stays frozen on screen; the live
   // re-diagnosed "next" question only takes over after Tiếp tục/Thử lại.
-  const upNext = rootKcId ? nextQuestion(rootKcId, localRecords) : undefined;
+  const upNext = rootKcId ? nextPracticeQuestion(rootKcId, localRecords) : undefined;
   const question = phase === 'feedback' && feedback?.question ? feedback.question : upNext;
   const transferQuestion =
     result.status === 'FAST_PATH' && result.nextItemId
@@ -112,7 +111,7 @@ export function PracticePage() {
         ?.misconceptionId;
     try {
       const record = buildLocalAnswerRecord(
-        learnerId,
+        activeLearnerContext,
         target.itemId,
         selectedChoiceId,
         correct,
@@ -121,8 +120,7 @@ export function PracticePage() {
           ? { misconceptionId, methodValidity: 'INVALID' }
           : { methodValidity: 'UNKNOWN' },
       );
-      await appendEvent(record);
-      void queueEventForSync(record);
+      await recordAnswer(record);
       setFeedback({ correct, choiceId: selectedChoiceId, question: answered });
       setPhase('feedback');
       if (!correct) {
@@ -284,6 +282,14 @@ export function PracticePage() {
           <p>
             Trả lời đúng vài câu liên tiếp để chứng minh em đã vững — hệ thống sẽ tự chuyển sang
             bước tiếp theo.
+            {rootLesson?.lesson ? (
+              <>
+                {' '}
+                <Link className="text-link" to={`/student/lesson/${rootKcId}`}>
+                  Xem tóm tắt kiến thức trước
+                </Link>
+              </>
+            ) : null}
           </p>
         </div>
         <span className="status-label status-label--neutral">Lưu trên thiết bị</span>

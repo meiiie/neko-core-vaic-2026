@@ -5,6 +5,84 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.8.0] — 2026-07-18
+
+Baseline release for the per-feature deepening phase.
+
+### Added
+
+- Teacher-owned lesson materials: a server `lessons` table (12 team drafts seeded as
+  editable rows), a `/teacher/lessons` authoring surface that publishes under the
+  teacher's name, and an offline device mirror so students read materials without a
+  network — with provenance labels (draft vs teacher-updated) on every lesson.
+- Server-backed teacher intelligence: support groups, targeted review and per-learner
+  evidence tracing now read real synced records instead of on-device aggregates only.
+- Account-owned evidence hydration: paginated server history restores a student's
+  append-only log on any device; assignment answers feed diagnosis and practice
+  progress on equal footing with check-in answers.
+- End-to-end adaptive-contract tests over real Fastify + in-memory SQLite: the same
+  surface error yields different diagnosed roots and different remediation paths, with
+  an explicit abstention case — no API mocks.
+- Public governance set: requirement-by-requirement problem-fit audit, engineering
+  standards benchmarked against industry practice, and an honest architecture review
+  against the team's mature LMS with a tiered adoption plan.
+
+### Changed
+
+- Deploys are pipeline-only: keyless Workload Identity Federation + IAP from GitHub
+  Actions; hand SSH demoted to reported break-glass. One-command local gate
+  `npm run verify` mirrors CI exactly.
+- Learner evidence is isolated per account; assigned and practice progress unified.
+
+### Fixed
+
+- Assigned-answer evidence hardening; deploy-time SQLite snapshot flow simplified
+  after the sidecar approach proved redundant.
+
+## [0.7.0] — 2026-07-18
+
+### Added
+
+- An account-scoped assignment-to-diagnosis contract test now proves that identical K10 surface
+  errors can produce K02 and K07 remediation paths, while sparse evidence safely abstains.
+- Teacher group details now trace each learner's decision to server-owned answer evidence before
+  a review assignment is created.
+- Complete paginated server-evidence hydration feeds confirmed assignment answers back into local
+  diagnosis and adaptive practice progress.
+- Confirmed device profiles can reopen without connectivity after one successful online sign-in;
+  the same recovery remains available if the directory loads but the network drops during submit.
+- A focused adaptive check-in presents one evidence decision at a time with student-facing copy
+  and an explicit completion state.
+
+### Changed
+
+- Local answers and their outbox rows now commit atomically; duplicate IDs remain idempotent and
+  mismatched payloads are quarantined instead of overwriting server evidence.
+- Teacher support-group actions are shorter and more decision-focused while retaining evidence and
+  intervention detail.
+
+### Fixed
+
+- A browser-visible, non-credential profile binding plus `/api/auth/me` verification prevents an
+  offline profile switch from syncing events through another learner's stale HttpOnly session.
+- Shared-device outbox batches sync only events owned by the currently verified learner; HTTP
+  authentication failures never fall back to offline entry.
+
+## [0.6.1] — 2026-07-18
+
+### Changed
+
+- Teacher surfaces adopt the quiet presentation system: computed greeting and date
+  header (previously hard-coded), section labels in sentence case app-wide instead of
+  all-caps letterspacing (40 labels stopped shouting; uppercase Vietnamese also stacks
+  diacritics poorly), two decision-focused metric cards, and typographic middle-dot
+  separators across eight pages.
+
+### Removed
+
+- Redundant "last updated" chips on teacher pages — the sidebar connection status
+  already answers data freshness; the sample-data footnote stays with the data.
+
 ## [0.6.0] — 2026-07-18
 
 ### Added
@@ -95,6 +173,9 @@ hackathon window).
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.8.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.1...v0.7.0
+[0.6.1]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.3.0...v0.4.0

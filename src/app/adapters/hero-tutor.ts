@@ -30,6 +30,19 @@ import type { LearnerEventRecord } from '../../storage/db';
 
 export const HERO_TARGET_KC_ID = 'K10';
 
+export interface StudentDiagnosisContext {
+  readonly learnerId: string;
+  readonly simulationProfileId?: HeroSimulationProfileId;
+}
+
+type StudentDiagnosisReference = HeroSimulationProfileId | StudentDiagnosisContext;
+
+function normalizeStudentContext(reference: StudentDiagnosisReference): StudentDiagnosisContext {
+  return typeof reference === 'string'
+    ? { learnerId: reference, simulationProfileId: reference }
+    : reference;
+}
+
 export function isHeroLearnerId(value: string | undefined): value is HeroSimulationProfileId {
   return value !== undefined && Object.hasOwn(HERO_EVENTS, value);
 }
@@ -42,6 +55,13 @@ export const misconceptionName = heroMisconceptionName;
 
 export function questionForItem(itemId: string): HeroQuestion | undefined {
   return HERO_QUESTIONS.find((question) => question.itemId === itemId);
+}
+
+/** Resolve a persisted direct or teacher-bank ID to a known diagnosis item. */
+export function canonicalHeroItemId(itemId: string): string | undefined {
+  return HERO_ITEMS.find(
+    (candidate) => candidate.id === itemId || `bank-${candidate.id}` === itemId,
+  )?.id;
 }
 
 /** Payload stored in the local Dexie event record for a hero answer. */
@@ -90,13 +110,71 @@ function parsePayload(payload: string): HeroAnswerPayload | null {
   }
 }
 
-function seededMaxSequence(learnerId: HeroSimulationProfileId): number {
-  return HERO_EVENTS[learnerId].reduce((max, event) => Math.max(max, event.sequence), 0);
+function seededEvents(context: StudentDiagnosisContext): LearnerEvent[] {
+  const profileId = context.simulationProfileId;
+  if (!profileId) return [];
+  if (context.learnerId === profileId) return [...HERO_EVENTS[profileId]];
+  return HERO_EVENTS[profileId].map((event) => ({
+    ...event,
+    id: `${context.learnerId}-seed-${profileId}-${event.sequence}`,
+    learnerId: context.learnerId,
+  }));
+}
+
+function seededMaxSequence(context: StudentDiagnosisContext): number {
+  return seededEvents(context).reduce((max, event) => Math.max(max, event.sequence), 0);
+}
+
+export interface ConfirmedAssignmentEvent {
+  readonly id: string;
+  readonly learnerId: string;
+  readonly itemId: string;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly kind: 'ASSIGNMENT_ANSWER';
+  readonly payload: string;
+}
+
+/** Re-sequence a server-confirmed answer after the local seeded walkthrough. */
+export function buildConfirmedAssignmentRecord(
+  context: StudentDiagnosisContext,
+  event: ConfirmedAssignmentEvent,
+  existingLocalCount: number,
+): LearnerEventRecord | null {
+  if (event.learnerId !== context.learnerId || event.kind !== 'ASSIGNMENT_ANSWER') return null;
+  return {
+    id: event.id,
+    learnerId: context.learnerId,
+    itemId: event.itemId,
+    sequence: seededMaxSequence(context) + existingLocalCount + 1,
+    occurredAt: event.occurredAt,
+    kind: event.kind,
+    payload: event.payload,
+  };
+}
+
+/**
+ * Give a complete server history deterministic local ordering after the
+ * synthetic seed evidence. Any cross-account row rejects the whole batch.
+ */
+export function buildHydratedEventRecords(
+  context: StudentDiagnosisContext,
+  events: readonly LearnerEventRecord[],
+): LearnerEventRecord[] | null {
+  if (events.some((event) => event.learnerId !== context.learnerId)) return null;
+  const ordered = [...events].sort(
+    (left, right) =>
+      left.occurredAt.localeCompare(right.occurredAt) ||
+      left.sequence - right.sequence ||
+      left.id.localeCompare(right.id),
+  );
+  const seedSequence = seededMaxSequence(context);
+  return ordered.map((event, index) => ({ ...event, sequence: seedSequence + index + 1 }));
 }
 
 /** Build the Dexie record for a locally answered hero question. */
 export function buildLocalAnswerRecord(
-  learnerId: HeroSimulationProfileId,
+  context: StudentDiagnosisContext,
   itemId: string,
   choiceId: string,
   correct: boolean,
@@ -109,10 +187,10 @@ export function buildLocalAnswerRecord(
   const misconceptionId = evidence.misconceptionId ?? authoredMisconceptionId;
   const methodValidity = evidence.methodValidity ?? (misconceptionId ? 'INVALID' : 'UNKNOWN');
   return {
-    id: `${learnerId}-local-${crypto.randomUUID()}`,
-    learnerId,
+    id: `${context.learnerId}-local-${crypto.randomUUID()}`,
+    learnerId: context.learnerId,
     itemId,
-    sequence: seededMaxSequence(learnerId) + existingLocalCount + 1,
+    sequence: seededMaxSequence(context) + existingLocalCount + 1,
     occurredAt: new Date().toISOString(),
     kind: 'ANSWER',
     payload: JSON.stringify({
@@ -129,7 +207,8 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
   const events: LearnerEvent[] = [];
   for (const record of records) {
     const payload = parsePayload(record.payload);
-    const item = HERO_ITEMS.find((candidate) => candidate.id === record.itemId);
+    const canonicalItemId = canonicalHeroItemId(record.itemId);
+    const item = HERO_ITEMS.find((candidate) => candidate.id === canonicalItemId);
     if (!payload || !item) continue;
     const misconceptionId =
       item.misconceptionIds?.includes(payload.misconceptionId ?? '') &&
@@ -139,7 +218,7 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
     events.push({
       id: record.id,
       learnerId: record.learnerId,
-      itemId: record.itemId,
+      itemId: item.id,
       sequence: record.sequence,
       occurredAt: record.occurredAt,
       correct: payload.correct,
@@ -150,20 +229,45 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
   return events;
 }
 
+const HERO_ACCOUNT_PROFILE: Readonly<Record<string, HeroSimulationProfileId>> = {
+  'user-student-an': 'an',
+  'user-student-binh': 'binh',
+  'user-student-chi': 'chi',
+  'user-student-minh': 'minh',
+};
+
+/**
+ * Adapt account-owned browser events to the four synthetic class profiles.
+ * This mapping belongs only to the demo presentation boundary; domain and
+ * persistence code continue to use the stable account ID.
+ */
+export function toHeroClassObservedEvents(records: readonly LearnerEventRecord[]): LearnerEvent[] {
+  return toDomainEvents(records).flatMap((event) => {
+    const profileId = isHeroLearnerId(event.learnerId)
+      ? event.learnerId
+      : HERO_ACCOUNT_PROFILE[event.learnerId];
+    return profileId ? [{ ...event, learnerId: profileId }] : [];
+  });
+}
+
 /**
  * Diagnose a hero learner from the seeded demo evidence plus any answers the
  * user recorded locally in this browser. Pure domain call — no persistence.
  */
 export function diagnoseHero(
-  learnerId: HeroSimulationProfileId,
+  reference: StudentDiagnosisReference,
   localRecords: readonly LearnerEventRecord[] = [],
 ): DiagnosisResult {
+  const context = normalizeStudentContext(reference);
+  const localEvents = toDomainEvents(localRecords).filter(
+    (event) => event.learnerId === context.learnerId,
+  );
   return diagnose({
-    learnerId,
+    learnerId: context.learnerId,
     targetKcId: HERO_TARGET_KC_ID,
     graph: HERO_GRAPH,
     items: HERO_ITEMS,
-    events: [...HERO_EVENTS[learnerId], ...toDomainEvents(localRecords)],
+    events: [...seededEvents(context), ...localEvents],
     config: HERO_DEMO_CONFIG,
   });
 }

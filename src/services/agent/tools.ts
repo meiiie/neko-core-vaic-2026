@@ -9,6 +9,8 @@ import {
   STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH } from '../../content';
+import { fetchTeacherDashboard } from '../../features/teacher/teacher-api';
+import { ASSIGNMENTS_CHANGED_EVENT } from '../assignment-events';
 import { listEventsByLearner } from '../../storage/event-repository';
 import { z, type ZodType } from 'zod';
 
@@ -25,8 +27,6 @@ export interface AgentToolResult {
   data?: unknown;
   error?: string;
 }
-
-export const ASSIGNMENTS_CHANGED_EVENT = 'nekopath:assignments-changed';
 
 export interface AgentToolContext {
   readonly signal?: AbortSignal;
@@ -74,41 +74,77 @@ const tongQuanLop: AgentTool = {
   inputJsonSchema: EMPTY_JSON_SCHEMA,
   ...READ_ONLY_TOOL,
   async run() {
-    const dashboard = buildHeroClassDashboard();
-    const groups = [...dashboard.groups]
-      .sort((a, b) => b.priorityScore - a.priorityScore)
-      .map((group) => ({
-        nhom: GROUP_STATUS_LABELS[group.status] ?? group.status,
-        kienThucGoc: group.rootKcId ? kcName(group.rootKcId) : null,
-        soHocSinh: group.totalLearnerCount,
-        duBangChung: group.sufficientEvidenceCount,
-        diemUuTien: group.priorityScore,
-        hanhDong: actionLabel(group.suggestedActionId),
+    try {
+      const dashboard = await fetchTeacherDashboard();
+      const groups = [...dashboard.groups]
+        .sort((a, b) => b.priorityScore - a.priorityScore)
+        .map((group) => ({
+          nhom: GROUP_STATUS_LABELS[group.status] ?? group.status,
+          kienThucGoc: group.rootKcId ? kcName(group.rootKcId) : null,
+          soHocSinh: group.totalLearnerCount,
+          duBangChung: group.sufficientEvidenceCount,
+          soCauSaiCanKiemTra: group.wrongQuestions.length,
+          diemUuTien: group.priorityScore,
+          hanhDong: actionLabel(group.suggestedActionId),
+        }));
+      const gaps = dashboard.classWideGaps.map((gap) => ({
+        kienThuc: kcName(gap.rootKcId),
+        tuSo: gap.learnerCount,
+        mauSo: gap.classSize,
+        nguongPhanTram: Math.round(gap.thresholdRate * 100),
       }));
-    const gaps = dashboard.classWideGaps.map((gap) => ({
-      kienThuc: kcName(gap.rootKcId),
-      tuSo: gap.learnerCount,
-      mauSo: gap.classSize,
-      nguongPhanTram: Math.round(gap.thresholdRate * 100),
-    }));
-    return {
-      ok: true,
-      data: { siSo: dashboard.learners.length, nhom: groups, loHongToanLop: gaps },
-    };
+      return {
+        ok: true,
+        data: {
+          nguon: 'Máy chủ',
+          siSo: dashboard.rosterCount,
+          daCoBaiLam: dashboard.evaluatedLearnerCount,
+          nhom: groups,
+          loHongToanLop: gaps,
+        },
+      };
+    } catch {
+      const dashboard = buildHeroClassDashboard();
+      return {
+        ok: true,
+        data: {
+          nguon: 'Thiết bị',
+          siSo: dashboard.learners.length,
+          daCoBaiLam: dashboard.learners.length,
+          nhom: [...dashboard.groups]
+            .sort((a, b) => b.priorityScore - a.priorityScore)
+            .map((group) => ({
+              nhom: GROUP_STATUS_LABELS[group.status] ?? group.status,
+              kienThucGoc: group.rootKcId ? kcName(group.rootKcId) : null,
+              soHocSinh: group.totalLearnerCount,
+              duBangChung: group.sufficientEvidenceCount,
+              diemUuTien: group.priorityScore,
+              hanhDong: actionLabel(group.suggestedActionId),
+            })),
+          loHongToanLop: dashboard.classWideGaps.map((gap) => ({
+            kienThuc: kcName(gap.rootKcId),
+            tuSo: gap.learnerCount,
+            mauSo: gap.classSize,
+            nguongPhanTram: Math.round(gap.thresholdRate * 100),
+          })),
+        },
+      };
+    }
   },
 };
 
 const chanDoanHocSinh: AgentTool = {
   name: 'chan_doan_hoc_sinh',
-  description: 'Chẩn đoán hiện tại của một học sinh hero (an, binh, chi, minh).',
-  inputSchema: z.object({ hoc_sinh: z.enum(['an', 'binh', 'chi', 'minh']) }).strict(),
+  description: 'Nhóm hỗ trợ và bằng chứng hiện tại của một học sinh trong dữ liệu máy chủ.',
+  inputSchema: z.object({ hoc_sinh: z.string().min(1).max(120) }).strict(),
   inputJsonSchema: {
     type: 'object',
     properties: {
       hoc_sinh: {
         type: 'string',
-        enum: ['an', 'binh', 'chi', 'minh'],
-        description: 'ID học sinh demo.',
+        minLength: 1,
+        maxLength: 120,
+        description: 'Tên hoặc ID học sinh trong lớp.',
       },
     },
     required: ['hoc_sinh'],
@@ -116,26 +152,62 @@ const chanDoanHocSinh: AgentTool = {
   },
   ...READ_ONLY_TOOL,
   async run(args) {
-    const learnerId = String(args.hoc_sinh ?? '')
-      .toLowerCase()
+    const query = String(args.hoc_sinh ?? '')
+      .toLocaleLowerCase('vi-VN')
       .trim();
-    if (!isHeroLearnerId(learnerId)) {
-      return { ok: false, error: 'Chỉ có bốn hồ sơ demo: an, binh, chi, minh.' };
+    if (!query) return { ok: false, error: 'Cần nhập tên hoặc ID học sinh.' };
+    try {
+      const dashboard = await fetchTeacherDashboard();
+      const learner = dashboard.learners.find(
+        (candidate) =>
+          candidate.id.toLocaleLowerCase('vi-VN') === query ||
+          candidate.displayLabel.toLocaleLowerCase('vi-VN').includes(query),
+      );
+      if (!learner) return { ok: false, error: 'Không tìm thấy học sinh trong lớp.' };
+      const group = dashboard.groups.find((candidate) => candidate.learnerIds.includes(learner.id));
+      return {
+        ok: true,
+        data: {
+          hocSinh: learner.displayLabel,
+          trangThai: group
+            ? (GROUP_STATUS_LABELS[group.status] ?? group.status)
+            : 'Chưa có nhóm hỗ trợ',
+          kienThucGoc: group?.rootKcId ? kcName(group.rootKcId) : null,
+          duongBu: [],
+          soBangChung: learner.eventCount,
+          soCauTraLoi: learner.eventCount,
+          nhom: group ? (GROUP_STATUS_LABELS[group.status] ?? group.status) : null,
+          kienThucCanOn: group?.rootKcId ? kcName(group.rootKcId) : null,
+          cauSaiGanNhat:
+            group?.wrongQuestions
+              .filter((question) =>
+                question.answers.some((answer) => answer.learnerId === learner.id),
+              )
+              .map((question) => question.prompt) ?? [],
+        },
+      };
+    } catch {
+      const learnerId = ['an', 'binh', 'chi', 'minh'].find(
+        (candidate) => query === candidate || query.endsWith(`-${candidate}`),
+      );
+      if (!learnerId || !isHeroLearnerId(learnerId)) {
+        return { ok: false, error: 'Không đọc được dữ liệu học sinh từ máy chủ.' };
+      }
+      const result = diagnoseHero(learnerId, await listEventsByLearner(learnerId));
+      return {
+        ok: true,
+        data: {
+          hocSinh: learnerId,
+          trangThai: STATUS_LABELS[result.status],
+          kienThucGoc: result.rootKcId ? kcName(result.rootKcId) : null,
+          duongBu: result.pathKcIds.map((id) => kcName(id)),
+          soBangChung: result.evidenceEventIds.length,
+          nhom: STATUS_LABELS[result.status],
+          kienThucCanOn: result.rootKcId ? kcName(result.rootKcId) : null,
+          cauSaiGanNhat: [],
+        },
+      };
     }
-    const localRecords = await listEventsByLearner(learnerId);
-    const result = diagnoseHero(learnerId, localRecords);
-    return {
-      ok: true,
-      data: {
-        hocSinh: learnerId,
-        trangThai: STATUS_LABELS[result.status],
-        kienThucGoc: result.rootKcId ? kcName(result.rootKcId) : null,
-        giaThuyetCanhTranh: result.competingKcIds.map((id) => kcName(id)),
-        duongBu: result.pathKcIds.map((id) => kcName(id)),
-        soBangChung: result.evidenceEventIds.length,
-        cauHoiTiepTheo: result.nextItemId ?? null,
-      },
-    };
   },
 };
 
@@ -234,10 +306,13 @@ const deXuatBaiTap: AgentTool = {
   },
   ...READ_ONLY_TOOL,
   async run(args, context) {
-    const dashboard = buildHeroClassDashboard();
     const requestedKc = typeof args.kc === 'string' ? args.kc.toUpperCase() : null;
-    const recommendedKc = requestedKc ?? dashboard.classWideGaps[0]?.rootKcId ?? HERO_TARGET_KC_ID;
     try {
+      const dashboard = requestedKc
+        ? null
+        : await fetchTeacherDashboard().catch(() => buildHeroClassDashboard());
+      const recommendedKc =
+        requestedKc ?? dashboard?.classWideGaps[0]?.rootKcId ?? HERO_TARGET_KC_ID;
       const response = await fetch('/api/questions', {
         credentials: 'include',
         signal: context?.signal,
@@ -249,7 +324,7 @@ const deXuatBaiTap: AgentTool = {
           kcId: string;
           prompt: string;
           difficulty: string;
-          reviewState: string;
+          reviewState?: string;
         }[];
       };
       const questions = body.questions
@@ -259,7 +334,7 @@ const deXuatBaiTap: AgentTool = {
           id: question.id,
           noiDung: question.prompt,
           doKho: question.difficulty,
-          trangThaiDuyet: question.reviewState,
+          trangThaiDuyet: question.reviewState ?? 'UNREVIEWED',
         }));
       if (questions.length === 0) {
         return {

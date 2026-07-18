@@ -1,4 +1,6 @@
-import { useLiveQuery } from 'dexie-react-hooks';
+import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
+import { CheckCircleIcon } from '@phosphor-icons/react/CheckCircle';
+import { InfoIcon } from '@phosphor-icons/react/Info';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
@@ -7,30 +9,37 @@ import {
   diagnoseHero,
   kcName,
   questionForItem,
-  STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
-import { queueEventForSync } from '../../services/sync';
-import { appendEvent, listEventsByLearner } from '../../storage/event-repository';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
+import { recordAnswer } from '../../services/sync';
 
 const QUESTION_BUDGET = 3;
 
 export function LearnPage() {
   const { account } = useSession();
-  const learnerId = account?.learnerId ?? 'chi';
+  const learnerContext = studentContextForAccount(account);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const savingRef = useRef(false);
-  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
 
-  if (localRecords === undefined) {
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
+
+  if (localRecords === undefined || !learnerContext) {
     return <div className="page-loading" aria-label="Đang tải bài kiểm tra" />;
   }
 
-  const result = diagnoseHero(learnerId, localRecords);
+  const activeLearnerContext = learnerContext;
+  const result = diagnoseHero(activeLearnerContext, localRecords);
   const probeQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
-  const targetQuestion = questionForItem('K10-CHECK-1');
   const questionNumber = Math.min(localRecords.length + 1, QUESTION_BUDGET);
-  const progress = probeQuestion ? Math.round(((questionNumber - 1) / QUESTION_BUDGET) * 100) : 100;
 
   async function saveAnswer() {
     if (!probeQuestion || !selectedChoiceId || localRecords === undefined || savingRef.current)
@@ -39,14 +48,13 @@ export function LearnPage() {
     setSaveState('saving');
     try {
       const record = buildLocalAnswerRecord(
-        learnerId,
+        activeLearnerContext,
         probeQuestion.itemId,
         selectedChoiceId,
         selectedChoiceId === probeQuestion.correctChoiceId,
         localRecords.length,
       );
-      await appendEvent(record);
-      void queueEventForSync(record);
+      await recordAnswer(record);
       setSelectedChoiceId(null);
       setSaveState('saved');
     } catch {
@@ -58,42 +66,30 @@ export function LearnPage() {
 
   return (
     <div className="assessment-page">
-      <header className="assessment-header">
-        <div>
-          <p className="eyebrow">Toán 7 · Chủ đề tỉ lệ thức</p>
+      <header className="assessment-focus-header">
+        <Link className="assessment-exit" to="/student">
+          <ArrowLeftIcon aria-hidden="true" size={20} weight="bold" />
+          Thoát bài
+        </Link>
+        <div className="assessment-title">
           <h1>Bài kiểm tra nền tảng</h1>
-          <p>Hệ thống chọn câu tiếp theo từ câu trả lời trước; tổng số câu có thể thay đổi.</p>
+          <p>Toán 7 · Chủ đề tỉ lệ thức</p>
         </div>
         <span className="status-label status-label--neutral">Lưu trên thiết bị</span>
       </header>
 
-      <div className="assessment-progress" aria-label={`Tiến độ ${progress}%`}>
-        <div>
-          <strong>{probeQuestion ? `Câu ${questionNumber}` : 'Hoàn thành'}</strong>
-          <span>{probeQuestion ? `tối đa ${QUESTION_BUDGET} câu` : 'đã đủ bằng chứng'}</span>
-        </div>
-        <div
-          className="progress-track"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={progress}
-        >
-          <span style={{ width: `${progress}%` }} />
-        </div>
+      <div className="assessment-progress" aria-label="Tiến trình đánh giá">
+        <span>Tiến trình đánh giá</span>
+        <strong>{probeQuestion ? `Câu ${questionNumber}` : 'Hoàn thành'}</strong>
+        <span>{probeQuestion ? 'Đang làm' : 'Đã hoàn thành'}</span>
       </div>
 
       {probeQuestion ? (
         <div className="assessment-layout">
           <section className="question-panel" aria-labelledby="question-heading">
             <header>
-              <span className="question-number" aria-hidden="true">
-                {String(questionNumber).padStart(2, '0')}
-              </span>
-              <div>
-                <p className="eyebrow">Chọn một đáp án</p>
-                <h2 id="question-heading">{probeQuestion.promptVi}</h2>
-              </div>
+              <p className="question-step">Câu {questionNumber}</p>
+              <h2 id="question-heading">{probeQuestion.promptVi}</h2>
             </header>
 
             <div className="answer-list" role="radiogroup" aria-labelledby="question-heading">
@@ -122,6 +118,10 @@ export function LearnPage() {
               })}
             </div>
 
+            {!selectedChoiceId && saveState !== 'saving' ? (
+              <p className="answer-hint">Chọn một đáp án để tiếp tục</p>
+            ) : null}
+
             <footer className="question-actions">
               <Link className="button-secondary" to="/student">
                 Lưu và thoát
@@ -138,7 +138,7 @@ export function LearnPage() {
 
             {saveState === 'saved' ? (
               <p role="status" className="save-message">
-                Đã lưu. Câu tiếp theo được chọn từ bằng chứng mới.
+                Đã lưu. Hệ thống sẽ chọn câu tiếp theo phù hợp với kết quả của em.
               </p>
             ) : null}
             {saveState === 'error' ? (
@@ -149,39 +149,51 @@ export function LearnPage() {
           </section>
 
           <aside className="assessment-context" aria-labelledby="context-heading">
-            <p className="eyebrow">Mục tiêu của bài</p>
+            <p className="eyebrow">Mục tiêu</p>
             <h2 id="context-heading">Tìm giá trị chưa biết trong tỉ lệ thức</h2>
-            {targetQuestion ? <p>{targetQuestion.promptVi}</p> : null}
-            <dl>
-              <div>
-                <dt>Trạng thái</dt>
-                <dd>{STATUS_LABELS[result.status]}</dd>
-              </div>
-              <div>
-                <dt>Đang phân biệt</dt>
-                <dd>
-                  {result.competingKcIds.length > 0
-                    ? result.competingKcIds.map((id) => kcName(id)).join(' / ')
-                    : 'Kiến thức nền liên quan'}
-                </dd>
-              </div>
-            </dl>
+            <div className="assessment-skill">
+              <span>Kỹ năng đang đánh giá</span>
+              <strong>
+                {result.competingKcIds.length > 0
+                  ? result.competingKcIds.map((id) => kcName(id)).join(' · ')
+                  : 'Kiến thức nền liên quan'}
+              </strong>
+            </div>
+            <p className="assessment-context-note">
+              Hệ thống cần thêm câu trả lời để đánh giá chính xác.
+            </p>
             <details>
-              <summary>Vì sao hệ thống hỏi câu này?</summary>
-              <p>{probeQuestion.hypothesisLabel}.</p>
+              <summary>
+                <InfoIcon aria-hidden="true" size={18} />
+                Vì sao?
+              </summary>
+              <p>
+                Câu hỏi này giúp hệ thống hiểu rõ hơn kỹ năng nền nào em cần củng cố trước khi học
+                tiếp.
+              </p>
             </details>
           </aside>
         </div>
       ) : (
         <section className="completion-panel">
-          <span className="completion-mark" aria-hidden="true">
-            ✓
-          </span>
-          <p className="eyebrow">Đã hoàn thành phiên kiểm tra</p>
-          <h2>NekoPath đã có đủ bằng chứng cho bước tiếp theo</h2>
-          <p>
-            Bạn có thể xem kiến thức nền cần củng cố và đường học ngắn nhất đến mục tiêu của lớp.
-          </p>
+          <CheckCircleIcon
+            className="completion-mark completion-mark--icon"
+            aria-hidden="true"
+            size={56}
+            weight="fill"
+          />
+          <p className="eyebrow">Đã hoàn thành bài kiểm tra nền tảng</p>
+          {result.status === 'NEEDS_MORE_EVIDENCE' ? (
+            <>
+              <h2>Đã lưu câu trả lời của em</h2>
+              <p>Hệ thống cần thêm câu trả lời trước khi đưa ra đánh giá chính xác.</p>
+            </>
+          ) : (
+            <>
+              <h2>Đã có kết quả để chuẩn bị bước học tiếp theo</h2>
+              <p>Em có thể xem kỹ năng cần củng cố và bước học phù hợp với kết quả vừa rồi.</p>
+            </>
+          )}
           <Link className="button-primary" to="/student/path">
             Xem lộ trình của tôi
           </Link>
