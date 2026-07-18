@@ -1,51 +1,56 @@
 import { composeAnswer } from './providers';
-import { toolByName, type AgentTool } from './tools';
+import type { AgentToolCall } from './protocol';
+import { executeToolCalls } from './tool-runtime';
+import type { AgentTool } from './tools';
 
-/**
- * Agent loop — a browser-sized mirror of NekoCore's core
- * (`complete → tool-calls → observe`, capped by max steps; see
- * E:\Sach\Sua\NekoCore src/core/ports.ts + agent.ts). One provider port;
- * rule-based, OpenAI-compatible (Ollama/FPT-proxy) and future WebLLM
- * adapters all satisfy it, so swapping the brain is a data edit.
- */
+export type { AgentToolCall } from './protocol';
 
 export interface AgentChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  /** Set on assistant messages that requested tools; echoed back for context. */
-  toolName?: string;
+  readonly role: 'system' | 'user' | 'assistant' | 'tool';
+  readonly content: string;
+  readonly toolName?: string;
+  readonly toolCallId?: string;
 }
 
-export interface AgentToolCall {
-  name: string;
-  args: Record<string, string>;
+export interface AgentUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cachedInputTokens?: number;
 }
 
 export interface AgentCompletion {
-  content: string | null;
-  toolCalls: AgentToolCall[];
+  readonly content: string | null;
+  readonly toolCalls: readonly AgentToolCall[];
+  readonly finishReason?: string;
+  readonly usage?: AgentUsage;
 }
 
-/** Live token stream hook (mirror of NekoCore DeltaHook). */
 export type AgentDeltaHook = (text: string) => void;
 
-/** The one port every "brain" implements (mirror of NekoCore Provider). */
 export interface AgentProvider {
   readonly id: string;
   readonly label: string;
+  readonly contextWindow?: number;
   complete(
     messages: readonly AgentChatMessage[],
     tools: readonly AgentTool[],
     signal?: AbortSignal,
     onDelta?: AgentDeltaHook,
   ): Promise<AgentCompletion>;
+  dispose?(): Promise<void> | void;
 }
 
 export type AgentTraceEvent =
-  | { kind: 'tool_call'; name: string; args: Record<string, string> }
+  | { kind: 'tool_call'; name: string; args: Readonly<Record<string, unknown>> }
   | { kind: 'tool_result'; name: string; ok: boolean; summary: string }
   | { kind: 'answer'; text: string }
   | { kind: 'note'; text: string };
+
+export interface AgentTurnResult {
+  readonly text: string;
+  readonly messages: readonly AgentChatMessage[];
+  readonly usage: AgentUsage;
+}
 
 const MAX_STEPS = 4;
 
@@ -54,74 +59,96 @@ export const AGENT_SYSTEM_PROMPT =
   'tuyệt đối không tự bịa số liệu hay chẩn đoán. Nếu không có công cụ phù hợp, nói rõ giới hạn. ' +
   'Trả lời tiếng Việt, ngắn gọn, nêu rõ hành động gợi ý khi có.';
 
-export async function runAgent(
+function callKey(call: AgentToolCall): string {
+  return `${call.name}:${JSON.stringify(
+    Object.fromEntries(Object.entries(call.args).sort(([left], [right]) => left.localeCompare(right))),
+  )}`;
+}
+
+function numericClaims(value: string): Set<string> {
+  return new Set(value.match(/\b\d+(?:[.,]\d+)?(?:\s*%)?\b/g) ?? []);
+}
+
+function isGrounded(answer: string, question: string, toolPayloads: readonly string[]): boolean {
+  if (toolPayloads.length === 0) return true;
+  const allowedNumbers = numericClaims(`${question}\n${toolPayloads.join('\n')}`);
+  if ([...numericClaims(answer)].some((claim) => !allowedNumbers.has(claim))) return false;
+
+  const anchors = new Set<string>();
+  for (const payload of toolPayloads) {
+    for (const match of payload.matchAll(/"kienThuc(?:Goc)?":"([^"]+)"/g)) anchors.add(match[1]);
+  }
+  return anchors.size === 0 || [...anchors].some((anchor) => answer.includes(anchor));
+}
+
+function composeCollectedEvidence(toolLog: readonly { name: string; payload: string }[]): string {
+  const parts = toolLog.map((entry) => composeAnswer(entry.name, entry.payload));
+  return [...new Set(parts)].join('\n');
+}
+
+export async function runAgentTurn(
   question: string,
   provider: AgentProvider,
   tools: readonly AgentTool[],
-  onTrace: (event: AgentTraceEvent) => void,
+  history: readonly AgentChatMessage[],
+  onTrace: (event: AgentTraceEvent) => void = () => undefined,
   signal?: AbortSignal,
   onDelta?: AgentDeltaHook,
-): Promise<string> {
-  const messages: AgentChatMessage[] = [
-    { role: 'system', content: AGENT_SYSTEM_PROMPT },
-    { role: 'user', content: question },
-  ];
+): Promise<AgentTurnResult> {
+  if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+  const messages: AgentChatMessage[] = [...history, { role: 'user', content: question }];
   const seenCalls = new Set<string>();
   const toolLog: { name: string; payload: string }[] = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedInputTokens = 0;
 
-  for (let step = 1; step <= MAX_STEPS; step++) {
+  for (let step = 1; step <= MAX_STEPS; step += 1) {
     const completion = await provider.complete(messages, tools, signal, onDelta);
+    inputTokens += completion.usage?.inputTokens ?? 0;
+    outputTokens += completion.usage?.outputTokens ?? 0;
+    cachedInputTokens += completion.usage?.cachedInputTokens ?? 0;
+    if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
 
     if (completion.toolCalls.length === 0) {
       let answer =
         completion.content?.trim() || 'Tôi chưa có đủ dữ kiện từ công cụ để trả lời câu này.';
-      // Grounding guard: fact anchors (KC names) from tool results must
-      // survive into the answer. A small model that drifts gets replaced by
-      // the deterministic composition of the same facts — honestly labeled.
-      const anchors = new Set<string>();
-      for (const entry of toolLog) {
-        for (const match of entry.payload.matchAll(/"kienThuc(?:Goc)?":"([^"]+)"/g)) {
-          anchors.add(match[1]);
-        }
-      }
-      if (anchors.size > 0 && ![...anchors].some((anchor) => answer.includes(anchor))) {
-        const last = toolLog[toolLog.length - 1];
+      if (!isGrounded(answer, question, toolLog.map((entry) => entry.payload))) {
         onTrace({
           kind: 'note',
           text: 'Câu trả lời của model lệch dữ kiện công cụ — thay bằng bản tổng hợp deterministic.',
         });
-        answer = composeAnswer(last.name, last.payload);
+        answer = composeCollectedEvidence(toolLog);
       }
+      messages.push({ role: 'assistant', content: answer });
       onTrace({ kind: 'answer', text: answer });
-      return answer;
+      return {
+        text: answer,
+        messages,
+        usage: { inputTokens, outputTokens, cachedInputTokens },
+      };
     }
 
-    // Stuck-loop guard (NekoCore trait): the exact same call twice means the
-    // brain is spinning — stop and report the facts gathered so far.
-    const keys = completion.toolCalls.map((call) => `${call.name}:${JSON.stringify(call.args)}`);
+    const keys = completion.toolCalls.map(callKey);
     if (keys.some((key) => seenCalls.has(key))) {
       const stuck = 'Bộ não lặp lại cùng một lệnh công cụ — dừng để tránh vòng lặp vô ích.';
       onTrace({ kind: 'note', text: stuck });
-      return stuck;
+      messages.push({ role: 'assistant', content: stuck });
+      return {
+        text: stuck,
+        messages,
+        usage: { inputTokens, outputTokens, cachedInputTokens },
+      };
     }
     keys.forEach((key) => seenCalls.add(key));
 
-    // Every tool is read-only, so a batch fans out in parallel (NekoCore's
-    // read-only tool fan-out).
     completion.toolCalls.forEach((call) => {
       onTrace({ kind: 'tool_call', name: call.name, args: call.args });
     });
-    const results = await Promise.all(
-      completion.toolCalls.map(async (call) => {
-        const tool = toolByName(call.name);
-        return tool
-          ? await tool.run(call.args)
-          : { ok: false as const, error: `Không có công cụ ${call.name}.` };
-      }),
-    );
+    const results = await executeToolCalls(completion.toolCalls, tools, signal);
     completion.toolCalls.forEach((call, index) => {
       const result = results[index];
-      const payload = JSON.stringify(result);
+      const payload = JSON.stringify({ ok: result.ok, data: result.data, error: result.error });
       onTrace({
         kind: 'tool_result',
         name: call.name,
@@ -132,14 +159,48 @@ export async function runAgent(
         role: 'assistant',
         content: `[gọi công cụ ${call.name}]`,
         toolName: call.name,
+        toolCallId: call.id,
       });
-      messages.push({ role: 'tool', content: payload, toolName: call.name });
+      messages.push({
+        role: 'tool',
+        content: payload,
+        toolName: call.name,
+        toolCallId: call.id,
+      });
       toolLog.push({ name: call.name, payload });
     });
   }
 
   const fallback =
-    'Đã chạm giới hạn số bước của phiên hỏi này. Kết quả công cụ ở trên là dữ kiện đã thu được.';
+    toolLog.length > 0
+      ? `${composeCollectedEvidence(toolLog)}\n(Đã chạm giới hạn số bước; đây là bản tổng hợp deterministic.)`
+      : 'Đã chạm giới hạn số bước của phiên hỏi này mà chưa thu được dữ kiện.';
   onTrace({ kind: 'note', text: fallback });
-  return fallback;
+  messages.push({ role: 'assistant', content: fallback });
+  return {
+    text: fallback,
+    messages,
+    usage: { inputTokens, outputTokens, cachedInputTokens },
+  };
+}
+
+/** Backward-compatible one-shot entry point for existing tests and callers. */
+export async function runAgent(
+  question: string,
+  provider: AgentProvider,
+  tools: readonly AgentTool[],
+  onTrace: (event: AgentTraceEvent) => void,
+  signal?: AbortSignal,
+  onDelta?: AgentDeltaHook,
+): Promise<string> {
+  const result = await runAgentTurn(
+    question,
+    provider,
+    tools,
+    [{ role: 'system', content: AGENT_SYSTEM_PROMPT }],
+    onTrace,
+    signal,
+    onDelta,
+  );
+  return result.text;
 }

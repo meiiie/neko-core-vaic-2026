@@ -42,22 +42,41 @@ export interface OutboxRecord {
   nextRetryAt: string;
 }
 
+export interface AgentSessionRecord {
+  id: string;
+  accountId: string;
+  role: 'teacher';
+  classId: string | null;
+  providerId: string;
+  /** Canonical compacted capsule + recent tail; never provider credentials. */
+  payload: string;
+  updatedAt: string;
+}
+
 export const DB_NAME = 'nekopath';
-export const DB_SCHEMA_VERSION = 1;
+export const DB_SCHEMA_VERSION = 2;
 
 export class NekoPathDb extends Dexie {
   meta!: Table<MetaRecord, string>;
   events!: Table<LearnerEventRecord, string>;
   overrides!: Table<OverrideRecord, string>;
   outbox!: Table<OutboxRecord, string>;
+  agentSessions!: Table<AgentSessionRecord, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
+    this.version(1).stores({
+      meta: 'key',
+      events: 'id, [learnerId+sequence], learnerId, itemId, occurredAt',
+      overrides: 'id, learnerId, targetKcId, updatedAt',
+      outbox: 'eventId, status, createdAt, nextRetryAt',
+    });
     this.version(DB_SCHEMA_VERSION).stores({
       meta: 'key',
       events: 'id, [learnerId+sequence], learnerId, itemId, occurredAt',
       overrides: 'id, learnerId, targetKcId, updatedAt',
       outbox: 'eventId, status, createdAt, nextRetryAt',
+      agentSessions: 'id, accountId, providerId, updatedAt',
     });
   }
 }

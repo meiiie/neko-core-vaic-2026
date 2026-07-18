@@ -96,7 +96,10 @@ export class WebLlmAgentProvider implements AgentProvider {
   ): Promise<AgentCompletion> {
     const llm = await engine();
     const toolMenu = tools
-      .map((tool) => `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.parameters)}`)
+      .map(
+        (tool) =>
+          `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.inputJsonSchema)}`,
+      )
       .join('\n');
     const executedTools = new Set(
       messages.filter((message) => message.role === 'tool').map((message) => message.toolName),

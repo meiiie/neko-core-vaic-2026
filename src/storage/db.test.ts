@@ -20,7 +20,7 @@ function makeEvent(overrides: Partial<LearnerEventRecord> = {}): LearnerEventRec
   };
 }
 
-describe('Dexie schema v1', () => {
+describe('Dexie schema v2', () => {
   const dbs: NekoPathDb[] = [];
 
   afterEach(async () => {
@@ -29,13 +29,14 @@ describe('Dexie schema v1', () => {
     }
   });
 
-  it('opens with the four v1 tables', async () => {
+  it('opens with the canonical event tables plus scoped agent sessions', async () => {
     const database = makeDb();
     dbs.push(database);
     await database.open();
 
-    expect(database.verno).toBe(1);
+    expect(database.verno).toBe(2);
     expect(database.tables.map((t) => t.name).sort()).toEqual([
+      'agentSessions',
       'events',
       'meta',
       'outbox',

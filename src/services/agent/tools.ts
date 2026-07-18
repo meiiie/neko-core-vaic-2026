@@ -10,6 +10,7 @@ import {
 } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH } from '../../content';
 import { listEventsByLearner } from '../../storage/event-repository';
+import { z, type ZodType } from 'zod';
 
 /**
  * Agent tools — the ONLY way the console agent may know anything.
@@ -25,18 +26,51 @@ export interface AgentToolResult {
   error?: string;
 }
 
+export interface AgentToolContext {
+  readonly signal?: AbortSignal;
+}
+
+export interface AgentToolJsonSchema {
+  readonly type: 'object';
+  readonly properties: Readonly<Record<string, unknown>>;
+  readonly required?: readonly string[];
+  readonly additionalProperties: false;
+}
+
 export interface AgentTool {
   readonly name: string;
   readonly description: string;
-  /** Flat string params keep schemas tiny for small local models. */
-  readonly parameters: Readonly<Record<string, string>>;
-  run(args: Readonly<Record<string, string>>): Promise<AgentToolResult>;
+  readonly inputSchema: ZodType;
+  readonly inputJsonSchema: AgentToolJsonSchema;
+  readonly readOnly: boolean;
+  readonly parallelSafe: boolean;
+  readonly timeoutMs: number;
+  run(
+    args: Readonly<Record<string, unknown>>,
+    context?: AgentToolContext,
+  ): Promise<AgentToolResult>;
 }
+
+const EMPTY_INPUT = z.object({}).strict();
+const EMPTY_JSON_SCHEMA: AgentToolJsonSchema = {
+  type: 'object',
+  properties: {},
+  required: [],
+  additionalProperties: false,
+};
+
+const READ_ONLY_TOOL = {
+  readOnly: true,
+  parallelSafe: true,
+  timeoutMs: 8_000,
+} as const;
 
 const tongQuanLop: AgentTool = {
   name: 'tong_quan_lop',
   description: 'Tổng quan lớp 7A: các nhóm can thiệp, ưu tiên, lỗ hổng toàn lớp.',
-  parameters: {},
+  inputSchema: EMPTY_INPUT,
+  inputJsonSchema: EMPTY_JSON_SCHEMA,
+  ...READ_ONLY_TOOL,
   async run() {
     const dashboard = buildHeroClassDashboard();
     const groups = [...dashboard.groups]
@@ -65,9 +99,22 @@ const tongQuanLop: AgentTool = {
 const chanDoanHocSinh: AgentTool = {
   name: 'chan_doan_hoc_sinh',
   description: 'Chẩn đoán hiện tại của một học sinh hero (an, binh, chi, minh).',
-  parameters: { hoc_sinh: 'ID học sinh: an | binh | chi | minh' },
+  inputSchema: z.object({ hoc_sinh: z.enum(['an', 'binh', 'chi', 'minh']) }).strict(),
+  inputJsonSchema: {
+    type: 'object',
+    properties: {
+      hoc_sinh: {
+        type: 'string',
+        enum: ['an', 'binh', 'chi', 'minh'],
+        description: 'ID học sinh demo.',
+      },
+    },
+    required: ['hoc_sinh'],
+    additionalProperties: false,
+  },
+  ...READ_ONLY_TOOL,
   async run(args) {
-    const learnerId = (args.hoc_sinh ?? '').toLowerCase().trim();
+    const learnerId = String(args.hoc_sinh ?? '').toLowerCase().trim();
     if (!isHeroLearnerId(learnerId)) {
       return { ok: false, error: 'Chỉ có bốn hồ sơ demo: an, binh, chi, minh.' };
     }
@@ -91,9 +138,18 @@ const chanDoanHocSinh: AgentTool = {
 const giaiThichKienThuc: AgentTool = {
   name: 'giai_thich_kien_thuc',
   description: 'Vị trí một kiến thức (K01..K10) trong đồ thị: cần gì trước, mở khóa gì sau.',
-  parameters: { kc: 'Mã kiến thức, ví dụ K02' },
+  inputSchema: z.object({ kc: z.string().regex(/^K(?:0[1-9]|10)$/i) }).strict(),
+  inputJsonSchema: {
+    type: 'object',
+    properties: {
+      kc: { type: 'string', pattern: '^K(?:0[1-9]|10)$', description: 'Mã K01 đến K10.' },
+    },
+    required: ['kc'],
+    additionalProperties: false,
+  },
+  ...READ_ONLY_TOOL,
   async run(args) {
-    const kcId = (args.kc ?? '').toUpperCase().trim();
+    const kcId = String(args.kc ?? '').toUpperCase().trim();
     const node = HERO_GRAPH.nodes.find((candidate) => candidate.id === kcId);
     if (!node) {
       return {
@@ -117,7 +173,9 @@ const giaiThichKienThuc: AgentTool = {
 const baiDuocGiao: AgentTool = {
   name: 'bai_duoc_giao',
   description: 'Danh sách bài đã giao cho lớp và tiến độ nộp (cần kết nối máy chủ).',
-  parameters: {},
+  inputSchema: EMPTY_INPUT,
+  inputJsonSchema: EMPTY_JSON_SCHEMA,
+  ...READ_ONLY_TOOL,
   async run() {
     try {
       const response = await fetch('/api/assignments', { credentials: 'include' });

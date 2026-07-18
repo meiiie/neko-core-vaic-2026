@@ -182,7 +182,10 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
   ): Promise<AgentCompletion> {
     const stream = Boolean(onDelta);
     const toolMenu = tools
-      .map((tool) => `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.parameters)}`)
+      .map(
+        (tool) =>
+          `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.inputJsonSchema)}`,
+      )
       .join('\n');
     const executedTools = new Set(
       messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
@@ -216,15 +219,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: {
-            type: 'object',
-            properties: Object.fromEntries(
-              Object.entries(tool.parameters).map(([key, description]) => [
-                key,
-                { type: 'string', description },
-              ]),
-            ),
-          },
+          parameters: tool.inputJsonSchema,
         },
       })),
     };
@@ -298,7 +293,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
       if (!name) return [];
       try {
         return [
-          { name, args: JSON.parse(call.function?.arguments || '{}') as Record<string, string> },
+          { name, args: JSON.parse(call.function?.arguments || '{}') as Record<string, unknown> },
         ];
       } catch {
         return [{ name, args: {} }];
