@@ -98,7 +98,9 @@ export function PathPage() {
         </header>
         {canCheckIn ? (
           <Link className="button-primary" to="/student/check-in">
-            {hasRetainedAnswers ? 'Trả lời câu xác minh để mở lộ trình' : 'Trả lời câu phân biệt tiếp theo'}
+            {hasRetainedAnswers
+              ? 'Trả lời câu xác minh để mở lộ trình'
+              : 'Trả lời câu phân biệt tiếp theo'}
           </Link>
         ) : (
           <p role="status" className="decision-panel decision-panel--review">
