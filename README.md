@@ -167,6 +167,7 @@ The full local gate mirrors CI: `format:check`, `lint`, `typecheck`, `test`, `bu
 - **CI** (`.github/workflows/ci.yml`): SHA-pinned actions, least-privilege permissions, the
   complete gate on every push and pull request.
 - **Deploy** (`.github/workflows/deploy.yml`): manual `workflow_dispatch` to the production VM;
+  keyless GitHub OIDC/Google Workload Identity Federation replaces stored cloud credentials, and
   the Docker build is the release gate. The in-product version surface reports the immutable Git
   SHA; `/api/healthz` reports liveness and server time.
 - **Versioning**: semantic versions, annotated tags, and published

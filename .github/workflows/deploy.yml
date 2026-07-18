@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: deploy-production
@@ -16,20 +17,26 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # Requires repository secret GCP_SA_KEY (service-account JSON with
-    # compute.instances.* + IAP tunnel access). Never exposed to PRs:
-    # workflow_dispatch only runs from branches in this repo.
     steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          project_id: the-wiii-lab-500306
+          workload_identity_provider: projects/14068163754/locations/global/workloadIdentityPools/github-actions/providers/nekopath-main
+          service_account: nekopath-github-deployer@the-wiii-lab-500306.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          project_id: the-wiii-lab-500306
 
       - name: Pull main and rebuild app container on the VM
         run: |
           gcloud compute ssh nekopath-production \
+            --project=the-wiii-lab-500306 \
             --zone=asia-southeast1-c \
             --tunnel-through-iap \
-            --command="cd /opt/nekopath && git fetch origin main && git checkout main && git pull --ff-only origin main && export GITHUB_SHA=\$(git rev-parse HEAD) && sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app"
+            --command="set -eu; sudo -u Admin git -C /opt/nekopath fetch origin main; sudo -u Admin git -C /opt/nekopath checkout main; sudo -u Admin git -C /opt/nekopath pull --ff-only origin main; export GITHUB_SHA=\$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD); cd /opt/nekopath; sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app"
 
       - name: Smoke canonical URL
         run: |

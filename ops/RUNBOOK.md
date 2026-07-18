@@ -12,6 +12,8 @@ Canonical URL: `https://nekopath.holilihu.online`
 - Cloudflare Worker: `nekopath-edge`
 - HTTPS origin: `https://nekopath-origin.34-142-197-144.sslip.io`
 - recovery Pages URL: `https://nekopath-vaic.pages.dev`
+- GitHub deploy identity: `nekopath-github-deployer@the-wiii-lab-500306.iam.gserviceaccount.com`
+- Workload Identity provider: `github-actions/nekopath-main`
 
 Do not copy API keys or local `.env` files to this host. The current release runs the deterministic core and mock LLM profile; external inference is admitted only through a server-side secret after its own evaluation gate.
 
@@ -20,7 +22,8 @@ Do not copy API keys or local `.env` files to this host. The current release run
 ```powershell
 gcloud compute ssh nekopath-production `
   --project=the-wiii-lab-500306 `
-  --zone=asia-southeast1-c
+  --zone=asia-southeast1-c `
+  --tunnel-through-iap
 ```
 
 ```bash
@@ -37,17 +40,17 @@ Expected: both services are `healthy`; origin health JSON has `"status":"ok"`; c
 ## Deploy a reviewed main commit
 
 ```bash
+sudo -u Admin git -C /opt/nekopath fetch origin main
+sudo -u Admin git -C /opt/nekopath checkout main
+sudo -u Admin git -C /opt/nekopath pull --ff-only origin main
+export GITHUB_SHA=$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD)
 cd /opt/nekopath
-git fetch origin main
-git checkout main
-git pull --ff-only origin main
-export GITHUB_SHA=$(git rev-parse HEAD)
 sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml build app
 sudo docker compose -f ops/compose.yml up -d
 sudo docker compose -f ops/compose.yml ps
 ```
 
-The Docker build is the release gate: it runs typecheck, tests and the PWA production build before creating the runtime image. `GITHUB_SHA` is passed as immutable build provenance and appears in the product's version screen. Do not use `--no-cache` unless cache corruption is established. Keep `/opt/nekopath` owned by the OS Login user; only Docker commands require `sudo`.
+The Docker build is the release gate: it runs typecheck, tests and the PWA production build before creating the runtime image. `GITHUB_SHA` is passed as immutable build provenance and appears in the product's version screen. Do not use `--no-cache` unless cache corruption is established. The repository remains owned by the original local `Admin` account, so every Git command must run as `sudo -u Admin`; never run Git as root. OS Login is enabled only on `nekopath-production`, and administrative SSH must use IAP.
 
 ## Back up SQLite
 
@@ -70,8 +73,8 @@ Use a known-good immutable commit. Database migrations must remain backward comp
 
 ```bash
 cd /opt/nekopath
-git fetch origin
-git checkout --detach <known-good-commit>
+sudo -u Admin git -C /opt/nekopath fetch origin
+sudo -u Admin git -C /opt/nekopath checkout --detach <known-good-commit>
 sudo docker compose -f ops/compose.yml up -d --build app
 sudo docker compose -f ops/compose.yml ps
 ```
@@ -118,12 +121,13 @@ To return to full-stack, deploy the reviewed `main` Worker configuration from `e
 - `ci.yml` gates every PR and main push: format, lint, typecheck, tests,
   deterministic eval, production build + PWA artifact integrity; uploads
   `dist` for 7 days. Actions pinned to full commit SHAs; `contents: read`.
-- `deploy.yml` is **manual** (`workflow_dispatch`): auths to GCP with the
-  `GCP_SA_KEY` repository secret, then runs the exact RUNBOOK deploy over IAP
-  SSH and smokes the canonical URL. To enable it once: create a service
-  account with Compute OS Login + IAP-secured tunnel access, download its
-  JSON key, and add it as the `GCP_SA_KEY` secret. Until that secret exists,
-  deploys stay manual per the section above (identical commands).
+- `deploy.yml` is **manual** (`workflow_dispatch`) and keyless. GitHub's OIDC token is exchanged
+  through Workload Identity Federation for a short-lived credential; there is no GCP JSON key or
+  repository secret. The provider admits only repository ID `1302016512`, owner ID `156531153`,
+  `main`, `workflow_dispatch`, and this exact workflow path.
+- The deploy service account can only read the Compute fields required by `gcloud ssh`, open an
+  IAP tunnel to port 22, and use OS Admin Login on `nekopath-production`. It has no service-account
+  keys. The workflow then runs the same reviewed-main deploy above and smokes the canonical URL.
 
 ## Accounts
 
