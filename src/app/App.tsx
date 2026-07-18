@@ -107,10 +107,12 @@ function NotFoundPage() {
   );
 }
 
-export function App() {
+function AppContent() {
+  const { account, ready } = useSession();
+
   return (
-    <SessionProvider>
-      <UpdatePrompt />
+    <>
+      <UpdatePrompt preWorkspace={!ready || account === null} />
       <Suspense
         fallback={<div className="page-loading" aria-label="Đang tải không gian làm việc" />}
       >
@@ -139,6 +141,14 @@ export function App() {
           </Route>
         </Routes>
       </Suspense>
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <SessionProvider>
+      <AppContent />
     </SessionProvider>
   );
 }

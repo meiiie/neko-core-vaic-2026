@@ -1,32 +1,27 @@
 import { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
 /**
  * Service-worker update UX (docs/IMPLEMENTATION_MASTER_PLAN.md §8), rendered
  * at App level so EVERY route — including /login — sees it.
  *
- * - On /login the update applies automatically: no work-in-progress exists
- *   before sign-in, and a stale shell talking to a newer API is worse than a
- *   reload (a not-yet-signed-in visitor would otherwise stay stuck on the old
- *   build forever, since they could never reach the in-app prompt).
- * - Everywhere else the user chooses, so an active diagnostic is never
- *   interrupted by a silent reload.
+ * - Before a workspace is active the update applies automatically: no
+ *   work-in-progress exists, and a stale shell talking to a newer API is worse
+ *   than a reload.
+ * - Inside a workspace the user chooses, so an active diagnostic is never
+ *   interrupted silently.
  */
-export function UpdatePrompt() {
-  const location = useLocation();
+export function UpdatePrompt({ preWorkspace }: { preWorkspace: boolean }) {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW();
 
-  const onLogin = location.pathname === '/login';
-
   useEffect(() => {
-    if (needRefresh && onLogin) void updateServiceWorker(true);
-  }, [needRefresh, onLogin, updateServiceWorker]);
+    if (needRefresh && preWorkspace) void updateServiceWorker(true);
+  }, [needRefresh, preWorkspace, updateServiceWorker]);
 
-  if (!needRefresh || onLogin) {
+  if (!needRefresh || preWorkspace) {
     return null;
   }
 
