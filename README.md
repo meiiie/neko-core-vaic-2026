@@ -199,6 +199,7 @@ labs/           Image-generation lab with asset register and review rubric
 | [EXECUTIVE_CONCLUSION_EXECUTION.md](docs/EXECUTIVE_CONCLUSION_EXECUTION.md) | Evidence-aware adaptive core rationale |
 | [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md) | Production topology and verification |
 | [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Submission video script with claim discipline |
+| [CURRICULUM_SCOPE_DECISIONS.md](docs/CURRICULUM_SCOPE_DECISIONS.md) | Team-lead-approved curriculum scope and architecture decisions |
 | [ops/RUNBOOK.md](ops/RUNBOOK.md) | Operations: deploy, accounts, recovery |
 
 ## Team and AI collaboration

@@ -50,6 +50,23 @@ export async function markOutboxSent(
   });
 }
 
+/**
+ * The server refused these IDs permanently (same ID, different content).
+ * They must stop retrying — a CONFLICT row is visible on the system page,
+ * never silently dropped and never counted as synced.
+ */
+export async function markOutboxConflict(
+  eventIds: readonly string[],
+  database: NekoPathDb = db,
+): Promise<void> {
+  if (eventIds.length === 0) return;
+  await database.transaction('rw', [database.outbox], async () => {
+    for (const eventId of eventIds) {
+      await database.outbox.update(eventId, { status: 'CONFLICT' });
+    }
+  });
+}
+
 export async function markOutboxRetry(
   rows: readonly OutboxRow[],
   database: NekoPathDb = db,

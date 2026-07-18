@@ -36,7 +36,8 @@ export interface OverrideRecord extends TeacherDiagnosisOverride {
 
 export interface OutboxRecord {
   eventId: string;
-  status: 'PENDING' | 'SENT' | 'FAILED';
+  /** CONFLICT: the server holds a different record under this ID; never retried, never shown as synced. */
+  status: 'PENDING' | 'SENT' | 'FAILED' | 'CONFLICT';
   createdAt: string;
   nextRetryAt: string;
 }

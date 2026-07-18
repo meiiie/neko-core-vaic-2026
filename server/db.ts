@@ -83,6 +83,14 @@ export function openDb(path: string): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_events_learner ON events(learner_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_events_assignment ON events(assignment_id);
+    CREATE TABLE IF NOT EXISTS sync_conflicts (
+      event_id TEXT NOT NULL,
+      learner_id TEXT NOT NULL,
+      server_fingerprint TEXT NOT NULL,
+      client_fingerprint TEXT NOT NULL,
+      first_seen_at TEXT NOT NULL,
+      PRIMARY KEY (event_id, client_fingerprint)
+    );
   `);
 
   // Small additive migrations keep an existing event database usable during the UI refinement.

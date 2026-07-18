@@ -182,6 +182,12 @@ export function SystemPage() {
               <span>Cơ chế</span>
               <strong>Tự động khi có mạng; ID sự kiện chống trùng lặp</strong>
             </li>
+            {sync !== undefined && sync.conflictCount > 0 ? (
+              <li>
+                <span>Bản ghi bị cách ly (khác nội dung với máy chủ)</span>
+                <strong>{sync.conflictCount}</strong>
+              </li>
+            ) : null}
           </ul>
           <button className="button-secondary" type="button" onClick={() => void flushOutbox()}>
             Đồng bộ ngay

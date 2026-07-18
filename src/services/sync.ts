@@ -1,10 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type LearnerEventRecord, type NekoPathDb } from '../storage/db';
+import { learnerEventSchema, type AppendResult } from '../storage/event-repository';
 import {
   duePendingOutbox,
+  markOutboxConflict,
   markOutboxRetry,
   markOutboxSent,
-  queueOutbox,
 } from '../storage/outbox-repository';
 
 /**
@@ -55,11 +56,14 @@ export async function flushOutbox(
         }),
       });
       if (!response.ok) throw new Error(String(response.status));
+      const body = (await response.json().catch(() => ({}))) as { conflictIds?: string[] };
+      const conflictIds = new Set(body.conflictIds ?? []);
+      await markOutboxConflict([...conflictIds], database);
       await markOutboxSent(
-        due.map((row) => row.eventId),
+        due.map((row) => row.eventId).filter((id) => !conflictIds.has(id)),
         database,
       );
-      return { pushed: events.length };
+      return { pushed: events.length - conflictIds.size };
     } catch {
       await markOutboxRetry(due, database);
       return { skipped: 'PUSH_FAILED' };
@@ -69,13 +73,50 @@ export async function flushOutbox(
   }
 }
 
-/** Record a local answer AND queue it for server sync in one call. */
-export async function queueEventForSync(
+/**
+ * Record a local answer AND queue it for server sync atomically: the event,
+ * the freshness marker and the outbox row commit in ONE IndexedDB
+ * transaction, so a crash between "saved" and "queued" cannot silently lose
+ * the event from sync (plan §27.2). Duplicate IDs stay idempotent.
+ */
+export async function recordAnswer(
   record: LearnerEventRecord,
   database: NekoPathDb = db,
-): Promise<void> {
-  await queueOutbox(record.id, database);
+): Promise<AppendResult> {
+  const parsed = learnerEventSchema.parse(record);
+  const now = new Date().toISOString();
+  const result = await database.transaction(
+    'rw',
+    [database.events, database.outbox, database.meta],
+    async (): Promise<AppendResult> => {
+      try {
+        await database.events.add(parsed);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'ConstraintError') {
+          return 'DUPLICATE_IGNORED';
+        }
+        throw error;
+      }
+      await database.meta.put({
+        key: 'lastLocalWriteAt',
+        value: parsed.occurredAt,
+        updatedAt: now,
+      });
+      try {
+        await database.outbox.add({
+          eventId: parsed.id,
+          status: 'PENDING',
+          createdAt: now,
+          nextRetryAt: now,
+        });
+      } catch (error) {
+        if (!(error instanceof Error && error.name === 'ConstraintError')) throw error;
+      }
+      return 'APPENDED';
+    },
+  );
   void flushOutbox(database);
+  return result;
 }
 
 let triggersRegistered = false;
@@ -93,6 +134,7 @@ export function registerSyncTriggers(): void {
 
 export interface SyncStatus {
   pendingCount: number;
+  conflictCount: number;
   lastSyncedAt: string | null;
 }
 
@@ -100,7 +142,8 @@ export interface SyncStatus {
 export function useSyncStatus(): SyncStatus | undefined {
   return useLiveQuery(async () => {
     const pendingCount = await db.outbox.where('status').equals('PENDING').count();
+    const conflictCount = await db.outbox.where('status').equals('CONFLICT').count();
     const meta = await db.meta.get('lastSyncedAt');
-    return { pendingCount, lastSyncedAt: meta?.value ?? null };
+    return { pendingCount, conflictCount, lastSyncedAt: meta?.value ?? null };
   }, []);
 }

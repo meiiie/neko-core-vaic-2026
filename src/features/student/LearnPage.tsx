@@ -9,8 +9,8 @@ import {
   questionForItem,
   STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
-import { queueEventForSync } from '../../services/sync';
-import { appendEvent, listEventsByLearner } from '../../storage/event-repository';
+import { recordAnswer } from '../../services/sync';
+import { listEventsByLearner } from '../../storage/event-repository';
 
 const QUESTION_BUDGET = 3;
 
@@ -45,8 +45,7 @@ export function LearnPage() {
         selectedChoiceId === probeQuestion.correctChoiceId,
         localRecords.length,
       );
-      await appendEvent(record);
-      void queueEventForSync(record);
+      await recordAnswer(record);
       setSelectedChoiceId(null);
       setSaveState('saved');
     } catch {

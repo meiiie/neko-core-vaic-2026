@@ -197,7 +197,49 @@ describe('NekoPath API', () => {
       cookies: student,
       payload: { events: [event] },
     });
-    expect((second.json() as { accepted: number }).accepted).toBe(0);
+    const secondBody = second.json() as { accepted: number; conflictIds: string[] };
+    expect(secondBody.accepted).toBe(0);
+    expect(secondBody.conflictIds).toEqual([]);
+    await app.close();
+  });
+
+  it('quarantines a resent event ID whose content differs instead of overwriting', async () => {
+    const app = await makeApp();
+    const student = await loginCookie(app, STUDENT_EMAIL);
+    const original = {
+      id: 'evt-clash-1',
+      itemId: 'K02-CHECK-1',
+      sequence: 1,
+      occurredAt: '2026-07-18T03:00:00.000Z',
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    };
+    await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: { events: [original] },
+    });
+
+    const tampered = { ...original, payload: '{"choiceId":"b","correct":false}' };
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: { events: [tampered] },
+    });
+    const body = response.json() as { accepted: number; conflictIds: string[] };
+    expect(body.accepted).toBe(0);
+    expect(body.conflictIds).toEqual(['evt-clash-1']);
+
+    // The stored event keeps its original content; both fingerprints are on file.
+    const summary = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: { events: [original] },
+    });
+    expect((summary.json() as { conflictIds: string[] }).conflictIds).toEqual([]);
     await app.close();
   });
 });

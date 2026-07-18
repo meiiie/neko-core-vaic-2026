@@ -1,6 +1,6 @@
 import fastifyCookie from '@fastify/cookie';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import {
@@ -519,7 +519,13 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     };
   });
 
-  /** Idempotent batch sync of locally recorded practice events. */
+  /**
+   * Idempotent batch sync of locally recorded practice events. A retried
+   * event with the same content is acknowledged silently; the same event ID
+   * with DIFFERENT content is never overwritten — both fingerprints are
+   * quarantined in sync_conflicts and the ID is reported back so the client
+   * stops retrying it.
+   */
   app.post('/api/events', (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return;
@@ -530,7 +536,26 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
+    const selectExisting = db.prepare(
+      'SELECT item_id, sequence, occurred_at, kind, payload FROM events WHERE id = ?',
+    );
+    const insertConflict = db.prepare(
+      `INSERT OR IGNORE INTO sync_conflicts
+       (event_id, learner_id, server_fingerprint, client_fingerprint, first_seen_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    const fingerprint = (row: {
+      itemId: string;
+      sequence: number;
+      occurredAt: string;
+      kind: string;
+      payload: string;
+    }) =>
+      createHash('sha256')
+        .update(JSON.stringify([row.itemId, row.sequence, row.occurredAt, row.kind, row.payload]))
+        .digest('hex');
     let accepted = 0;
+    const conflictIds: string[] = [];
     for (const event of parsed.data.events) {
       const result = insert.run(
         event.id,
@@ -543,9 +568,27 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
         event.payload,
         new Date().toISOString(),
       );
-      accepted += Number(result.changes);
+      if (Number(result.changes) > 0) {
+        accepted += 1;
+        continue;
+      }
+      const existing = selectExisting.get(event.id) as
+        | { item_id: string; sequence: number; occurred_at: string; kind: string; payload: string }
+        | undefined;
+      if (!existing) continue;
+      const serverPrint = fingerprint({
+        itemId: existing.item_id,
+        sequence: existing.sequence,
+        occurredAt: existing.occurred_at,
+        kind: existing.kind,
+        payload: existing.payload,
+      });
+      const clientPrint = fingerprint(event);
+      if (serverPrint === clientPrint) continue; // harmless retry
+      insertConflict.run(event.id, user.id, serverPrint, clientPrint, new Date().toISOString());
+      conflictIds.push(event.id);
     }
-    return { accepted, received: parsed.data.events.length };
+    return { accepted, conflictIds, received: parsed.data.events.length };
   });
 
   return app;

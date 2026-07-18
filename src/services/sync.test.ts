@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NekoPathDb, type LearnerEventRecord } from '../storage/db';
 import { appendEvent } from '../storage/event-repository';
 import { duePendingOutbox, queueOutbox } from '../storage/outbox-repository';
-import { flushOutbox } from './sync';
+import { flushOutbox, recordAnswer } from './sync';
 
 function makeDb(): NekoPathDb {
   return new NekoPathDb(`nekopath-sync-${crypto.randomUUID()}`);
@@ -65,6 +65,50 @@ describe('outbox sync bridge', () => {
     expect(stillPending[0].nextRetryAt > new Date().toISOString()).toBe(true);
     // Not yet due, so an immediate second flush pushes nothing.
     expect(await duePendingOutbox(new Date().toISOString(), database)).toHaveLength(0);
+    await database.delete();
+  });
+
+  it('quarantines server-reported conflicts instead of marking them synced', async () => {
+    const database = makeDb();
+    await appendEvent(makeEvent('evt-ok', 1), database);
+    await appendEvent(makeEvent('evt-clash', 2), database);
+    await queueOutbox('evt-ok', database);
+    await queueOutbox('evt-clash', database);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ accepted: 1, conflictIds: ['evt-clash'], received: 2 }), {
+            status: 200,
+          }),
+      ),
+    );
+
+    const result = await flushOutbox(database);
+    expect(result).toEqual({ pushed: 1 });
+    expect((await database.outbox.get('evt-ok'))?.status).toBe('SENT');
+    expect((await database.outbox.get('evt-clash'))?.status).toBe('CONFLICT');
+    // Conflicts are permanent: they never come due again.
+    expect(await duePendingOutbox(new Date().toISOString(), database)).toHaveLength(0);
+    await database.delete();
+  });
+
+  it('recordAnswer writes the event and its outbox row in one atomic call', async () => {
+    const database = makeDb();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 503 })), // flush fails, rows must survive
+    );
+
+    expect(await recordAnswer(makeEvent('evt-atomic', 1), database)).toBe('APPENDED');
+    expect(await database.events.get('evt-atomic')).toBeTruthy();
+    expect((await database.outbox.get('evt-atomic'))?.status).toBe('PENDING');
+    expect((await database.meta.get('lastLocalWriteAt'))?.value).toBe('2026-07-17T09:00:00.000Z');
+
+    // Same ID again: idempotent, still exactly one event and one outbox row.
+    expect(await recordAnswer(makeEvent('evt-atomic', 99), database)).toBe('DUPLICATE_IGNORED');
+    expect(await database.events.count()).toBe(1);
+    expect(await database.outbox.count()).toBe(1);
     await database.delete();
   });
 });

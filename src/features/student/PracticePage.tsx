@@ -10,9 +10,9 @@ import {
 import { useSession } from '../../app/session';
 import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
-import { queueEventForSync } from '../../services/sync';
+import { recordAnswer } from '../../services/sync';
 import type { LearnerEventRecord } from '../../storage/db';
-import { appendEvent, listEventsByLearner } from '../../storage/event-repository';
+import { listEventsByLearner } from '../../storage/event-repository';
 
 type Phase = 'answering' | 'feedback';
 
@@ -121,8 +121,7 @@ export function PracticePage() {
           ? { misconceptionId, methodValidity: 'INVALID' }
           : { methodValidity: 'UNKNOWN' },
       );
-      await appendEvent(record);
-      void queueEventForSync(record);
+      await recordAnswer(record);
       setFeedback({ correct, choiceId: selectedChoiceId, question: answered });
       setPhase('feedback');
       if (!correct) {
