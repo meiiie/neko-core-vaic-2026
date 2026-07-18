@@ -29,7 +29,7 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('opens on a sign-in card with the class-roll dropdown (no demo picker, no Google)', async () => {
+  it('opens on the searchable class roll (no password field, no Google)', async () => {
     installApiStub(null);
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -38,14 +38,14 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     );
 
     expect(screen.getByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeTruthy();
-    expect(await screen.findByRole('combobox')).toBeTruthy();
-    expect(screen.getByRole('option', { name: /Trần Ngọc An/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Đăng nhập' })).toBeTruthy();
+    expect(await screen.findByRole('searchbox', { name: 'Tìm tên của bạn' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Trần Ngọc An/ })).toBeTruthy();
+    expect(screen.queryByLabelText(/Mật khẩu/)).toBeNull();
     expect(screen.queryByText(/tài khoản mẫu/i)).toBeNull();
     expect(screen.queryByText(/Google/)).toBeNull();
   });
 
-  it('signs in by picking a name and typing the password', async () => {
+  it('signs in by searching and tapping a name — no typing a password', async () => {
     installApiStub(null);
     const user = userEvent.setup();
     render(
@@ -54,9 +54,10 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
       </MemoryRouter>,
     );
 
-    await user.selectOptions(await screen.findByRole('combobox'), 'an@nekopath.edu.vn');
-    await user.type(screen.getByPlaceholderText('••••••••'), 'Nekopath@2026');
-    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+    // Diacritic-insensitive search: "ngoc an" finds "Trần Ngọc An".
+    await user.type(await screen.findByRole('searchbox', { name: 'Tìm tên của bạn' }), 'ngoc an');
+    await user.click(screen.getByRole('button', { name: /Trần Ngọc An/ }));
+    await user.click(screen.getByRole('button', { name: /Đăng nhập — Trần Ngọc An/ }));
 
     const navigation = await screen.findByRole('navigation', { name: 'Điều hướng chính' });
     expect([...navigation.querySelectorAll('a')].map((link) => link.textContent)).toEqual([

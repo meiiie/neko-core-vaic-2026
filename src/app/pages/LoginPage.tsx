@@ -1,18 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BrandMark } from '../../components/BrandMark';
 import { useSession } from '../session';
 
 /**
- * Sign-in — one calm centred card. Picking your name from the class roll
- * (dropdown) beats typing an email on a shared rural-classroom device; the
- * password stays the only secret. Returning users on this device are restored
- * from the cached session and never see this screen; the first sign-in needs
- * the network, so an unreachable server falls back to a plain email field
- * with an honest note.
+ * Sign-in — search your name in the class roll, tap it, press Đăng nhập.
+ * The class password is applied automatically (event environment, documented
+ * in ops/RUNBOOK.md): rural Grade-7 students on a shared device should not
+ * have to type anything beyond finding their own name. Returning users are
+ * restored from the cached session and never see this screen.
  */
 
 const LAST_EMAIL_KEY = 'nekopath.last-email.v1';
+const CLASS_PASSWORD = 'Nekopath@2026';
 
 interface DirectoryAccount {
   email: string;
@@ -21,15 +21,26 @@ interface DirectoryAccount {
   subtitle: string;
 }
 
+/** Diacritic-insensitive matching so "han" finds "Hân", "le" finds "Lê". */
+function fold(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
+
 export function LoginPage() {
   const { account, ready, signIn } = useSession();
   const navigate = useNavigate();
 
   const [directory, setDirectory] = useState<DirectoryAccount[] | null>(null);
-  const [directoryFailed, setDirectoryFailed] = useState(false);
-  const [email, setEmail] = useState(() => window.localStorage.getItem(LAST_EMAIL_KEY) ?? '');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string>(
+    () => window.localStorage.getItem(LAST_EMAIL_KEY) ?? '',
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,144 +55,141 @@ export function LoginPage() {
       .then(async (response) => {
         if (!response.ok) throw new Error(String(response.status));
         const body = (await response.json()) as { accounts: DirectoryAccount[] };
-        if (!cancelled) setDirectory(body.accounts);
+        if (!cancelled) {
+          setDirectory(body.accounts);
+          setLoadError(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setDirectoryFailed(true);
+        if (!cancelled) setLoadError(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
+  const filtered = useMemo(() => {
+    if (!directory) return [];
+    const needle = fold(query.trim());
+    if (!needle) return directory;
+    return directory.filter((entry) => fold(entry.name).includes(needle));
+  }, [directory, query]);
+
+  const selectedAccount = directory?.find((entry) => entry.email === selected) ?? null;
+  const teachers = filtered.filter((entry) => entry.role === 'TEACHER');
+  const students = filtered.filter((entry) => entry.role === 'STUDENT');
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (pending) return;
+    if (pending || !selectedAccount) return;
     setPending(true);
     setError(null);
-    const failure = await signIn(email.trim(), password);
+    const failure = await signIn(selectedAccount.email, CLASS_PASSWORD);
     setPending(false);
     if (failure) {
       setError(failure);
       return;
     }
     try {
-      window.localStorage.setItem(LAST_EMAIL_KEY, email.trim());
+      window.localStorage.setItem(LAST_EMAIL_KEY, selectedAccount.email);
     } catch {
       // Remembering the choice is a convenience only.
     }
   }
 
-  const teachers = (directory ?? []).filter((entry) => entry.role === 'TEACHER');
-  const students = (directory ?? []).filter((entry) => entry.role === 'STUDENT');
+  function renderGroup(label: string, entries: DirectoryAccount[]) {
+    if (entries.length === 0) return null;
+    return (
+      <li>
+        <p className="auth-roll-label">{label}</p>
+        <ul className="auth-roll-group">
+          {entries.map((entry) => (
+            <li key={entry.email}>
+              <button
+                type="button"
+                className="auth-roll-item"
+                aria-pressed={selected === entry.email}
+                onClick={() => setSelected(entry.email)}
+              >
+                <span className="auth-roll-name">{entry.name}</span>
+                {entry.role === 'TEACHER' ? (
+                  <span className="auth-roll-sub">{entry.subtitle}</span>
+                ) : null}
+                {selected === entry.email ? (
+                  <span className="auth-roll-check" aria-hidden="true">
+                    ✓
+                  </span>
+                ) : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </li>
+    );
+  }
 
   return (
     <main className="auth">
-      <div className="auth-card">
+      <form className="auth-card" onSubmit={(e) => void submit(e)}>
         <div className="auth-brand">
           <BrandMark size={40} />
           <span>NekoPath</span>
         </div>
         <h1 className="auth-title">Đăng nhập</h1>
-        <p className="auth-subtitle">Trợ giảng thích ứng cho lớp học đa trình độ.</p>
+        <p className="auth-subtitle">Tìm tên của bạn trong lớp rồi bấm Đăng nhập.</p>
 
-        <form className="auth-form" onSubmit={(e) => void submit(e)} noValidate>
-          {directory ? (
-            <label className="auth-field">
-              <span>Bạn là ai?</span>
-              <select
-                className="auth-select"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              >
-                <option value="" disabled>
-                  Chọn tên của bạn trong lớp…
-                </option>
-                {teachers.length > 0 ? (
-                  <optgroup label="Giáo viên">
-                    {teachers.map((entry) => (
-                      <option key={entry.email} value={entry.email}>
-                        {entry.name} — {entry.subtitle}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-                {students.length > 0 ? (
-                  <optgroup label="Học sinh lớp 7A">
-                    {students.map((entry) => (
-                      <option key={entry.email} value={entry.email}>
-                        {entry.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </select>
-            </label>
-          ) : (
-            <label className="auth-field">
-              <span>Email</span>
-              <input
-                type="email"
-                name="email"
-                autoComplete="username"
-                inputMode="email"
-                placeholder="ban@nekopath.edu.vn"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              {directoryFailed ? (
-                <small className="auth-hint">
-                  Không tải được danh sách lớp — nhập email tài khoản. Lần đăng nhập đầu cần có
-                  mạng.
-                </small>
+        {loadError ? (
+          <p className="auth-error" role="alert">
+            Không tải được danh sách lớp — lần đăng nhập đầu cần có mạng.{' '}
+            <button type="button" className="auth-retry" onClick={() => window.location.reload()}>
+              Thử lại
+            </button>
+          </p>
+        ) : null}
+
+        {directory === null && !loadError ? (
+          <p className="auth-loading">Đang tải danh sách lớp…</p>
+        ) : null}
+
+        {directory !== null ? (
+          <>
+            <input
+              type="search"
+              className="auth-search"
+              placeholder="Tìm tên của bạn…"
+              aria-label="Tìm tên của bạn"
+              autoComplete="off"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <ul className="auth-roll" aria-label="Danh sách lớp">
+              {renderGroup('Giáo viên', teachers)}
+              {renderGroup('Học sinh lớp 7A', students)}
+              {filtered.length === 0 ? (
+                <li className="auth-roll-empty">Không tìm thấy tên «{query}».</li>
               ) : null}
-            </label>
-          )}
+            </ul>
+          </>
+        ) : null}
 
-          <label className="auth-field">
-            <span>Mật khẩu</span>
-            <span className="auth-password">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                name="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              <button
-                type="button"
-                className="auth-password-toggle"
-                aria-pressed={showPassword}
-                onClick={() => setShowPassword((v) => !v)}
-              >
-                {showPassword ? 'Ẩn' : 'Hiện'}
-              </button>
-            </span>
-          </label>
+        {error ? (
+          <p className="auth-error" role="alert">
+            {error}
+          </p>
+        ) : null}
 
-          {error ? (
-            <p className="auth-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <button
-            className="auth-submit"
-            type="submit"
-            disabled={pending || !email.trim() || !password}
-          >
-            {pending ? 'Đang đăng nhập…' : 'Đăng nhập'}
-          </button>
-        </form>
+        <button className="auth-submit" type="submit" disabled={pending || !selectedAccount}>
+          {pending
+            ? 'Đang đăng nhập…'
+            : selectedAccount
+              ? `Đăng nhập — ${selectedAccount.name}`
+              : 'Chọn tên để đăng nhập'}
+        </button>
 
         <p className="auth-fineprint">
           Tài khoản do nhà trường cấp. Dữ liệu học tập lưu trên thiết bị và tự đồng bộ khi có mạng.
         </p>
-      </div>
+      </form>
     </main>
   );
 }
