@@ -358,6 +358,80 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('returns an empty class list instead of failing when a teacher has no class', async () => {
+    const db = openDb(':memory:');
+    seed(db);
+    db.prepare('UPDATE classes SET teacher_id = NULL').run();
+    const app = buildApp(db);
+    await app.ready();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+
+    const classes = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/classes',
+      cookies: teacher,
+    });
+    expect(classes.statusCode).toBe(200);
+    expect(classes.json()).toEqual({ classes: [] });
+
+    const legacyDashboard = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+    expect(legacyDashboard.statusCode).toBe(404);
+    expect(legacyDashboard.json()).toEqual({ error: 'NO_CLASS' });
+    await app.close();
+  });
+
+  it('creates a teacher-owned class and enrolls a real student account', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/teacher/classes',
+      cookies: teacher,
+      payload: { name: 'Lớp 8B', subject: 'Toán', schoolYear: '2026–2027' },
+    });
+    expect(created.statusCode).toBe(201);
+    const classId = (created.json() as { id: string }).id;
+
+    const enrolled = await app.inject({
+      method: 'POST',
+      url: `/api/teacher/classes/${classId}/students`,
+      cookies: teacher,
+      payload: { name: 'Nguyễn Hải Nam', email: 'hai.nam@example.edu.vn' },
+    });
+    expect(enrolled.statusCode).toBe(201);
+    expect(enrolled.json()).toMatchObject({ created: true });
+    expect(
+      (enrolled.json() as { temporaryPassword: string }).temporaryPassword.length,
+    ).toBeGreaterThanOrEqual(8);
+
+    const roster = await app.inject({
+      method: 'GET',
+      url: `/api/teacher/classes/${classId}/students`,
+      cookies: teacher,
+    });
+    expect(roster.statusCode).toBe(200);
+    expect(roster.json()).toMatchObject({
+      class: { id: classId, name: 'Lớp 8B' },
+      students: [{ name: 'Nguyễn Hải Nam', progressPercent: 0, needsSupportCount: 0 }],
+    });
+
+    const learnerId = (enrolled.json() as { learnerId: string }).learnerId;
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/teacher/classes/${classId}/students/${learnerId}`,
+      cookies: teacher,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json()).toMatchObject({
+      student: { id: learnerId, assignedWork: [], recommendedLessons: [] },
+    });
+    await app.close();
+  });
+
   it('rejects wrong credentials and unauthenticated access', async () => {
     const app = await makeApp();
     const bad = await app.inject({

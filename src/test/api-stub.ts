@@ -234,16 +234,36 @@ export function installApiStub(
         state.email = null;
         return json({ ok: true });
       }
-      if (url.endsWith('/api/teacher/dashboard')) return json(state.teacherDashboard);
-      if (url.endsWith('/api/teacher/overrides') && init?.method === 'POST') {
+      if (url.endsWith('/api/teacher/classes')) {
+        return json({
+          classes: [
+            {
+              id: state.teacherDashboard.classId,
+              name: state.teacherDashboard.className,
+              subject: 'Toán',
+              schoolYear: '2026–2027',
+              createdAt: '2026-07-18T00:00:00.000Z',
+              studentCount: state.teacherDashboard.rosterCount,
+              needsSupportCount: state.teacherDashboard.groups.length,
+            },
+          ],
+        });
+      }
+      if (
+        url.endsWith('/api/teacher/dashboard') ||
+        /\/api\/teacher\/classes\/[^/]+\/dashboard$/.test(url)
+      ) {
+        return json(state.teacherDashboard);
+      }
+      if (url.includes('/api/teacher/overrides') && init?.method === 'POST') {
         if (dashboardAfterOverride) state.teacherDashboard = dashboardAfterOverride;
         return json({ id: 'override-test', updatedAt: '2026-07-18T08:05:00.000Z' }, 201);
       }
       if (url.endsWith('/api/questions')) return json({ questions: TEACHER_QUESTION_FIXTURE });
-      if (url.endsWith('/api/assignments') && init?.method === 'POST') {
+      if (url.includes('/api/assignments') && init?.method === 'POST') {
         return json({ id: 'assignment-test' }, 201);
       }
-      if (url.endsWith('/api/assignments')) return json({ assignments: [] });
+      if (url.includes('/api/assignments')) return json({ assignments: [] });
       if (url.endsWith('/api/lessons')) {
         return json({
           lessons: LESSON_SUMMARIES.map((lesson) => ({

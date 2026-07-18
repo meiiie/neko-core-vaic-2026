@@ -33,7 +33,11 @@ export function openDb(path: string): DatabaseSync {
     );
     CREATE TABLE IF NOT EXISTS classes (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL
+      teacher_id TEXT REFERENCES users(id),
+      name TEXT NOT NULL,
+      subject TEXT NOT NULL DEFAULT 'Toán',
+      school_year TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS enrollments (
       class_id TEXT NOT NULL REFERENCES classes(id),
@@ -139,6 +143,21 @@ export function openDb(path: string): DatabaseSync {
   if (!assignmentColumns.some((column) => column.name === 'teacher_message')) {
     db.exec("ALTER TABLE assignments ADD COLUMN teacher_message TEXT NOT NULL DEFAULT '';");
   }
+
+  const classColumns = db.prepare('PRAGMA table_info(classes)').all() as { name: string }[];
+  if (!classColumns.some((column) => column.name === 'teacher_id')) {
+    db.exec('ALTER TABLE classes ADD COLUMN teacher_id TEXT;');
+  }
+  if (!classColumns.some((column) => column.name === 'subject')) {
+    db.exec("ALTER TABLE classes ADD COLUMN subject TEXT NOT NULL DEFAULT 'Toán';");
+  }
+  if (!classColumns.some((column) => column.name === 'school_year')) {
+    db.exec("ALTER TABLE classes ADD COLUMN school_year TEXT NOT NULL DEFAULT '';");
+  }
+  if (!classColumns.some((column) => column.name === 'created_at')) {
+    db.exec("ALTER TABLE classes ADD COLUMN created_at TEXT NOT NULL DEFAULT '';");
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_classes_teacher ON classes(teacher_id, created_at);');
 
   // Additive migration for databases created before email login existed.
   const userColumns = db.prepare('PRAGMA table_info(users)').all() as { name: string }[];

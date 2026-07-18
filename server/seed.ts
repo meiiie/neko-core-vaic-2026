@@ -78,8 +78,6 @@ export function seed(db: DatabaseSync): void {
   const enroll = db.prepare('INSERT OR IGNORE INTO enrollments (class_id, user_id) VALUES (?, ?)');
   const passwordHash = hashPassword(DEMO_PASSWORD);
 
-  db.prepare('INSERT OR IGNORE INTO classes (id, name) VALUES (?, ?)').run(CLASS_7A_ID, 'Lớp 7A');
-
   const teacherId = 'user-teacher-ha';
   insertUser.run(
     teacherId,
@@ -93,6 +91,12 @@ export function seed(db: DatabaseSync): void {
     'Giáo viên Toán • Lớp 7A',
     null,
   );
+
+  db.prepare(
+    `INSERT INTO classes (id, teacher_id, name, subject, school_year, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET teacher_id = COALESCE(classes.teacher_id, excluded.teacher_id)`,
+  ).run(CLASS_7A_ID, teacherId, 'Lớp 7A', 'Toán', '2026–2027', now);
 
   for (const hero of HERO_STUDENTS) {
     const id = `user-student-${hero.profile}`;

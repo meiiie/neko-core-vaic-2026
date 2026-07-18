@@ -3908,6 +3908,392 @@ html:has(.question-selection-actions) {
   }
 }
 
+/* Teacher-owned classes and student progress */
+.teacher-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-6);
+}
+
+.class-picker {
+  display: grid;
+  min-width: 15rem;
+  gap: var(--s-1);
+  color: var(--muted-strong);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.class-picker select,
+.class-create-form input,
+.student-add-panel input,
+.roster-search input {
+  min-height: var(--touch-target);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.teacher-first-class {
+  max-width: 42rem;
+}
+
+.teacher-notice {
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid #abefc6;
+  border-radius: var(--radius-md);
+  background: var(--evidence-soft);
+  color: var(--evidence);
+  font-weight: 600;
+}
+
+.temporary-credentials {
+  padding: var(--s-4);
+  border: 1px solid #fedf89;
+  border-radius: var(--radius-md);
+  background: var(--review-soft);
+}
+
+.temporary-credentials h2,
+.temporary-credentials > p {
+  margin-bottom: var(--s-2);
+}
+
+.temporary-credentials div {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.temporary-credentials div p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin: 0;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.temporary-credentials code {
+  font-weight: 700;
+}
+
+.class-create-form {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  align-items: end;
+  gap: var(--s-4);
+}
+
+.class-create-form header {
+  grid-column: 1 / -1;
+}
+
+.class-create-form label,
+.student-add-panel label,
+.roster-search {
+  display: grid;
+  gap: var(--s-1);
+  color: var(--muted-strong);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.class-create-form .form-actions {
+  display: flex;
+  gap: var(--s-2);
+}
+
+.class-management-layout {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s-5);
+}
+
+.class-list-panel {
+  position: sticky;
+  top: var(--s-4);
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.class-list-panel h2 {
+  margin: 0;
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--rule);
+}
+
+.class-list-panel button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.class-list-panel button:last-child {
+  border-bottom: 0;
+}
+
+.class-list-panel button[data-active] {
+  background: var(--navigation-active);
+  color: var(--navigation-active-ink);
+}
+
+.class-list-panel button span:first-child,
+.student-progress-table td:first-child {
+  display: grid;
+}
+
+.class-list-panel small,
+.student-progress-table small,
+.lesson-progress-list small,
+.assigned-work-list small {
+  color: var(--muted);
+}
+
+.roster-panel {
+  min-width: 0;
+}
+
+.student-add-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-5);
+  margin: var(--s-5) 0;
+  padding: var(--s-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+}
+
+.student-add-panel form,
+.excel-import-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--s-3);
+}
+
+.excel-import-panel {
+  padding-left: var(--s-5);
+  border-left: 1px solid var(--rule);
+}
+
+.excel-import-panel input[type='file'] {
+  min-height: auto;
+  padding: var(--s-4);
+  border: 1px dashed var(--rule-strong);
+  background: var(--surface);
+}
+
+.import-preview {
+  padding: var(--s-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.import-preview ul {
+  margin: var(--s-2) 0 var(--s-3);
+  padding-left: var(--s-5);
+  color: var(--danger);
+  font-size: 0.8125rem;
+}
+
+.roster-search {
+  max-width: 22rem;
+  margin: var(--s-4) 0;
+}
+
+.student-table-wrap {
+  overflow-x: auto;
+}
+
+.student-progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.student-progress-table th,
+.student-progress-table td {
+  padding: var(--s-3);
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+
+.student-progress-table th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.student-progress-table .progress-track {
+  width: 8rem;
+}
+
+.student-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  white-space: nowrap;
+}
+
+.student-row-actions button {
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  padding: 0 var(--s-2);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill--attention {
+  background: var(--review-soft);
+  color: var(--review);
+}
+
+.compact-empty {
+  padding: var(--s-6);
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  text-align: center;
+}
+
+.student-detail-metrics {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.student-recommendation {
+  padding: var(--s-6);
+  border: 1px solid #fedf89;
+  border-left: 0.3rem solid var(--review);
+  border-radius: var(--radius-lg);
+  background: var(--review-soft);
+}
+
+.lesson-progress-list,
+.assigned-work-list {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.lesson-progress-list article {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1fr) minmax(8rem, 0.8fr) auto;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.lesson-progress-list article:last-child {
+  border-bottom: 0;
+}
+
+.lesson-progress-list article > div:first-child,
+.assigned-work-list article > div {
+  display: grid;
+}
+
+.assigned-work-list article {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.7fr) 1fr;
+  gap: var(--s-5);
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+}
+
+.assigned-work-list blockquote,
+.assigned-work-list p {
+  margin: 0;
+  color: var(--muted-strong);
+}
+
+@media (max-width: 64rem) {
+  .class-management-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .class-list-panel {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+
+  .class-list-panel h2 {
+    grid-column: 1 / -1;
+  }
+
+  .class-create-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 42rem) {
+  .teacher-heading-row,
+  .student-add-panel {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .class-picker {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .class-create-form,
+  .student-detail-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .excel-import-panel {
+    padding-top: var(--s-5);
+    padding-left: 0;
+    border-top: 1px solid var(--rule);
+    border-left: 0;
+  }
+
+  .lesson-progress-list article,
+  .assigned-work-list article {
+    grid-template-columns: 1fr;
+  }
+}
+
 .intervention-common-error {
   max-width: 52rem;
   margin-top: var(--s-2);

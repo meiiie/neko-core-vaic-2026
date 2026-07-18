@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { kcName } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH } from '../../content';
 import { buildTeacherLearnerEvidenceRows } from './teacher-evidence';
@@ -24,10 +24,12 @@ interface OverrideSaveOutcome {
 function TeacherOverrideForm({
   group,
   overrides,
+  classId,
   onSaved,
 }: {
   readonly group: TeacherSupportGroupDto;
   readonly overrides: readonly TeacherOverrideDto[];
+  readonly classId: string | null;
   readonly onSaved: (learnerId: string) => Promise<OverrideSaveOutcome>;
 }) {
   const [learnerId, setLearnerId] = useState(group.learnerIds[0] ?? '');
@@ -55,13 +57,16 @@ function TeacherOverrideForm({
     setSaveState('saving');
     try {
       const rootKcId = selectedDecision.startsWith('ROOT:') ? selectedDecision.slice(5) : undefined;
-      await saveTeacherOverride({
-        learnerId: selectedLearnerId,
-        targetKcId: 'K10',
-        decision: rootKcId ? 'SET_ROOT' : 'NEEDS_MORE_EVIDENCE',
-        ...(rootKcId ? { rootKcId } : {}),
-        reason: reason.trim(),
-      });
+      await saveTeacherOverride(
+        {
+          learnerId: selectedLearnerId,
+          targetKcId: 'K10',
+          decision: rootKcId ? 'SET_ROOT' : 'NEEDS_MORE_EVIDENCE',
+          ...(rootKcId ? { rootKcId } : {}),
+          reason: reason.trim(),
+        },
+        classId,
+      );
       setReason('');
       setDecision('');
       const outcome = await onSaved(selectedLearnerId);
@@ -155,8 +160,10 @@ function TeacherOverrideForm({
 
 export function TeacherGroupDetailPage() {
   const { groupId = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const classId = searchParams.get('classId');
   const navigate = useNavigate();
-  const { dashboard, loading, error, refresh } = useTeacherDashboard();
+  const { dashboard, loading, error, refresh } = useTeacherDashboard(classId ?? undefined);
   const group = dashboard.groups.find((candidate) => candidate.id === groupId);
 
   if (loading) {
@@ -209,12 +216,15 @@ export function TeacherGroupDetailPage() {
       destinationGroup.learners.find((learner) => learner.id === learnerId)?.displayLabel ??
       activeGroup.learners.find((learner) => learner.id === learnerId)?.displayLabel ??
       learnerId;
-    const assignmentUrl = `/teacher/assignments?group=${encodeURIComponent(destinationGroup.id)}&learner=${encodeURIComponent(learnerId)}`;
+    const assignmentUrl = `/teacher/assignments?group=${encodeURIComponent(destinationGroup.id)}&learner=${encodeURIComponent(learnerId)}${classId ? `&classId=${encodeURIComponent(classId)}` : ''}`;
     if (nextGroup && nextGroup.id !== currentGroupId) {
       const nextName = nextGroup.rootKcId
         ? kcName(nextGroup.rootKcId)
         : TEACHER_GROUP_LABELS[nextGroup.status];
-      navigate(`/teacher/class/${encodeURIComponent(nextGroup.id)}`, { replace: true });
+      navigate(
+        `/teacher/class/${encodeURIComponent(nextGroup.id)}${classId ? `?classId=${encodeURIComponent(classId)}` : ''}`,
+        { replace: true },
+      );
       return {
         message: `Đã lưu gợi ý và chuyển học sinh sang bài cần ôn: ${nextName}. Chưa có bài nào được giao cho học sinh.`,
         assignmentUrl,
@@ -403,7 +413,7 @@ export function TeacherGroupDetailPage() {
         <div className="group-actions">
           <Link
             className="button-primary"
-            to={`/teacher/assignments?group=${encodeURIComponent(group.id)}`}
+            to={`/teacher/assignments?group=${encodeURIComponent(group.id)}${classId ? `&classId=${encodeURIComponent(classId)}` : ''}`}
           >
             Xem gói bài ôn đề xuất
           </Link>
@@ -418,6 +428,7 @@ export function TeacherGroupDetailPage() {
         <TeacherOverrideForm
           group={group}
           overrides={dashboard.overrides}
+          classId={classId}
           onSaved={handleOverrideSaved}
         />
       </details>

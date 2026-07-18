@@ -71,6 +71,7 @@ export function TeacherAssignmentsPage() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const groupId = searchParams.get('group');
+  const classId = searchParams.get('classId');
   const requestedKcId = searchParams.get('kc');
   const requestedLearnerId = searchParams.get('learner');
   const initialQuestionIds = useMemo(
@@ -100,8 +101,15 @@ export function TeacherAssignmentsPage() {
     try {
       const [questionsRes, assignmentsRes, dashboardRes] = await Promise.all([
         fetch('/api/questions', { credentials: 'include' }),
-        fetch('/api/assignments', { credentials: 'include' }),
-        fetch('/api/teacher/dashboard', { credentials: 'include' }),
+        fetch(`/api/assignments${classId ? `?classId=${encodeURIComponent(classId)}` : ''}`, {
+          credentials: 'include',
+        }),
+        fetch(
+          classId
+            ? `/api/teacher/classes/${encodeURIComponent(classId)}/dashboard`
+            : '/api/teacher/dashboard',
+          { credentials: 'include' },
+        ),
       ]);
       if (!questionsRes.ok || !assignmentsRes.ok || !dashboardRes.ok) throw new Error('load');
       const questionsBody = (await questionsRes.json()) as { questions: ApiQuestionSummary[] };
@@ -146,7 +154,7 @@ export function TeacherAssignmentsPage() {
           setSelected(new Set(questionIds));
           setAutoSelectionCount(questionIds.length);
         }
-        if (group && packageId) {
+        if ((group || requestedLearner) && packageId) {
           const lessonName = topicLabel(packageId);
           setTitle(`Ôn tập: ${lessonName}`);
           setTeacherMessage(
@@ -160,7 +168,7 @@ export function TeacherAssignmentsPage() {
     } catch {
       setLoadError(true);
     }
-  }, [groupId, initialQuestionIds, requestedKcId, requestedLearnerId]);
+  }, [classId, groupId, initialQuestionIds, requestedKcId, requestedLearnerId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async load; state changes only after awaited responses
@@ -240,6 +248,7 @@ export function TeacherAssignmentsPage() {
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          ...(classId ? { classId } : {}),
           title: title.trim(),
           teacherMessage: teacherMessage.trim(),
           questionIds: [...selected],
