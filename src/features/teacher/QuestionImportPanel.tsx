@@ -71,6 +71,7 @@ export function QuestionImportPanel({
       preview?.questions.filter((question, index) => question.valid && selected.has(index)) ?? [],
     [preview, selected],
   );
+  const selectedKcName = HERO_GRAPH.nodes.find((node) => node.id === kcId)?.name ?? kcId;
 
   function chooseFile(nextFile: File | null) {
     setError(null);
@@ -198,7 +199,9 @@ export function QuestionImportPanel({
         <div className="question-import-success">
           <CheckCircleIcon size={32} weight="fill" aria-hidden="true" />
           <div>
-            <h2 id="import-success-title">Đã thêm {importedCount} câu vào gói</h2>
+            <h2 id="import-success-title">
+              Đã thêm {importedCount} câu vào nhóm {selectedKcName}
+            </h2>
             <p>Các câu mới đang ở trạng thái bản nháp để cô kiểm tra trước khi giao bài.</p>
           </div>
           <button className="button-primary" type="button" onClick={onClose}>
@@ -218,7 +221,7 @@ export function QuestionImportPanel({
         <div>
           <p className="eyebrow">Thêm nhiều câu cùng lúc</p>
           <h2 id="question-import-title">Nhập câu hỏi từ Word hoặc Excel</h2>
-          <p>Chọn đúng gói, xem trước từng câu rồi mới thêm vào ngân hàng.</p>
+          <p>Chọn nhóm nhận câu hỏi trước, sau đó kiểm tra từng câu rồi mới lưu.</p>
         </div>
         <button className="text-link" type="button" onClick={onClose}>
           Đóng
@@ -227,7 +230,7 @@ export function QuestionImportPanel({
 
       <ol className="question-import-steps" aria-label="Các bước nhập câu hỏi">
         <li className="is-current">
-          <span>1</span> Chọn file
+          <span>1</span> Chọn nhóm và file
         </li>
         <li className={preview ? 'is-current' : ''}>
           <span>2</span> Kiểm tra câu hỏi
@@ -239,9 +242,12 @@ export function QuestionImportPanel({
 
       {!preview ? (
         <form className="question-import-form" onSubmit={(event) => void previewFile(event)}>
-          <div className="question-import-settings">
+          <div className="question-import-destination">
             <label>
-              Thêm vào gói câu hỏi
+              <span>
+                <strong>Nhóm câu hỏi / chủ đề của file</strong>
+                <small>Tất cả câu hợp lệ trong file sẽ được thêm vào nhóm này.</small>
+              </span>
               <select value={kcId} onChange={(event) => setKcId(event.target.value)}>
                 {HERO_GRAPH.nodes.map((node) => (
                   <option key={node.id} value={node.id}>
@@ -250,6 +256,9 @@ export function QuestionImportPanel({
                 ))}
               </select>
             </label>
+          </div>
+
+          <div className="question-import-settings">
             <label>
               Độ khó mặc định
               <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
@@ -260,26 +269,6 @@ export function QuestionImportPanel({
                 ))}
               </select>
             </label>
-          </div>
-
-          <div className="question-import-guide" aria-label="Mẫu file được hỗ trợ">
-            <article>
-              <FileDocIcon size={24} weight="duotone" aria-hidden="true" />
-              <div>
-                <strong>File Word (.docx)</strong>
-                <p>
-                  Mỗi câu bắt đầu bằng số; đáp án ghi A, B, C, D. Đặt dấu * trước đáp án đúng hoặc
-                  thêm dòng “Đáp án: B”.
-                </p>
-              </div>
-            </article>
-            <article>
-              <FileXlsIcon size={24} weight="duotone" aria-hidden="true" />
-              <div>
-                <strong>File Excel (.xlsx)</strong>
-                <p>Dòng đầu gồm: Câu hỏi, Đáp án A, Đáp án B, Đáp án C, Đáp án D, Đáp án đúng.</p>
-              </div>
-            </article>
           </div>
 
           <label
@@ -307,6 +296,29 @@ export function QuestionImportPanel({
             </span>
           </label>
 
+          <details className="question-import-format-guide">
+            <summary>Xem cách trình bày file đúng mẫu</summary>
+            <div className="question-import-guide" aria-label="Mẫu file được hỗ trợ">
+              <article>
+                <FileDocIcon size={24} weight="duotone" aria-hidden="true" />
+                <div>
+                  <strong>File Word (.docx)</strong>
+                  <p>
+                    Mỗi câu bắt đầu bằng số; đáp án ghi A, B, C, D. Đặt dấu * trước đáp án đúng hoặc
+                    thêm dòng “Đáp án: B”.
+                  </p>
+                </div>
+              </article>
+              <article>
+                <FileXlsIcon size={24} weight="duotone" aria-hidden="true" />
+                <div>
+                  <strong>File Excel (.xlsx)</strong>
+                  <p>Dòng đầu gồm: Câu hỏi, Đáp án A, Đáp án B, Đáp án C, Đáp án D, Đáp án đúng.</p>
+                </div>
+              </article>
+            </div>
+          </details>
+
           {error ? (
             <p className="error-message" role="alert">
               {error}
@@ -314,7 +326,7 @@ export function QuestionImportPanel({
           ) : null}
           <div className="inline-actions">
             <button className="button-primary" type="submit" disabled={!file || busy !== 'idle'}>
-              {busy === 'previewing' ? 'Đang đọc file…' : 'Đọc và xem trước'}
+              {busy === 'previewing' ? 'Đang đọc file…' : 'Đọc file và kiểm tra'}
             </button>
             <button className="button-secondary" type="button" onClick={onClose}>
               Hủy
@@ -326,7 +338,9 @@ export function QuestionImportPanel({
           <div className="question-import-preview-summary">
             <div>
               <strong>{preview.fileName}</strong>
-              <p>{preview.totalCount} câu được tìm thấy</p>
+              <p>
+                Nhóm {selectedKcName} · {preview.totalCount} câu được tìm thấy
+              </p>
             </div>
             <span className="status-label status-label--evidence">
               {preview.validCount} câu sẵn sàng
