@@ -48,12 +48,20 @@ export function LearnPage() {
   const review = reassessment
     ? reviewRecommendation(activeLearnerContext, result, localRecords, new Date().toISOString())
     : undefined;
-  const candidateQuestion = recommendedQuestion ?? review?.question;
+  // When the learner explicitly opened a review round (?mode=review or
+  // "Kiểm tra lại"), serve ONLY a scheduled review item. The transfer
+  // recommendation is a diagnostic "what's next" suggestion, not a review —
+  // mixing them would silently serve the transfer item under a "review" entry.
+  // The regular check-in keeps its original priority (recommended first).
+  const candidateQuestion = reassessment
+    ? review?.question
+    : (recommendedQuestion ?? review?.question);
   const roundComplete = answeredThisRound >= QUESTION_BUDGET;
   const probeQuestion = roundComplete ? undefined : candidateQuestion;
   const questionNumber = answeredThisRound + 1;
   const canContinueAssessment =
     result.status === 'NEEDS_MORE_EVIDENCE' && candidateQuestion !== undefined;
+  const reassessmentEmpty = reassessment && !review;
 
   async function saveAnswer() {
     if (!probeQuestion || !selectedChoiceId || localRecords === undefined || savingRef.current)
@@ -205,7 +213,16 @@ export function LearnPage() {
             weight="fill"
           />
           <p className="eyebrow">Đã hoàn thành bài kiểm tra nền tảng</p>
-          {result.status === 'NEEDS_MORE_EVIDENCE' ? (
+          {reassessmentEmpty ? (
+            <>
+              <h2>Chưa có lượt ôn mới cho em lúc này</h2>
+              <p role="status">
+                Em đã trả lời đủ câu cho mục tiêu hiện tại. NekoPath chưa mở lượt ôn tiếp theo vì
+                chưa đến lịch ôn giãn cách và chưa có câu vận dụng mới. Kết quả học của em vẫn được
+                lưu đầy đủ.
+              </p>
+            </>
+          ) : result.status === 'NEEDS_MORE_EVIDENCE' ? (
             <>
               <h2>Đã lưu câu trả lời của em</h2>
               <p>
@@ -238,7 +255,8 @@ export function LearnPage() {
                 : 'Xem lộ trình của tôi'}
             </Link>
           )}
-          {result.status === 'DIAGNOSED' || result.status === 'FAST_PATH' ? (
+          {(result.status === 'DIAGNOSED' || result.status === 'FAST_PATH') &&
+          !reassessmentEmpty ? (
             <button
               className="button-secondary"
               type="button"

@@ -217,7 +217,12 @@ export function PracticePage() {
     );
   }
 
-  if (result.status === 'FAST_PATH' || progress?.isComplete) {
+  // A learner who explicitly asked to review a completed step (?mode=review
+  // with a valid ?kc=) must reach the active-practice branch, not be bounced to
+  // the "path complete" panel. The panel below only renders when there is no
+  // explicit review request, or the requested KC is missing.
+  const explicitReviewRequest = explicitReview && requestedStep !== undefined;
+  if ((result.status === 'FAST_PATH' || progress?.isComplete) && !explicitReviewRequest) {
     return (
       <div className="page-stack">
         <section className="completion-panel">
@@ -301,6 +306,12 @@ export function PracticePage() {
             <Link className="button-primary" to="/student/check-in?mode=review">
               Bắt đầu lượt ôn thông minh tiếp theo
             </Link>
+          ) : null}
+          {!transferQuestion && !nextReview ? (
+            <p role="status" className="eyebrow">
+              Chưa có bài vận dụng hay lượt ôn mới cho mục tiêu này. Em có thể ôn lại từng bước từ
+              lộ trình khi muốn.
+            </p>
           ) : null}
           <Link className="button-secondary" to="/student/path">
             Xem kế hoạch học tiếp theo

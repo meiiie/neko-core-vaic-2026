@@ -168,4 +168,34 @@ describe('multi-step practice flow', () => {
       ),
     ).toBeTruthy();
   });
+
+  it('honours an explicit ?mode=review of a completed step instead of hijacking it with the path-complete panel', () => {
+    // Regression: once the path is FAST_PATH, clicking "Ôn lại" on a completed
+    // step (?mode=review) was bounced to the "Em đã vững các kiến thức nền"
+    // panel and never let the learner review that KC. The explicit review
+    // request must reach the active-practice branch.
+    const fullyMastered = [
+      ...diagnosedK01,
+      answer(4, 'K01-CHECK-1', true),
+      answer(5, 'K01-CHECK-2', true),
+      answer(6, 'K01-CHECK-1', true),
+      answer(7, 'K02-CHECK-1', true),
+      answer(8, 'K02-CHECK-2', true),
+      answer(9, 'K07-CHECK-1', true),
+      answer(10, 'K07-CHECK-2', true),
+      answer(11, 'K08-CHECK-1', true),
+      answer(12, 'K08-CHECK-2', true),
+      answer(13, 'K09-CHECK-1', true),
+      answer(14, 'K09-CHECK-2', true),
+      answer(15, 'K10-CHECK-1', true),
+      answer(16, 'K10-CHECK-2', true),
+    ];
+    practiceState.records = fullyMastered;
+
+    renderPractice('/student/practice?kc=K08&mode=review');
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Ôn lại: Các tỉ số bằng nhau' }),
+    ).toBeTruthy();
+    expect(screen.queryByText('Lộ trình đã hoàn thành')).toBeNull();
+  });
 });
