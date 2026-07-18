@@ -14,6 +14,7 @@ import {
   type ContextPolicy,
 } from './context-manager';
 import type { AgentTool } from './tools';
+import type { ToolApprovalGate } from './tool-runtime';
 
 export interface AgentSessionScope {
   readonly accountId: string;
@@ -34,6 +35,7 @@ export interface AgentSessionRunOptions {
   readonly signal?: AbortSignal;
   readonly onTrace?: (event: AgentTraceEvent) => void;
   readonly onDelta?: AgentDeltaHook;
+  readonly approveTool?: ToolApprovalGate;
 }
 
 export class AgentSessionController {
@@ -101,6 +103,7 @@ export class AgentSessionController {
         runOptions.onTrace,
         controller.signal,
         runOptions.onDelta,
+        runOptions.approveTool,
       );
       if (controller.signal.aborted || generation !== this.generation || this.disposed) {
         throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError');

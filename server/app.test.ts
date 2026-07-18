@@ -258,6 +258,103 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('relays native ChatGPT tool calls to the authenticated browser and resumes the turn', async () => {
+    const manager: CodexManagerPort = {
+      isEnabled: () => true,
+      status: async () => ({
+        account: { type: 'chatgpt', planType: 'plus' },
+        requiresOpenaiAuth: true,
+      }),
+      models: async () => [
+        {
+          id: 'gpt-5.6-sol',
+          model: 'gpt-5.6-sol',
+          displayName: 'GPT-5.6-Sol',
+          description: '',
+          isDefault: true,
+        },
+      ],
+      startLogin: async () => ({ loginId: 'login-1', authUrl: 'https://auth.openai.com/' }),
+      complete: async (_accountId, _prompt, onDelta, _signal, model, tools, executeTool) => {
+        expect(tools).toEqual([
+          {
+            name: 'de_xuat_bai_tap',
+            description: 'Đề xuất bài tập.',
+            inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        ]);
+        const result = await executeTool!({
+          id: 'call-1',
+          name: 'de_xuat_bai_tap',
+          args: {},
+        });
+        onDelta?.('Đã dùng dữ liệu thật.');
+        return { content: String((result.data as { tenBai: string }).tenBai), modelId: model! };
+      },
+      logout: async () => undefined,
+      disposeAll: vi.fn(),
+    };
+    const app = await makeApp({ codexManager: manager });
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    await app.listen({ host: '127.0.0.1', port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('Missing test listener address');
+    const origin = `http://127.0.0.1:${address.port}`;
+    const cookie = `nekopath_sid=${teacher.nekopath_sid}`;
+
+    const response = await fetch(`${origin}/api/ai/chatgpt/complete`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        prompt: 'Giao bài cho lớp.',
+        model: 'gpt-5.6-sol',
+        tools: [
+          {
+            name: 'de_xuat_bai_tap',
+            description: 'Đề xuất bài tập.',
+            inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        ],
+      }),
+    });
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let streamed = '';
+    while (!streamed.includes('event: tool_call')) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      streamed += decoder.decode(chunk.value, { stream: true });
+    }
+    const toolEvent = streamed.match(/event: tool_call\ndata: ([^\n]+)/)?.[1];
+    expect(toolEvent).toBeTruthy();
+    const requestId = (JSON.parse(toolEvent!) as { requestId: string }).requestId;
+
+    const resultResponse = await fetch(`${origin}/api/ai/chatgpt/tool-result`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        requestId,
+        result: {
+          ok: true,
+          data: { tenBai: 'Luyện tập Phân số bằng nhau' },
+        },
+      }),
+    });
+    expect(resultResponse.status).toBe(200);
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      streamed += decoder.decode(chunk.value, { stream: true });
+    }
+    expect(streamed).toContain('event: delta');
+    expect(streamed).toContain('Đã dùng dữ liệu thật.');
+    expect(streamed).toContain('event: done');
+    expect(streamed).toContain('Luyện tập Phân số bằng nhau');
+    expect(response.headers.get('origin-agent-cluster')).toBe('?1');
+    expect(response.headers.get('permissions-policy')).toBe('tools=(self)');
+    await app.close();
+  });
+
   it('rejects wrong credentials and unauthenticated access', async () => {
     const app = await makeApp();
     const bad = await app.inject({

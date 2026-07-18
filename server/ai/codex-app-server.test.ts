@@ -24,7 +24,7 @@ class FakeTransport implements CodexTransport {
   send(message: unknown): void {
     const wire = message as WireMessage;
     this.writes.push(wire);
-    if (wire.id === undefined) return;
+    if (wire.id === undefined || !wire.method) return;
     queueMicrotask(() => {
       switch (wire.method) {
         case 'initialize':
@@ -111,6 +111,10 @@ class FakeTransport implements CodexTransport {
     this.notify(method, params);
   }
 
+  serverRequest(id: number, method: string, params: unknown): void {
+    this.onMessage?.({ id, method, params });
+  }
+
   fail(error: Error): void {
     this.onError?.(error);
   }
@@ -142,7 +146,7 @@ describe('Codex App Server managed ChatGPT client', () => {
     ).toEqual({ type: 'chatgpt' });
     expect(transport.writes[0]).toMatchObject({
       method: 'initialize',
-      params: { capabilities: { experimentalApi: false, requestAttestation: false } },
+      params: { capabilities: { experimentalApi: true, requestAttestation: false } },
     });
     expect(transport.writes.some((message) => message.method === 'initialized')).toBe(true);
   });
@@ -201,6 +205,71 @@ describe('Codex App Server managed ChatGPT client', () => {
         isDefault: false,
       },
     ]);
+  });
+
+  it('registers dynamic tools and answers App Server tool requests exactly once', async () => {
+    const transport = new FakeTransport(false);
+    const client = new CodexAppServerClient(transport, { cwd: 'C:\\isolated-empty' });
+    const executeTool = vi.fn(async () => ({
+      ok: true,
+      data: { tenBai: 'Luyện tập Phân số bằng nhau' },
+    }));
+    const completion = client.complete(
+      'Giao bài cho lớp.',
+      undefined,
+      undefined,
+      'gpt-5.5',
+      [
+        {
+          name: 'de_xuat_bai_tap',
+          description: 'Đề xuất bài tập từ ngân hàng thật.',
+          inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        },
+      ],
+      executeTool,
+    );
+
+    await vi.waitFor(() => {
+      expect(transport.writes.some((message) => message.method === 'turn/start')).toBe(true);
+    });
+    const params = {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      callId: 'call-1',
+      tool: 'de_xuat_bai_tap',
+      arguments: {},
+    };
+    transport.serverRequest(91, 'item/tool/call', params);
+    transport.serverRequest(92, 'item/tool/call', params);
+
+    await vi.waitFor(() => {
+      expect(transport.writes.some((message) => message.id === 91 && message.result)).toBe(true);
+      expect(transport.writes.some((message) => message.id === 92 && message.result)).toBe(true);
+    });
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(
+      transport.writes.find((message) => message.method === 'thread/start')?.params,
+    ).toMatchObject({
+      dynamicTools: [
+        {
+          type: 'function',
+          name: 'de_xuat_bai_tap',
+          inputSchema: { type: 'object' },
+        },
+      ],
+    });
+
+    transport.emit('item/agentMessage/delta', {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      delta: 'Đã đề xuất.',
+    });
+    transport.emit('turn/completed', {
+      threadId: 'thread-1',
+      turn: { id: 'turn-1', status: 'completed' },
+    });
+    await expect(completion).resolves.toMatchObject({ content: 'Đã đề xuất.' });
+    client.dispose();
   });
 
   it('uses the catalog default when gpt-5.5 is absent and rejects a missing explicit model', async () => {

@@ -3382,6 +3382,31 @@ html:has(.question-selection-actions) {
   text-align: center;
 }
 
+.neko-approval {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0.25rem 0 1rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary, #006c62) 32%, var(--rule, #e4e7ec));
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--primary, #006c62) 5%, var(--surface, #fff));
+}
+
+.neko-approval h3,
+.neko-approval p {
+  margin: 0;
+}
+
+.neko-approval h3 {
+  font-size: 1rem;
+}
+
+.neko-approval > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .neko-input-row {
   display: flex;
   gap: 0.5rem;

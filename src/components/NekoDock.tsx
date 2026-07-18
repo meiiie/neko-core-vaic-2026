@@ -18,7 +18,7 @@ import {
   type AgentSessionSnapshot,
 } from '../services/agent/session-controller';
 import { AgentSessionStore } from '../services/agent/session-store';
-import { AGENT_TOOLS } from '../services/agent/tools';
+import { AGENT_TOOLS, type AgentTool } from '../services/agent/tools';
 import { setWebLlmProgressListener } from '../services/agent/webllm-provider';
 import { db } from '../storage/db';
 
@@ -36,6 +36,12 @@ interface ChatMessage {
   readonly fallback?: boolean;
 }
 
+interface PendingApproval {
+  readonly tool: AgentTool;
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly resolve: (approved: boolean) => void;
+}
+
 const SUGGESTIONS = [
   'Hôm nay nên dạy lại gì cho lớp?',
   'Chẩn đoán của bạn An thế nào?',
@@ -47,6 +53,8 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   chan_doan_hoc_sinh: 'Hồ sơ học sinh',
   giai_thich_kien_thuc: 'Bản đồ kiến thức',
   bai_duoc_giao: 'Bài đã giao',
+  de_xuat_bai_tap: 'Đề xuất bài tập',
+  giao_bai: 'Giao bài cho lớp',
 };
 
 let messageId = 0;
@@ -129,6 +137,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const [controllerReady, setControllerReady] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [activity, setActivity] = useState<string | null>(null);
+  const [approval, setApproval] = useState<PendingApproval | null>(null);
   const [providerId, setProviderId] = useState('local');
   const [chatGpt, setChatGpt] = useState<ChatGptStatus>({
     available: false,
@@ -142,6 +151,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const bufferedTextRef = useRef('');
   const frameRef = useRef<number | null>(null);
   const turnStartedAtRef = useRef(0);
+  const approvalRef = useRef<PendingApproval | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const store = useMemo(() => new AgentSessionStore(db), []);
@@ -241,6 +251,8 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     return () => {
       cancelled = true;
       turnGenerationRef.current += 1;
+      approvalRef.current?.resolve(false);
+      approvalRef.current = null;
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
       bufferedTextRef.current = '';
@@ -259,6 +271,9 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       frameRef.current = null;
       bufferedTextRef.current = '';
       setStreamText('');
+      approvalRef.current?.resolve(false);
+      approvalRef.current = null;
+      setApproval(null);
       setBusy(false);
       return;
     }
@@ -294,6 +309,9 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
     bufferedTextRef.current = '';
+    approvalRef.current?.resolve(false);
+    approvalRef.current = null;
+    setApproval(null);
     setStreamText('');
     setBusy(false);
   }
@@ -363,6 +381,18 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     try {
       const result = await controller.run(question, {
         onTrace,
+        approveTool: (tool, args) =>
+          new Promise<boolean>((resolve) => {
+            if (generation !== turnGenerationRef.current || stoppedByUserRef.current) {
+              resolve(false);
+              return;
+            }
+            approvalRef.current?.resolve(false);
+            const pending = { tool, args, resolve };
+            approvalRef.current = pending;
+            setApproval(pending);
+            setActivity('Cần giáo viên xác nhận trước khi thay đổi dữ liệu.');
+          }),
         onDelta: (delta) => {
           if (generation !== turnGenerationRef.current || stoppedByUserRef.current) return;
           telemetry.recordDelta();
@@ -427,6 +457,9 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       }
     } finally {
       if (generation === turnGenerationRef.current) {
+        approvalRef.current?.resolve(false);
+        approvalRef.current = null;
+        setApproval(null);
         if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
         frameRef.current = null;
         bufferedTextRef.current = '';
@@ -442,6 +475,9 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
     bufferedTextRef.current = '';
+    approvalRef.current?.resolve(false);
+    approvalRef.current = null;
+    setApproval(null);
     setStreamText('');
     controllerRef.current?.abort(new DOMException('Stopped', 'AbortError'));
   }
@@ -512,6 +548,53 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
                 `${activity || 'Đang kiểm tra dữ liệu lớp…'}${busyElapsed > 0 ? ` · ${busyElapsed}s` : ''}`}
             </p>
           </div>
+        ) : null}
+        {approval ? (
+          <section className="neko-approval" aria-labelledby="neko-approval-title">
+            <p className="eyebrow">Xác nhận thao tác</p>
+            <h3 id="neko-approval-title">
+              {typeof approval.args.title === 'string'
+                ? approval.args.title
+                : TOOL_LABELS[approval.tool.name]}
+            </h3>
+            <p>
+              Giao{' '}
+              {Array.isArray(approval.args.question_ids) ? approval.args.question_ids.length : 0}{' '}
+              câu cho lớp 7A
+              {typeof approval.args.due_at === 'string'
+                ? ` · hạn ${new Date(approval.args.due_at).toLocaleString('vi-VN')}`
+                : ' · không đặt hạn'}
+              .
+            </p>
+            <div>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => {
+                  const pending = approvalRef.current;
+                  approvalRef.current = null;
+                  setApproval(null);
+                  setActivity('Đã hủy thao tác giao bài.');
+                  pending?.resolve(false);
+                }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="button-primary"
+                onClick={() => {
+                  const pending = approvalRef.current;
+                  approvalRef.current = null;
+                  setApproval(null);
+                  setActivity('Đang giao bài cho lớp…');
+                  pending?.resolve(true);
+                }}
+              >
+                Xác nhận giao bài
+              </button>
+            </div>
+          </section>
         ) : null}
         {!busy && activity ? (
           <p className="neko-progress" role="status">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { HERO_GRAPH } from '../../content';
+import { ASSIGNMENTS_CHANGED_EVENT } from '../../services/agent/tools';
 
 interface ApiQuestionSummary {
   id: string;
@@ -67,6 +68,12 @@ export function TeacherAssignmentsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async load; state set only after await
     void reload();
+  }, [reload]);
+
+  useEffect(() => {
+    const handleAssignmentsChanged = () => void reload();
+    window.addEventListener(ASSIGNMENTS_CHANGED_EVENT, handleAssignmentsChanged);
+    return () => window.removeEventListener(ASSIGNMENTS_CHANGED_EVENT, handleAssignmentsChanged);
   }, [reload]);
 
   const filteredQuestions = useMemo(() => {

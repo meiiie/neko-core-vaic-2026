@@ -1,7 +1,7 @@
 import { composeAnswer } from './providers';
 import { parseCapsule } from './context-manager';
 import type { AgentToolCall } from './protocol';
-import { executeToolCalls } from './tool-runtime';
+import { executeToolCalls, type ToolApprovalGate, type ToolExecutionResult } from './tool-runtime';
 import type { AgentTool } from './tools';
 
 export type { AgentToolCall } from './protocol';
@@ -31,6 +31,10 @@ export interface AgentCompletion {
 
 export type AgentDeltaHook = (text: string) => void;
 
+export interface AgentProviderRuntime {
+  readonly executeTool: (call: AgentToolCall) => Promise<ToolExecutionResult>;
+}
+
 export interface AgentProvider {
   readonly id: string;
   readonly label: string;
@@ -40,6 +44,7 @@ export interface AgentProvider {
     tools: readonly AgentTool[],
     signal?: AbortSignal,
     onDelta?: AgentDeltaHook,
+    runtime?: AgentProviderRuntime,
   ): Promise<AgentCompletion>;
   dispose?(): Promise<void> | void;
 }
@@ -60,6 +65,7 @@ export interface AgentTurnResult {
 }
 
 const MAX_STEPS = 4;
+const MAX_NATIVE_TOOL_CALLS = 8;
 
 export const AGENT_SYSTEM_PROMPT =
   'Bạn là trợ lý lớp học NekoPath cho GIÁO VIÊN. Chỉ được trả lời dựa trên kết quả công cụ; ' +
@@ -117,6 +123,7 @@ export async function runAgentTurn(
   onTrace: (event: AgentTraceEvent) => void = () => undefined,
   signal?: AbortSignal,
   onDelta?: AgentDeltaHook,
+  approveTool?: ToolApprovalGate,
 ): Promise<AgentTurnResult> {
   if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
   const messages: AgentChatMessage[] = [...history, { role: 'user', content: question }];
@@ -128,13 +135,71 @@ export async function runAgentTurn(
   let displayUsage: AgentUsage | undefined;
   let modelId: string | undefined;
   let fallback = false;
+  let nativeToolCallCount = 0;
 
   for (let step = 1; step <= MAX_STEPS; step += 1) {
-    const completion = await provider.complete(messages, tools, signal, onDelta);
+    const nativeResults: { call: AgentToolCall; result: ToolExecutionResult }[] = [];
+    const completion = await provider.complete(messages, tools, signal, onDelta, {
+      executeTool: async (call) => {
+        const key = callKey(call);
+        if (seenCalls.has(key)) {
+          return {
+            name: call.name,
+            args: call.args,
+            ok: false,
+            error: 'Bộ não lặp lại cùng một lệnh công cụ.',
+            errorCode: 'TOOL_ERROR',
+            durationMs: 0,
+          };
+        }
+        if (nativeToolCallCount >= MAX_NATIVE_TOOL_CALLS) {
+          return {
+            name: call.name,
+            args: call.args,
+            ok: false,
+            error: 'Đã chạm giới hạn số lệnh công cụ trong một lượt.',
+            errorCode: 'TOOL_ERROR',
+            durationMs: 0,
+          };
+        }
+        seenCalls.add(key);
+        nativeToolCallCount += 1;
+        onTrace({ kind: 'tool_call', name: call.name, args: call.args });
+        const [result] = await executeToolCalls([call], tools, signal, approveTool);
+        onTrace({
+          kind: 'tool_result',
+          name: call.name,
+          ok: result.ok,
+          summary: result.ok
+            ? JSON.stringify({ ok: true, data: result.data })
+            : (result.error ?? 'lỗi không rõ'),
+        });
+        nativeResults.push({ call, result });
+        return result;
+      },
+    });
     inputTokens += completion.usage?.inputTokens ?? 0;
     outputTokens += completion.usage?.outputTokens ?? 0;
     cachedInputTokens += completion.usage?.cachedInputTokens ?? 0;
     if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
+
+    for (const { call, result } of nativeResults) {
+      const payload = JSON.stringify({ ok: result.ok, data: result.data, error: result.error });
+      messages.push({
+        role: 'assistant',
+        content: `[gọi công cụ ${call.name}]`,
+        toolName: call.name,
+        toolCallId: call.id,
+        toolArgs: call.args,
+      });
+      messages.push({
+        role: 'tool',
+        content: payload,
+        toolName: call.name,
+        toolCallId: call.id,
+      });
+      toolLog.push({ name: call.name, payload });
+    }
 
     if (completion.toolCalls.length === 0) {
       displayUsage = completion.usage;
@@ -186,7 +251,7 @@ export async function runAgentTurn(
     completion.toolCalls.forEach((call) => {
       onTrace({ kind: 'tool_call', name: call.name, args: call.args });
     });
-    const results = await executeToolCalls(completion.toolCalls, tools, signal);
+    const results = await executeToolCalls(completion.toolCalls, tools, signal, approveTool);
     completion.toolCalls.forEach((call, index) => {
       const result = results[index];
       const payload = JSON.stringify({ ok: result.ok, data: result.data, error: result.error });
@@ -237,6 +302,7 @@ export async function runAgent(
   onTrace: (event: AgentTraceEvent) => void,
   signal?: AbortSignal,
   onDelta?: AgentDeltaHook,
+  approveTool?: ToolApprovalGate,
 ): Promise<string> {
   const result = await runAgentTurn(
     question,
@@ -246,6 +312,7 @@ export async function runAgent(
     onTrace,
     signal,
     onDelta,
+    approveTool,
   );
   return result.text;
 }

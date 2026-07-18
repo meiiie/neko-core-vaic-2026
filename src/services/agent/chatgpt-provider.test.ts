@@ -46,9 +46,11 @@ describe('managed ChatGPT provider', () => {
     const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body)) as {
       prompt: string;
       model: string;
+      tools: { name: string }[];
     };
     expect(body.model).toBe('gpt-5.6-sol');
     expect(body.prompt).toContain('Xin chào');
+    expect(body.tools.map((tool) => tool.name)).toContain('giao_bai');
   });
 
   it('lets the model select a browser tool without leaking its JSON into the transcript', async () => {
@@ -88,7 +90,49 @@ describe('managed ChatGPT provider', () => {
     expect(result.content).toContain('Phân số bằng nhau');
     const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body)) as { prompt: string };
     expect(body.prompt).toContain('Phân số bằng nhau');
-    expect(body.prompt).toContain('CÔNG CỤ ĐÃ CHẠY');
+    expect(body.prompt).toContain('BẰNG CHỨNG');
+  });
+
+  it('executes native App Server tool calls through the guarded browser runtime', async () => {
+    const requestId = '8c14c64b-d94f-4a48-b8ee-01342e19de8a';
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/ai/chatgpt/tool-result')) return Response.json({ ok: true });
+      return sseResponse(
+        `event: tool_call\ndata: {"requestId":"${requestId}","callId":"call-1","name":"de_xuat_bai_tap","args":{}}\n\n` +
+          'event: delta\ndata: {"text":"Đã kiểm tra ngân hàng câu hỏi."}\n\n' +
+          'event: done\ndata: {"content":"Đã kiểm tra ngân hàng câu hỏi.","modelId":"gpt-5.6-sol"}\n\n',
+      );
+    });
+    const executeTool = vi.fn(async () => ({
+      name: 'de_xuat_bai_tap',
+      args: {},
+      ok: true,
+      data: { tenBai: 'Luyện tập Phân số bằng nhau' },
+      durationMs: 3,
+    }));
+
+    const result = await new ChatGptAgentProvider(fetchImpl).complete(
+      [{ role: 'user', content: 'Giao bài tập cho lớp đi' }],
+      AGENT_TOOLS,
+      undefined,
+      undefined,
+      { executeTool },
+    );
+
+    expect(result.content).toBe('Đã kiểm tra ngân hàng câu hỏi.');
+    expect(executeTool).toHaveBeenCalledWith({
+      id: 'call-1',
+      name: 'de_xuat_bai_tap',
+      args: {},
+    });
+    const toolResultCall = fetchImpl.mock.calls.find(([input]) =>
+      String(input).endsWith('/api/ai/chatgpt/tool-result'),
+    );
+    expect(JSON.parse(String(toolResultCall?.[1]?.body))).toMatchObject({
+      requestId,
+      result: { ok: true, data: { tenBai: 'Luyện tập Phân số bằng nhau' } },
+    });
   });
 
   it('uses evidence retained in a compacted capsule for a contextual follow-up', async () => {

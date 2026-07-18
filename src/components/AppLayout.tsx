@@ -68,6 +68,20 @@ export function AppLayout() {
   }, []);
 
   useEffect(() => {
+    if (account?.role !== 'TEACHER') return;
+    let cancelled = false;
+    let unregister: () => void = () => undefined;
+    void import('../services/agent/webmcp').then(({ registerNekoPathWebMcpTools }) => {
+      if (cancelled) return;
+      unregister = registerNekoPathWebMcpTools();
+    });
+    return () => {
+      cancelled = true;
+      unregister();
+    };
+  }, [account?.role]);
+
+  useEffect(() => {
     if (!window.matchMedia) return;
     const media = window.matchMedia(MOBILE_NAVIGATION_QUERY);
     const updateViewport = () => {

@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AGENT_SYSTEM_PROMPT,
   runAgent,
@@ -15,6 +15,10 @@ import {
   RuleBasedProvider,
 } from './providers';
 import { AGENT_TOOLS, toolByName } from './tools';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function collect(): { events: AgentTraceEvent[]; onTrace: (e: AgentTraceEvent) => void } {
   const events: AgentTraceEvent[] = [];
@@ -66,6 +70,63 @@ describe('agent loop with the rule-based brain', () => {
       onTrace,
     );
     expect(answer).toContain('tổng quan lớp');
+  });
+
+  it('proposes from the real question bank, asks approval, then creates an assignment', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/questions')) {
+        return Response.json({
+          questions: [
+            {
+              id: 'q-k02-1',
+              kcId: 'K02',
+              prompt: 'Phân số nào bằng 1/2?',
+              difficulty: 'EASY',
+              reviewState: 'REVIEWED',
+            },
+            {
+              id: 'q-k02-2',
+              kcId: 'K02',
+              prompt: 'Chọn hai phân số bằng nhau.',
+              difficulty: 'MEDIUM',
+              reviewState: 'REVIEWED',
+            },
+          ],
+        });
+      }
+      if (url.endsWith('/api/assignments') && init?.method === 'POST') {
+        return Response.json({ id: 'assignment-created' }, { status: 201 });
+      }
+      return Response.json({ error: 'NOT_FOUND' }, { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const approve = vi.fn(async () => true);
+    const { events, onTrace } = collect();
+
+    const answer = await runAgent(
+      'Giao bài tập cho lớp đi',
+      new RuleBasedProvider(),
+      AGENT_TOOLS,
+      onTrace,
+      undefined,
+      undefined,
+      approve,
+    );
+
+    expect(answer).toContain('Đã giao');
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(events.flatMap((event) => (event.kind === 'tool_call' ? [event.name] : []))).toEqual([
+      'de_xuat_bai_tap',
+      'giao_bai',
+    ]);
+    const post = fetchImpl.mock.calls.find(
+      ([input, init]) => String(input).endsWith('/api/assignments') && init?.method === 'POST',
+    );
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
+      title: 'Luyện tập Phân số bằng nhau',
+      questionIds: ['q-k02-1', 'q-k02-2'],
+    });
   });
 
   it('stops a spinning provider that repeats the same tool call (stuck guard)', async () => {

@@ -1,4 +1,10 @@
-import type { AgentChatMessage, AgentCompletion, AgentProvider, AgentToolCall } from './loop';
+import type {
+  AgentChatMessage,
+  AgentCompletion,
+  AgentProvider,
+  AgentProviderRuntime,
+  AgentToolCall,
+} from './loop';
 import { parseCapsule } from './context-manager';
 import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
@@ -35,6 +41,49 @@ function previousToolResult(
   return evidence ? { name: evidence.toolName, payload: evidence.payload } : null;
 }
 
+function normalized(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
+
+function explicitlyRequestsAssignment(messages: readonly AgentChatMessage[]): boolean {
+  const latest = [...messages].reverse().find((message) => message.role === 'user')?.content ?? '';
+  return /\b(giao|tao|phan)\b[^.?!]{0,40}\b(bai|bai tap|de)\b/.test(normalized(latest));
+}
+
+function assignmentCallFromProposal(payload: string): AgentToolCall | null {
+  try {
+    const result = JSON.parse(payload) as {
+      ok?: boolean;
+      data?: { tenBai?: unknown; questionIds?: unknown };
+    };
+    if (
+      result.ok !== true ||
+      typeof result.data?.tenBai !== 'string' ||
+      !Array.isArray(result.data.questionIds) ||
+      !result.data.questionIds.every((id) => typeof id === 'string')
+    ) {
+      return null;
+    }
+    return {
+      name: 'giao_bai',
+      args: {
+        title: result.data.tenBai,
+        question_ids: result.data.questionIds,
+        due_at: null,
+        allow_retake: false,
+        shuffle_answers: true,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function hasEvidenceAfterLatestUser(messages: readonly AgentChatMessage[]): boolean {
   const lastUser = messages.findLastIndex((message) => message.role === 'user');
   if (lastUser < 0) return false;
@@ -64,6 +113,10 @@ export class RuleBasedProvider implements AgentProvider {
 
     // Second pass: a tool already ran — compose the answer from its payload.
     if (observed) {
+      if (observed.name === 'de_xuat_bai_tap' && explicitlyRequestsAssignment(messages)) {
+        const call = assignmentCallFromProposal(observed.payload);
+        if (call) return { content: null, toolCalls: [call] };
+      }
       return { content: composeAnswer(observed.name, observed.payload), toolCalls: [] };
     }
 
@@ -99,12 +152,15 @@ export class DeterministicFirstProvider implements AgentProvider {
     tools: readonly AgentTool[],
     signal?: AbortSignal,
     onDelta?: (text: string) => void,
+    runtime?: AgentProviderRuntime,
   ): Promise<AgentCompletion> {
     if (!hasEvidenceAfterLatestUser(messages)) {
       return this.rules.complete(messages, tools);
     }
+    const continuation = await this.rules.complete(messages, tools);
+    if (continuation.toolCalls.length > 0) return continuation;
     try {
-      const completion = await this.primary.complete(messages, tools, signal, onDelta);
+      const completion = await this.primary.complete(messages, tools, signal, onDelta, runtime);
       return { ...completion, modelId: completion.modelId ?? this.primary.id };
     } catch (error) {
       if (isAbortError(error, signal)) throw error;
@@ -162,6 +218,19 @@ export function composeAnswer(toolName: string, payload: string): string {
         const d = result.data as { ten: string; soCau: number; daNop: string }[];
         if (d.length === 0) return 'Chưa có bài nào được giao cho lớp.';
         return `Có ${d.length} bài đã giao: ${d.map((a) => `"${a.ten}" (${a.soCau} câu, đã nộp ${a.daNop})`).join('; ')}.`;
+      }
+      case 'de_xuat_bai_tap': {
+        const d = result.data as {
+          tenBai: string;
+          kienThuc: { ten: string };
+          cauHoi: unknown[];
+          thoiLuongDuKienPhut: number;
+        };
+        return `Đề xuất "${d.tenBai}" gồm ${d.cauHoi.length} câu về ${d.kienThuc.ten}, khoảng ${d.thoiLuongDuKienPhut} phút. Đây mới là bản xem trước, chưa giao cho lớp.`;
+      }
+      case 'giao_bai': {
+        const d = result.data as { tenBai: string; soCau: number; lop: string };
+        return `Đã giao "${d.tenBai}" gồm ${d.soCau} câu cho lớp ${d.lop}.`;
       }
       default:
         return payload;

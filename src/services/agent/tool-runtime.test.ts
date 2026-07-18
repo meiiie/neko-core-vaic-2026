@@ -21,6 +21,19 @@ function learnerTool(run = vi.fn(async () => ({ ok: true, data: { learner: 'an' 
   };
 }
 
+function mutationTool(
+  run: AgentTool['run'] = vi.fn(async () => ({ ok: true, data: { id: 'assignment-1' } })),
+): AgentTool {
+  return {
+    ...learnerTool(),
+    name: 'assign',
+    description: 'Create an assignment.',
+    readOnly: false,
+    parallelSafe: false,
+    run,
+  };
+}
+
 describe('strict agent tool runtime', () => {
   it('rejects tools outside the session allowlist without executing anything', async () => {
     const run = vi.fn(async () => ({ ok: true, data: { learner: 'an' } }));
@@ -59,5 +72,26 @@ describe('strict agent tool runtime', () => {
       { learner: 'an' },
       expect.objectContaining({ signal: expect.anything() }),
     );
+  });
+
+  it('fails closed for mutations and executes only after explicit approval', async () => {
+    const run = vi.fn(async () => ({ ok: true, data: { id: 'assignment-1' } }));
+    const tool = mutationTool(run);
+    const call = { name: 'assign', args: { learner: 'an' } };
+
+    const withoutGate = await executeToolCalls([call], [tool]);
+    expect(withoutGate[0]).toMatchObject({
+      ok: false,
+      errorCode: 'TOOL_APPROVAL_REQUIRED',
+    });
+    expect(run).not.toHaveBeenCalled();
+
+    const denied = await executeToolCalls([call], [tool], undefined, async () => false);
+    expect(denied[0]).toMatchObject({ ok: false, errorCode: 'TOOL_DENIED' });
+    expect(run).not.toHaveBeenCalled();
+
+    const approved = await executeToolCalls([call], [tool], undefined, async () => true);
+    expect(approved[0]).toMatchObject({ ok: true, data: { id: 'assignment-1' } });
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });

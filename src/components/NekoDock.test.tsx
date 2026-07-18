@@ -177,4 +177,44 @@ describe('NekoDock agent session', () => {
     });
     expect(screen.queryByRole('button', { name: 'Dừng' })).toBeNull();
   });
+
+  it('shows an assignment preview and writes only after the teacher confirms', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    const fetchImpl = vi.mocked(globalThis.fetch);
+    const assignmentChanged = vi.fn();
+    window.addEventListener('nekopath:assignments-changed', assignmentChanged);
+    const user = userEvent.setup();
+    render(
+      <SessionProvider>
+        <NekoDock open onClose={() => undefined} />
+      </SessionProvider>,
+    );
+
+    await screen.findByText(/Chào Cô Hà/);
+    const input = screen.getByRole('textbox', { name: 'Câu hỏi cho Neko' });
+    await waitFor(() => expect(input.hasAttribute('disabled')).toBe(false));
+    await user.type(input, 'Giao bài tập cho lớp đi');
+    await user.click(screen.getByRole('button', { name: 'Gửi' }));
+
+    expect(await screen.findByText('Luyện tập Phân số bằng nhau')).toBeTruthy();
+    expect(screen.getByText(/Giao 2 câu cho lớp 7A/)).toBeTruthy();
+    expect(
+      fetchImpl.mock.calls.some(
+        ([request, init]) =>
+          String(request).endsWith('/api/assignments') && init?.method === 'POST',
+      ),
+    ).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: 'Xác nhận giao bài' }));
+
+    expect(await screen.findByText(/Đã giao "Luyện tập Phân số bằng nhau"/)).toBeTruthy();
+    expect(
+      fetchImpl.mock.calls.some(
+        ([request, init]) =>
+          String(request).endsWith('/api/assignments') && init?.method === 'POST',
+      ),
+    ).toBe(true);
+    expect(assignmentChanged).toHaveBeenCalledOnce();
+    window.removeEventListener('nekopath:assignments-changed', assignmentChanged);
+  });
 });

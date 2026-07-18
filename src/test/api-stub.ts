@@ -96,6 +96,29 @@ export function installApiStub(initialEmail: string | null = null) {
         state.email = null;
         return json({ ok: true });
       }
+      if (url.endsWith('/api/questions')) {
+        return json({
+          questions: [
+            {
+              id: 'q-k02-1',
+              kcId: 'K02',
+              prompt: 'Phân số nào bằng 1/2?',
+              difficulty: 'EASY',
+              reviewState: 'REVIEWED',
+            },
+            {
+              id: 'q-k02-2',
+              kcId: 'K02',
+              prompt: 'Chọn hai phân số bằng nhau.',
+              difficulty: 'MEDIUM',
+              reviewState: 'REVIEWED',
+            },
+          ],
+        });
+      }
+      if (url.endsWith('/api/assignments') && init?.method === 'POST') {
+        return json({ id: 'assignment-stub' }, 201);
+      }
       if (url.endsWith('/api/assignments')) return json({ assignments: [] });
       return json({ error: 'NOT_FOUND' }, 404);
     }),

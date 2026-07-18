@@ -7,6 +7,8 @@ import {
   type CodexAccountResult,
   type CodexBrowserLogin,
   type CodexCompletion,
+  type CodexDynamicTool,
+  type CodexDynamicToolExecutor,
   type CodexModelInfo,
 } from './codex-app-server.ts';
 import type { CodexManagerPort } from './codex-routes.ts';
@@ -65,8 +67,10 @@ export class CodexAccountManager implements CodexManagerPort {
     onDelta?: (delta: string) => void,
     signal?: AbortSignal,
     model?: string,
+    tools?: readonly CodexDynamicTool[],
+    executeTool?: CodexDynamicToolExecutor,
   ): Promise<CodexCompletion> {
-    return this.client(accountId).complete(prompt, onDelta, signal, model);
+    return this.client(accountId).complete(prompt, onDelta, signal, model, tools, executeTool);
   }
 
   async logout(accountId: string): Promise<void> {

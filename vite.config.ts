@@ -92,9 +92,17 @@ export default defineConfig({
   },
   server: {
     proxy: { '/api': 'http://127.0.0.1:3001' },
+    headers: {
+      'Origin-Agent-Cluster': '?1',
+      'Permissions-Policy': 'tools=(self)',
+    },
   },
   preview: {
     proxy: { '/api': 'http://127.0.0.1:3001' },
+    headers: {
+      'Origin-Agent-Cluster': '?1',
+      'Permissions-Policy': 'tools=(self)',
+    },
   },
   test: {
     environment: 'jsdom',

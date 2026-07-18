@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 interface RpcMessage {
-  readonly id?: number;
+  readonly id?: number | string;
   readonly method?: string;
   readonly params?: unknown;
   readonly result?: unknown;
@@ -147,6 +147,29 @@ export interface CodexCompletion {
   readonly usage?: CodexUsage;
 }
 
+export interface CodexDynamicTool {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Readonly<Record<string, unknown>>;
+}
+
+export interface CodexDynamicToolCall {
+  readonly id: string;
+  readonly name: string;
+  readonly args: Readonly<Record<string, unknown>>;
+}
+
+export interface CodexDynamicToolResult {
+  readonly ok: boolean;
+  readonly data?: unknown;
+  readonly error?: string;
+  readonly errorCode?: string;
+}
+
+export type CodexDynamicToolExecutor = (
+  call: CodexDynamicToolCall,
+) => Promise<CodexDynamicToolResult>;
+
 export interface CodexModelInfo {
   readonly id: string;
   readonly model: string;
@@ -171,12 +194,21 @@ interface PendingTurn {
   timeout: ReturnType<typeof setTimeout>;
 }
 
+interface ActiveToolTurn {
+  readonly threadId: string;
+  readonly allowedNames: ReadonlySet<string>;
+  readonly execute: CodexDynamicToolExecutor;
+  readonly results: Map<string, Promise<CodexDynamicToolResult>>;
+}
+
 const DEFAULT_TURN_IDLE_TIMEOUT_MS = 45_000;
 
 const DEVELOPER_INSTRUCTIONS =
   'You are NekoPath, a conversational teaching assistant. Reply naturally in Vietnamese using plain text, not Markdown. ' +
-  'For claims about a class, learner, assignment, or curriculum, use only evidence included in the prompt. ' +
-  'Never invent school data. Do not read files, run commands, edit data, or browse the web.';
+  'For claims about a class, learner, assignment, or curriculum, use the registered NekoPath tools and their results. ' +
+  'When the user asks to perform an available action, call the appropriate tool instead of claiming the capability is unavailable. ' +
+  'If a tool result says the teacher denied an action, acknowledge the cancellation and do not retry that action. ' +
+  'Never invent school data. Do not read files, run commands, or browse the web.';
 
 export class CodexAppServerClient {
   private nextId = 1;
@@ -188,6 +220,7 @@ export class CodexAppServerClient {
   private readonly usageByTurn = new Map<string, CodexUsage>();
   private readonly completedTurns = new Map<string, { status: string; error?: string }>();
   private readonly completionWaiters = new Map<string, PendingTurn>();
+  private activeToolTurn: ActiveToolTurn | null = null;
   private readonly transport: CodexTransport;
   private readonly options: {
     readonly cwd: string;
@@ -216,7 +249,7 @@ export class CodexAppServerClient {
     );
     await this.request('initialize', {
       clientInfo: { name: 'nekopath', title: 'NekoPath', version: '0.2.0' },
-      capabilities: { experimentalApi: false, requestAttestation: false },
+      capabilities: { experimentalApi: true, requestAttestation: false },
     });
     this.transport.send({ method: 'initialized', params: {} });
     this.initialized = true;
@@ -271,7 +304,13 @@ export class CodexAppServerClient {
     onDelta?: (delta: string) => void,
     signal?: AbortSignal,
     requestedModel?: string,
+    dynamicTools: readonly CodexDynamicTool[] = [],
+    executeTool?: CodexDynamicToolExecutor,
   ): Promise<CodexCompletion> {
+    if (this.activeToolTurn) throw new Error('Codex App Server đang xử lý một lượt khác.');
+    if (dynamicTools.length > 0 && !executeTool) {
+      throw new Error('Dynamic tools cần bộ thực thi an toàn của NekoPath.');
+    }
     await this.initialize();
     const model = await this.resolveModel(requestedModel);
     const thread = (await this.request('thread/start', {
@@ -282,12 +321,36 @@ export class CodexAppServerClient {
       ephemeral: true,
       serviceName: 'nekopath',
       developerInstructions: DEVELOPER_INSTRUCTIONS,
+      ...(dynamicTools.length > 0
+        ? {
+            dynamicTools: dynamicTools.map((tool) => ({
+              type: 'function',
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+            })),
+          }
+        : {}),
     })) as { thread: { id: string } };
-    const started = (await this.request('turn/start', {
-      threadId: thread.thread.id,
-      input: [{ type: 'text', text: prompt }],
-      model,
-    })) as { turn: { id: string } };
+    if (executeTool) {
+      this.activeToolTurn = {
+        threadId: thread.thread.id,
+        allowedNames: new Set(dynamicTools.map((tool) => tool.name)),
+        execute: executeTool,
+        results: new Map(),
+      };
+    }
+    let started: { turn: { id: string } };
+    try {
+      started = (await this.request('turn/start', {
+        threadId: thread.thread.id,
+        input: [{ type: 'text', text: prompt }],
+        model,
+      })) as { turn: { id: string } };
+    } catch (error) {
+      this.activeToolTurn = null;
+      throw error;
+    }
     const turnId = started.turn.id;
     if (onDelta) {
       for (const delta of this.deltas.get(turnId) ?? []) onDelta(delta);
@@ -327,6 +390,7 @@ export class CodexAppServerClient {
       this.deltas.delete(turnId);
       this.usageByTurn.delete(turnId);
       this.completedTurns.delete(turnId);
+      this.activeToolTurn = null;
     }
   }
 
@@ -343,6 +407,7 @@ export class CodexAppServerClient {
     this.deltaHooks.clear();
     this.usageByTurn.clear();
     this.completedTurns.clear();
+    this.activeToolTurn = null;
     this.transport.stop();
   }
 
@@ -414,13 +479,18 @@ export class CodexAppServerClient {
   private handle(raw: unknown): void {
     if (!raw || typeof raw !== 'object') return;
     const message = raw as RpcMessage;
-    if (typeof message.id === 'number' && !message.method) {
-      const pending = this.pending.get(message.id);
+    if (message.id !== undefined && !message.method) {
+      const id = typeof message.id === 'number' ? message.id : Number(message.id);
+      const pending = this.pending.get(id);
       if (!pending) return;
       clearTimeout(pending.timeout);
-      this.pending.delete(message.id);
+      this.pending.delete(id);
       if (message.error) pending.reject(new Error(message.error.message ?? 'Codex RPC error.'));
       else pending.resolve(message.result);
+      return;
+    }
+    if (message.id !== undefined && message.method) {
+      void this.handleServerRequest(message);
       return;
     }
     if (message.method === 'error') {
@@ -514,6 +584,75 @@ export class CodexAppServerClient {
         this.completionWaiters.delete(turnId);
         pending.resolve(completed);
       }
+    }
+  }
+
+  private async handleServerRequest(message: RpcMessage): Promise<void> {
+    const id = message.id;
+    if (id === undefined) return;
+    try {
+      if (message.method !== 'item/tool/call') {
+        throw new Error(`Codex App Server request không được hỗ trợ: ${message.method}`);
+      }
+      const params = message.params as {
+        threadId?: string;
+        turnId?: string;
+        callId?: string;
+        tool?: string;
+        arguments?: unknown;
+      };
+      const active = this.activeToolTurn;
+      if (!active || params.threadId !== active.threadId) {
+        throw new Error('Dynamic tool không thuộc lượt NekoPath đang hoạt động.');
+      }
+      const callId = String(params.callId ?? '');
+      const name = String(params.tool ?? '');
+      const args = params.arguments;
+      if (
+        !callId ||
+        !active.allowedNames.has(name) ||
+        !args ||
+        typeof args !== 'object' ||
+        Array.isArray(args)
+      ) {
+        throw new Error('Codex App Server gửi dynamic tool call không hợp lệ.');
+      }
+      if (params.turnId) this.touchTurn(params.turnId);
+      let execution = active.results.get(callId);
+      if (!execution) {
+        execution = active.execute({
+          id: callId,
+          name,
+          args: args as Readonly<Record<string, unknown>>,
+        });
+        active.results.set(callId, execution);
+      }
+      const result = await execution;
+      this.transport.send({
+        id,
+        result: {
+          contentItems: [
+            {
+              type: 'inputText',
+              text: JSON.stringify({
+                ok: result.ok,
+                data: result.data,
+                error: result.error,
+                errorCode: result.errorCode,
+              }),
+            },
+          ],
+          success: result.ok,
+        },
+      });
+    } catch (error) {
+      this.transport.send({
+        id,
+        error: {
+          code: -32000,
+          message: error instanceof Error ? error.message : 'Dynamic tool failed.',
+        },
+      });
     }
   }
 

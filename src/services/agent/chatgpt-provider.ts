@@ -1,4 +1,9 @@
-import type { AgentChatMessage, AgentCompletion, AgentProvider } from './loop';
+import type {
+  AgentChatMessage,
+  AgentCompletion,
+  AgentProvider,
+  AgentProviderRuntime,
+} from './loop';
 import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
 
@@ -48,15 +53,7 @@ export async function logoutChatGpt(fetchImpl: typeof fetch = fetch): Promise<vo
   await jsonRequest(fetchImpl, '/api/ai/chatgpt/logout', { method: 'POST' });
 }
 
-function agentPrompt(messages: readonly AgentChatMessage[], tools: readonly AgentTool[]): string {
-  const executedTools = new Set(
-    messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
-  );
-  const toolMenu = tools
-    .map(
-      (tool) => `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.inputJsonSchema)}`,
-    )
-    .join('\n');
+function agentPrompt(messages: readonly AgentChatMessage[]): string {
   const transcript = messages
     .map((message) => {
       if (message.role === 'tool') {
@@ -66,15 +63,9 @@ function agentPrompt(messages: readonly AgentChatMessage[], tools: readonly Agen
     })
     .join('\n\n');
   return (
-    'Bạn là NekoPath, trợ lý hội thoại cho giáo viên. Trả lời tự nhiên bằng tiếng Việt, chỉ dùng văn bản thuần, không Markdown. ' +
-    'Với trò chuyện thông thường, hãy trả lời trực tiếp như một trợ lý thật. ' +
-    'Khi câu hỏi cần dữ liệu lớp, học sinh, kiến thức hoặc bài đã giao mà chưa có kết quả công cụ, ' +
-    'chỉ trả về đúng một JSON {"tool":"<tên>","args":{...}} và không thêm văn bản. ' +
-    'Khi đã có BẰNG CHỨNG, không gọi lại công cụ đó; hãy tổng hợp câu trả lời từ bằng chứng và không bịa số liệu.\n\n' +
-    `CÔNG CỤ KHẢ DỤNG:\n${toolMenu}\n\n` +
-    (executedTools.size > 0
-      ? `CÔNG CỤ ĐÃ CHẠY: ${[...executedTools].join(', ')}. Hãy trả lời từ kết quả, không xuất JSON gọi lại.\n\n`
-      : '') +
+    'Tiếp tục đoạn hội thoại NekoPath dưới đây với vai trò ASSISTANT. ' +
+    'Các công cụ NekoPath đã được đăng ký trực tiếp với runtime; hãy gọi công cụ khi cần đọc hoặc thay đổi dữ liệu hệ thống. ' +
+    'Không xuất JSON mô phỏng lệnh công cụ. Sau khi có kết quả công cụ, trả lời tự nhiên bằng tiếng Việt và không bịa dữ liệu.\n\n' +
     transcript
   );
 }
@@ -94,22 +85,25 @@ function parseRecord(raw: string): SseRecord | null {
   return data.length > 0 ? { event, data: data.join('\n') } : null;
 }
 
-async function readSse(response: Response, onRecord: (record: SseRecord) => void): Promise<void> {
+async function readSse(
+  response: Response,
+  onRecord: (record: SseRecord) => void | Promise<void>,
+): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) throw new Error('ChatGPT stream không có response body.');
   const decoder = new TextDecoder();
   let buffer = '';
-  const drain = (final = false) => {
+  const drain = async (final = false) => {
     const normalized = buffer.replace(/\r\n/g, '\n');
     const records = normalized.split('\n\n');
     buffer = final ? '' : (records.pop() ?? '');
     for (const raw of final ? records.filter(Boolean) : records) {
       const record = parseRecord(raw);
-      if (record) onRecord(record);
+      if (record) await onRecord(record);
     }
     if (final && buffer.trim()) {
       const record = parseRecord(buffer);
-      if (record) onRecord(record);
+      if (record) await onRecord(record);
       buffer = '';
     }
   };
@@ -117,10 +111,10 @@ async function readSse(response: Response, onRecord: (record: SseRecord) => void
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-    drain();
+    await drain();
   }
   buffer += decoder.decode();
-  drain(true);
+  await drain(true);
 }
 
 export class ChatGptAgentProvider implements AgentProvider {
@@ -140,14 +134,20 @@ export class ChatGptAgentProvider implements AgentProvider {
     tools: readonly AgentTool[],
     signal?: AbortSignal,
     onDelta?: (text: string) => void,
+    runtime?: AgentProviderRuntime,
   ): Promise<AgentCompletion> {
     const response = await (this.fetchImpl ?? fetch)('/api/ai/chatgpt/complete', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        prompt: agentPrompt(messages, tools),
+        prompt: agentPrompt(messages),
         ...(this.selectedModel ? { model: this.selectedModel } : {}),
+        tools: tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputJsonSchema,
+        })),
       }),
       signal,
     });
@@ -163,7 +163,7 @@ export class ChatGptAgentProvider implements AgentProvider {
     let streamError: Error | null = null;
     let pendingVisibleText = '';
     let visibilityDecided = false;
-    await readSse(response, ({ event, data }) => {
+    await readSse(response, async ({ event, data }) => {
       let value: Record<string, unknown>;
       try {
         value = JSON.parse(data) as Record<string, unknown>;
@@ -201,6 +201,39 @@ export class ChatGptAgentProvider implements AgentProvider {
         streamError = new Error(
           typeof value.message === 'string' ? value.message : 'ChatGPT completion failed.',
         );
+      } else if (event === 'tool_call') {
+        const requestId = typeof value.requestId === 'string' ? value.requestId : '';
+        const name = typeof value.name === 'string' ? value.name : '';
+        const callId = typeof value.callId === 'string' ? value.callId : requestId;
+        const args =
+          value.args && typeof value.args === 'object' && !Array.isArray(value.args)
+            ? (value.args as Record<string, unknown>)
+            : {};
+        if (!requestId || !name) throw new Error('ChatGPT relay gửi tool call không hợp lệ.');
+        const result = runtime
+          ? await runtime.executeTool({ id: callId, name, args })
+          : {
+              name,
+              args,
+              ok: false,
+              error: 'Phiên NekoPath không có bộ thực thi công cụ.',
+              errorCode: 'TOOL_NOT_ALLOWED' as const,
+              durationMs: 0,
+            };
+        await jsonRequest(this.fetchImpl ?? fetch, '/api/ai/chatgpt/tool-result', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            requestId,
+            result: {
+              ok: result.ok,
+              data: result.data,
+              error: result.error,
+              errorCode: result.errorCode,
+            },
+          }),
+          signal,
+        });
       }
     });
     if (streamError) throw streamError;

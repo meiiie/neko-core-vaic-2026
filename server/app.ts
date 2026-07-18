@@ -117,6 +117,11 @@ export interface AppOptions {
 export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 });
   void app.register(fastifyCookie);
+  app.addHook('onRequest', (_request, reply, done) => {
+    void reply.header('Origin-Agent-Cluster', '?1');
+    void reply.header('Permissions-Policy', 'tools=(self)');
+    done();
+  });
 
   function currentUser(request: FastifyRequest) {
     const sid = request.cookies[SESSION_COOKIE];

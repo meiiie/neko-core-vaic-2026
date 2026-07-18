@@ -26,6 +26,8 @@ export interface AgentToolResult {
   error?: string;
 }
 
+export const ASSIGNMENTS_CHANGED_EVENT = 'nekopath:assignments-changed';
+
 export interface AgentToolContext {
   readonly signal?: AbortSignal;
 }
@@ -206,11 +208,172 @@ const baiDuocGiao: AgentTool = {
   },
 };
 
+const deXuatBaiTap: AgentTool = {
+  name: 'de_xuat_bai_tap',
+  description:
+    'Đọc ngân hàng câu hỏi thật và đề xuất một bài luyện phù hợp cho lớp 7A. Công cụ này chỉ tạo bản xem trước, chưa giao bài.',
+  inputSchema: z
+    .object({
+      kc: z
+        .string()
+        .regex(/^K(?:0[1-9]|10)$/i)
+        .optional(),
+    })
+    .strict(),
+  inputJsonSchema: {
+    type: 'object',
+    properties: {
+      kc: {
+        type: 'string',
+        pattern: '^K(?:0[1-9]|10)$',
+        description: 'Mã kiến thức cần luyện; bỏ trống để dùng lỗ hổng ưu tiên của lớp.',
+      },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+  ...READ_ONLY_TOOL,
+  async run(args, context) {
+    const dashboard = buildHeroClassDashboard();
+    const requestedKc = typeof args.kc === 'string' ? args.kc.toUpperCase() : null;
+    const recommendedKc = requestedKc ?? dashboard.classWideGaps[0]?.rootKcId ?? HERO_TARGET_KC_ID;
+    try {
+      const response = await fetch('/api/questions', {
+        credentials: 'include',
+        signal: context?.signal,
+      });
+      if (!response.ok) return { ok: false, error: `Máy chủ trả về ${response.status}.` };
+      const body = (await response.json()) as {
+        questions: {
+          id: string;
+          kcId: string;
+          prompt: string;
+          difficulty: string;
+          reviewState: string;
+        }[];
+      };
+      const questions = body.questions
+        .filter((question) => question.kcId === recommendedKc)
+        .slice(0, 5)
+        .map((question) => ({
+          id: question.id,
+          noiDung: question.prompt,
+          doKho: question.difficulty,
+          trangThaiDuyet: question.reviewState,
+        }));
+      if (questions.length === 0) {
+        return {
+          ok: false,
+          error: `Ngân hàng chưa có câu hỏi cho ${recommendedKc} — ${kcName(recommendedKc)}.`,
+        };
+      }
+      return {
+        ok: true,
+        data: {
+          lop: '7A',
+          kienThuc: { ma: recommendedKc, ten: kcName(recommendedKc) },
+          lyDo: requestedKc
+            ? 'Chủ đề do giáo viên yêu cầu.'
+            : 'Lỗ hổng toàn lớp có mức ưu tiên cao nhất trong dữ liệu hiện tại.',
+          tenBai: `Luyện tập ${kcName(recommendedKc)}`,
+          thoiLuongDuKienPhut: questions.length * 3,
+          cauHoi: questions,
+          questionIds: questions.map((question) => question.id),
+        },
+      };
+    } catch (error) {
+      if (context?.signal?.aborted) throw error;
+      return { ok: false, error: 'Không kết nối được ngân hàng câu hỏi.' };
+    }
+  },
+};
+
+const giaoBai: AgentTool = {
+  name: 'giao_bai',
+  description:
+    'Tạo ngay một bài tập thật cho lớp 7A từ các ID câu hỏi đã kiểm tra. Đây là thao tác ghi dữ liệu và luôn cần giáo viên xác nhận.',
+  inputSchema: z
+    .object({
+      title: z.string().min(3).max(120),
+      question_ids: z.array(z.string().min(1)).min(1).max(20),
+      due_at: z.union([z.string().datetime(), z.null()]).optional(),
+      allow_retake: z.boolean().default(false),
+      shuffle_answers: z.boolean().default(true),
+    })
+    .strict(),
+  inputJsonSchema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', minLength: 3, maxLength: 120, description: 'Tên bài tập.' },
+      question_ids: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 20,
+        items: { type: 'string' },
+        description: 'ID câu hỏi lấy từ công cụ de_xuat_bai_tap.',
+      },
+      due_at: {
+        type: ['string', 'null'],
+        format: 'date-time',
+        description: 'Hạn nộp ISO 8601 hoặc null nếu không đặt hạn.',
+      },
+      allow_retake: { type: 'boolean', description: 'Cho phép làm lại từng câu.' },
+      shuffle_answers: { type: 'boolean', description: 'Trộn thứ tự đáp án.' },
+    },
+    required: ['title', 'question_ids'],
+    additionalProperties: false,
+  },
+  readOnly: false,
+  parallelSafe: false,
+  timeoutMs: 10_000,
+  async run(args, context) {
+    try {
+      const response = await fetch('/api/assignments', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: args.title,
+          questionIds: args.question_ids,
+          dueAt: args.due_at ?? null,
+          allowRetake: args.allow_retake ?? false,
+          shuffleAnswers: args.shuffle_answers ?? true,
+        }),
+        signal: context?.signal,
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        return {
+          ok: false,
+          error: `Không giao được bài: ${body?.error ?? `máy chủ trả về ${response.status}`}.`,
+        };
+      }
+      const body = (await response.json()) as { id: string };
+      window.dispatchEvent(new CustomEvent(ASSIGNMENTS_CHANGED_EVENT));
+      return {
+        ok: true,
+        data: {
+          id: body.id,
+          lop: '7A',
+          tenBai: args.title,
+          soCau: Array.isArray(args.question_ids) ? args.question_ids.length : 0,
+          hanNop: args.due_at ?? null,
+        },
+      };
+    } catch (error) {
+      if (context?.signal?.aborted) throw error;
+      return { ok: false, error: 'Không kết nối được máy chủ để giao bài.' };
+    }
+  },
+};
+
 export const AGENT_TOOLS: readonly AgentTool[] = [
   tongQuanLop,
   chanDoanHocSinh,
   giaiThichKienThuc,
   baiDuocGiao,
+  deXuatBaiTap,
+  giaoBai,
 ];
 
 export function toolByName(name: string): AgentTool | undefined {
