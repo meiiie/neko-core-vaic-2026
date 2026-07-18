@@ -503,36 +503,56 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!question) return reply.code(404).send({ error: 'QUESTION_NOT_FOUND' });
 
     const correct = question.correct_choice_id === body.data.choiceId;
+    const choices = JSON.parse(question.choices_json) as {
+      id: string;
+      noteVi?: string;
+      misconceptionTag?: string;
+    }[];
+    const picked = choices.find((choice) => choice.id === body.data.choiceId);
+    if (!picked) return reply.code(400).send({ error: 'INVALID_CHOICE' });
+    const misconceptionId = !correct ? picked?.misconceptionTag : undefined;
     const sequence = (
       db.prepare('SELECT COUNT(*) AS n FROM events WHERE learner_id = ?').get(user.id) as {
         n: number;
       }
     ).n;
+    const eventId = `evt-${randomUUID()}`;
+    const occurredAt = new Date().toISOString();
+    const payload = JSON.stringify({
+      choiceId: body.data.choiceId,
+      correct,
+      methodValidity: misconceptionId ? 'INVALID' : 'UNKNOWN',
+      ...(misconceptionId ? { misconceptionId } : {}),
+    });
     db.prepare(
       `INSERT OR IGNORE INTO events
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
        VALUES (?, ?, ?, ?, ?, ?, 'ASSIGNMENT_ANSWER', ?, ?)`,
     ).run(
-      `evt-${randomUUID()}`,
+      eventId,
       user.id,
       body.data.questionId,
       id,
       sequence + 1,
-      new Date().toISOString(),
-      JSON.stringify({ choiceId: body.data.choiceId, correct }),
+      occurredAt,
+      payload,
       new Date().toISOString(),
     );
-    const choices = JSON.parse(question.choices_json) as {
-      id: string;
-      noteVi?: string;
-    }[];
-    const picked = choices.find((choice) => choice.id === body.data.choiceId);
     return {
       correct,
       correctChoiceId: question.correct_choice_id,
       explanation: question.explanation,
       note: picked?.noteVi ?? null,
       hints: JSON.parse(question.hints_json) as string[],
+      event: {
+        id: eventId,
+        learnerId: user.id,
+        itemId: body.data.questionId,
+        sequence: sequence + 1,
+        occurredAt,
+        kind: 'ASSIGNMENT_ANSWER',
+        payload,
+      },
     };
   });
 

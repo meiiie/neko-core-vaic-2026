@@ -14,7 +14,7 @@ export function useTeacherDashboard() {
         listLatestTeacherOverrides(),
       ]);
       const observedEvents = toHeroClassObservedEvents(
-        records.filter((record) => record.kind === 'ANSWER'),
+        records.filter((record) => record.kind === 'ANSWER' || record.kind === 'ASSIGNMENT_ANSWER'),
       );
       return {
         dashboard: buildHeroClassDashboard(HERO_CLASS_LEARNERS, observedEvents, overrides),

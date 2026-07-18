@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type LearnerEventRecord, type NekoPathDb } from '../storage/db';
-import { learnerEventSchema, type AppendResult } from '../storage/event-repository';
+import { appendEvent, learnerEventSchema, type AppendResult } from '../storage/event-repository';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundProfileId, SIGNED_OUT_PROFILE } from './profile-binding';
 import {
@@ -172,6 +172,23 @@ export async function recordAnswer(
     },
   );
   void flushOutbox(database);
+  return result;
+}
+
+/**
+ * Persist an answer the assignment API has already accepted. It must become
+ * local diagnosis evidence, but must not be queued back to the server as a
+ * second write.
+ */
+export async function recordConfirmedAnswer(
+  record: LearnerEventRecord,
+  database: NekoPathDb = db,
+): Promise<AppendResult> {
+  const result = await appendEvent(record, database);
+  if (result === 'APPENDED') {
+    const now = new Date().toISOString();
+    await database.meta.put({ key: 'lastSyncedAt', value: now, updatedAt: now });
+  }
   return result;
 }
 
