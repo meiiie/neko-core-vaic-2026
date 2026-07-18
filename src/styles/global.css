@@ -3189,6 +3189,34 @@ details li {
   text-align: center;
 }
 
+.session-startup {
+  text-align: center;
+}
+
+.session-startup__message {
+  margin: var(--s-6) 0 var(--s-3);
+  color: var(--muted-strong);
+}
+
+.session-startup__progress {
+  display: block;
+  overflow: hidden;
+  height: var(--s-1);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+}
+
+.session-startup__progress::after {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  content: '';
+  transform: translateX(-100%);
+  animation: loading-shimmer 1.4s linear infinite;
+}
+
 .auth-field {
   display: flex;
   flex-direction: column;
@@ -3250,6 +3278,11 @@ details li {
   .auth-combo-field input,
   .auth-combo-chevron {
     transition: none;
+  }
+
+  .session-startup__progress::after {
+    animation: none;
+    transform: none;
   }
 }
 

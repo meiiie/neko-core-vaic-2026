@@ -10,6 +10,7 @@ import {
 import { disposeAgentSessions } from '../services/agent/agent-lifecycle';
 import { AgentSessionStore } from '../services/agent/session-store';
 import { db } from '../storage/db';
+import { fetchWithDeadline } from '../services/fetch-with-deadline';
 
 /**
  * Real API-backed session (HttpOnly cookie, server-side session store).
@@ -63,6 +64,8 @@ export interface SessionState {
 }
 
 const CACHE_KEY = 'nekopath.session-cache.v1';
+export const SESSION_RESTORE_DEADLINE_MS = 3_000;
+export const SIGN_IN_DEADLINE_MS = 8_000;
 
 function readCache(): Account | null {
   try {
@@ -90,9 +93,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const lifecycle = new AbortController();
     void (async () => {
       try {
-        const response = await fetch('/api/auth/me', { credentials: 'include' });
+        const response = await fetchWithDeadline('/api/auth/me', {
+          credentials: 'include',
+          deadlineMs: SESSION_RESTORE_DEADLINE_MS,
+          signal: lifecycle.signal,
+        });
         if (cancelled) return;
         if (response.ok) {
           const body = (await response.json()) as { user: ApiUser };
@@ -117,16 +125,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     })();
     return () => {
       cancelled = true;
+      lifecycle.abort();
     };
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetchWithDeadline('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ email, password }),
+        deadlineMs: SIGN_IN_DEADLINE_MS,
       });
       if (!response.ok) {
         return response.status === 401
@@ -138,8 +148,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setAccount(next);
       writeCache(next);
       return null;
-    } catch {
-      return 'Không kết nối được máy chủ. Kiểm tra mạng hoặc dùng thiết bị đã đăng nhập trước đó.';
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        return 'Đăng nhập mất quá nhiều thời gian. Vui lòng thử lại.';
+      }
+      return 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
     }
   }, []);
 
