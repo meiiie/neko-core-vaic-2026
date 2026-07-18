@@ -8,6 +8,7 @@ import {
   misconceptionName,
   REASON_LABELS,
   STATUS_LABELS,
+  toDomainEvents,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { reviewRecommendation, REVIEW_REASON_LABELS } from '../../app/adapters/review-selection';
@@ -33,6 +34,9 @@ export function PathPage() {
   }
 
   const result = diagnoseHero(learnerContext, localRecords);
+  const recordedAnswerCount = toDomainEvents(localRecords).filter(
+    (event) => event.learnerId === learnerContext.learnerId,
+  ).length;
   const review = reviewRecommendation(
     learnerContext,
     result,
@@ -59,8 +63,21 @@ export function PathPage() {
       {result.status === 'NEEDS_MORE_EVIDENCE' ? (
         <section className="decision-panel decision-panel--review">
           <div>
-            <p className="eyebrow">Quyết định an toàn</p>
-            <h2>Chưa đủ bằng chứng để chọn một lỗ hổng gốc</h2>
+            <p className="eyebrow">Lộ trình đang chờ xác minh</p>
+            <h2>
+              {recordedAnswerCount > 0
+                ? 'Câu trả lời đã được ghi nhận, nhưng chưa đủ để tìm nguyên nhân gốc'
+                : 'Chưa đủ dữ liệu để mở lộ trình'}
+            </h2>
+            {recordedAnswerCount > 0 ? (
+              <p role="status">
+                <strong>{recordedAnswerCount} câu trả lời đã được lưu trong hồ sơ.</strong> Dữ liệu
+                học tập không bị mất; lộ trình tạm chưa hiển thị vì số câu hiện có chưa đủ để kết
+                luận nguyên nhân gốc.
+              </p>
+            ) : (
+              <p>Hệ thống chưa có câu trả lời trực tiếp phù hợp để đề xuất một lộ trình an toàn.</p>
+            )}
             <p>
               {result.competingKcIds.length > 0
                 ? result.competingKcIds.length === 1
@@ -71,7 +88,7 @@ export function PathPage() {
           </div>
           {result.disposition === 'ASK_VERIFY' && result.nextItemId ? (
             <Link className="button-primary" to="/student/check-in">
-              Làm câu kiểm tra tiếp theo
+              Trả lời câu xác minh để mở lộ trình
             </Link>
           ) : (
             <p role="status">Đã chuyển vào danh sách để giáo viên xem xét.</p>
