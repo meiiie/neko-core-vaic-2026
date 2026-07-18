@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../app/session';
 import { registerAgentSession } from '../services/agent/agent-lifecycle';
 import {
@@ -12,7 +12,7 @@ import {
   type GenerationMetrics,
 } from '../services/agent/generation-telemetry';
 import type { AgentTraceEvent } from '../services/agent/loop';
-import { AGENT_PROVIDERS } from '../services/agent/providers';
+import { AGENT_PROVIDERS, CHATGPT_PROVIDER } from '../services/agent/providers';
 import {
   AgentSessionController,
   type AgentSessionSnapshot,
@@ -133,6 +133,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     available: false,
     authenticated: false,
   });
+  const [chatGptModel, setChatGptModel] = useState('');
   const [browserLogin, setBrowserLogin] = useState<ChatGptBrowserLogin | null>(null);
   const controllerRef = useRef<AgentSessionController | null>(null);
   const turnGenerationRef = useRef(0);
@@ -144,6 +145,20 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const store = useMemo(() => new AgentSessionStore(db), []);
   const provider =
     AGENT_PROVIDERS.find((candidate) => candidate.id === providerId) ?? AGENT_PROVIDERS[0];
+
+  const applyChatGptStatus = useCallback((status: ChatGptStatus): void => {
+    setChatGpt(status);
+    setChatGptModel((current) => {
+      const models = status.models ?? [];
+      const next =
+        models.find((model) => model.model === current)?.model ??
+        status.defaultModel ??
+        models[0]?.model ??
+        '';
+      CHATGPT_PROVIDER.setModel(next || null);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     const log = logRef.current;
@@ -167,13 +182,13 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     let cancelled = false;
     void readChatGptStatus()
       .then((status) => {
-        if (!cancelled) setChatGpt(status);
+        if (!cancelled) applyChatGptStatus(status);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyChatGptStatus]);
 
   useEffect(() => {
     const accountId = account?.id;
@@ -246,7 +261,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   async function refreshChatGpt(): Promise<boolean> {
     try {
       const status = await readChatGptStatus();
-      setChatGpt(status);
+      applyChatGptStatus(status);
       if (status.authenticated) {
         setBrowserLogin(null);
         setActivity('ChatGPT đã kết nối.');
@@ -534,17 +549,38 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
       <footer className="neko-foot">
         <label>
-          <span>Mô hình</span>
+          <span>Nguồn AI</span>
           <select
             value={providerId}
             onChange={(event) => void switchProvider(event.target.value)}
-            aria-label="Chọn mô hình cho Neko"
+            aria-label="Chọn nguồn AI cho Neko"
           >
             <option value="local">Local · Ollama</option>
             <option value="web">Gemma · trên thiết bị</option>
             <option value="chatgpt">ChatGPT{chatGpt.authenticated ? ' · đã kết nối' : ''}</option>
           </select>
         </label>
+        {providerId === 'chatgpt' && chatGpt.authenticated && (chatGpt.models?.length ?? 0) > 0 ? (
+          <label>
+            <span>Mô hình ChatGPT</span>
+            <select
+              value={chatGptModel}
+              onChange={(event) => {
+                const model = event.target.value;
+                setChatGptModel(model);
+                CHATGPT_PROVIDER.setModel(model);
+                setActivity(`Đã chọn ${event.target.selectedOptions[0]?.textContent ?? model}.`);
+              }}
+              aria-label="Chọn mô hình ChatGPT"
+            >
+              {chatGpt.models?.map((model) => (
+                <option key={model.id} value={model.model} title={model.description}>
+                  {model.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </footer>
     </aside>
   );

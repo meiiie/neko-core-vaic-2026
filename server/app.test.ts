@@ -111,16 +111,25 @@ describe('NekoPath API', () => {
         account: { type: 'chatgpt', email: 'teacher@example.test', planType: 'plus' },
         requiresOpenaiAuth: true,
       }),
+      models: async () => [
+        {
+          id: 'gpt-5.5',
+          model: 'gpt-5.5',
+          displayName: 'GPT 5.5',
+          description: 'Fast',
+          isDefault: true,
+        },
+      ],
       startLogin: async () => ({
         loginId: 'login-1',
         authUrl: 'https://auth.openai.com/authorize?client_id=codex',
       }),
-      complete: async (_accountId, _prompt, onDelta) => {
+      complete: async (_accountId, _prompt, onDelta, _signal, model) => {
         onDelta?.('Chỉ dựa ');
         onDelta?.('trên bằng chứng.');
         return {
           content: 'Chỉ dựa trên bằng chứng.',
-          modelId: 'gpt-5.5',
+          modelId: model ?? 'gpt-5.5',
           usage: { inputTokens: 12, outputTokens: 5 },
         };
       },
@@ -148,7 +157,13 @@ describe('NekoPath API', () => {
           cookies: teacher,
         })
       ).json(),
-    ).toMatchObject({ available: true, authenticated: true, planType: 'plus' });
+    ).toMatchObject({
+      available: true,
+      authenticated: true,
+      planType: 'plus',
+      defaultModel: 'gpt-5.5',
+      models: [{ model: 'gpt-5.5', displayName: 'GPT 5.5' }],
+    });
     expect(
       (
         await app.inject({
@@ -165,13 +180,13 @@ describe('NekoPath API', () => {
       method: 'POST',
       url: '/api/ai/chatgpt/complete',
       cookies: teacher,
-      payload: { prompt: 'Bằng chứng.' },
+      payload: { prompt: 'Bằng chứng.', model: 'gpt-5.6-sol' },
     });
     expect(streamed.headers['content-type']).toContain('text/event-stream');
     expect(streamed.body).toContain('event: delta');
     expect(streamed.body).toContain('Chỉ dựa ');
     expect(streamed.body).toContain('event: usage');
-    expect(streamed.body).toContain('"modelId":"gpt-5.5"');
+    expect(streamed.body).toContain('"modelId":"gpt-5.6-sol"');
 
     await app.inject({ method: 'POST', url: '/api/auth/logout', cookies: teacher });
     expect(logout).toHaveBeenCalledWith('user-teacher-ha');
@@ -187,6 +202,15 @@ describe('NekoPath API', () => {
         account: { type: 'chatgpt', planType: 'plus' },
         requiresOpenaiAuth: true,
       }),
+      models: async () => [
+        {
+          id: 'gpt-5.5',
+          model: 'gpt-5.5',
+          displayName: 'GPT 5.5',
+          description: '',
+          isDefault: true,
+        },
+      ],
       startLogin: async () => ({ loginId: 'login-1', authUrl: 'https://auth.openai.com/' }),
       complete: (_accountId, _prompt, onDelta, signal) =>
         new Promise((resolve, reject) => {

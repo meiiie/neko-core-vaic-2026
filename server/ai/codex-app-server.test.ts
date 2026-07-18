@@ -44,8 +44,22 @@ class FakeTransport implements CodexTransport {
         case 'model/list':
           this.reply(wire.id!, {
             data: [
-              { id: 'gpt-default', model: 'gpt-default', isDefault: true, hidden: false },
-              { id: 'gpt-5.5', model: 'gpt-5.5', isDefault: false, hidden: false },
+              {
+                id: 'gpt-default',
+                model: 'gpt-default',
+                displayName: 'GPT Default',
+                description: 'Recommended',
+                isDefault: true,
+                hidden: false,
+              },
+              {
+                id: 'gpt-5.5',
+                model: 'gpt-5.5',
+                displayName: 'GPT 5.5',
+                description: 'Previous generation',
+                isDefault: false,
+                hidden: false,
+              },
             ],
             nextCursor: null,
           });
@@ -129,8 +143,11 @@ describe('Codex App Server managed ChatGPT client', () => {
     await client.initialize();
     const deltas: string[] = [];
 
-    const answer = await client.complete('Dựa trên bằng chứng đã cung cấp.', (delta) =>
-      deltas.push(delta),
+    const answer = await client.complete(
+      'Dựa trên bằng chứng đã cung cấp.',
+      (delta) => deltas.push(delta),
+      undefined,
+      'gpt-5.5',
     );
 
     expect(answer).toEqual({
@@ -147,6 +164,33 @@ describe('Codex App Server managed ChatGPT client', () => {
       sandbox: 'read-only',
       ephemeral: true,
     });
+    const turnStart = transport.writes.find((message) => message.method === 'turn/start');
+    expect(turnStart?.params).toEqual({
+      threadId: 'thread-1',
+      input: [{ type: 'text', text: 'Dựa trên bằng chứng đã cung cấp.' }],
+      model: 'gpt-5.5',
+    });
+  });
+
+  it('exposes the authenticated model catalog for a real model picker', async () => {
+    const client = new CodexAppServerClient(new FakeTransport(), { cwd: 'C:\\isolated-empty' });
+
+    await expect(client.models()).resolves.toEqual([
+      {
+        id: 'gpt-default',
+        model: 'gpt-default',
+        displayName: 'GPT Default',
+        description: 'Recommended',
+        isDefault: true,
+      },
+      {
+        id: 'gpt-5.5',
+        model: 'gpt-5.5',
+        displayName: 'GPT 5.5',
+        description: 'Previous generation',
+        isDefault: false,
+      },
+    ]);
   });
 
   it('uses the catalog default when gpt-5.5 is absent and rejects a missing explicit model', async () => {
@@ -160,7 +204,16 @@ describe('Codex App Server managed ChatGPT client', () => {
           handler({
             id: wire.id,
             result: {
-              data: [{ id: 'gpt-default', model: 'gpt-default', isDefault: true, hidden: false }],
+              data: [
+                {
+                  id: 'gpt-default',
+                  model: 'gpt-default',
+                  displayName: 'GPT Default',
+                  description: '',
+                  isDefault: true,
+                  hidden: false,
+                },
+              ],
               nextCursor: null,
             },
           });

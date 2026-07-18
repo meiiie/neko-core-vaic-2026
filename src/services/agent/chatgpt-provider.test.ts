@@ -22,20 +22,58 @@ function evidenceMessages() {
 }
 
 describe('managed ChatGPT provider', () => {
-  it('uses the deterministic router for the tool-selection step', async () => {
-    const fetchImpl = vi.fn();
+  it('sends ordinary conversation to the selected model and streams it', async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      sseResponse(
+        'event: delta\ndata: {"text":"Xin "}\n\n' +
+          'event: delta\ndata: {"text":"chào cô Hà!"}\n\n' +
+          'event: done\ndata: {"content":"Xin chào cô Hà!","modelId":"gpt-5.6-sol"}\n\n',
+      ),
+    );
     const provider = new ChatGptAgentProvider(fetchImpl);
+    provider.setModel('gpt-5.6-sol');
+    const deltas: string[] = [];
 
     const result = await provider.complete(
+      [{ role: 'user', content: 'Xin chào' }],
+      AGENT_TOOLS,
+      undefined,
+      (delta) => deltas.push(delta),
+    );
+
+    expect(result.content).toBe('Xin chào cô Hà!');
+    expect(deltas).toEqual(['Xin ', 'chào cô Hà!']);
+    const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body)) as {
+      prompt: string;
+      model: string;
+    };
+    expect(body.model).toBe('gpt-5.6-sol');
+    expect(body.prompt).toContain('Xin chào');
+  });
+
+  it('lets the model select a browser tool without leaking its JSON into the transcript', async () => {
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      sseResponse(
+        'event: delta\ndata: {"text":"{\\"tool\\":\\"chan_doan_hoc_sinh\\","}\n\n' +
+          'event: delta\ndata: {"text":"\\"args\\":{\\"hoc_sinh\\":\\"an\\"}}"}\n\n' +
+          'event: done\ndata: {"content":"{\\"tool\\":\\"chan_doan_hoc_sinh\\",\\"args\\":{\\"hoc_sinh\\":\\"an\\"}}","modelId":"gpt-5.6-sol"}\n\n',
+      ),
+    );
+    const deltas: string[] = [];
+
+    const result = await new ChatGptAgentProvider(fetchImpl).complete(
       [{ role: 'user', content: 'Chẩn đoán An thế nào?' }],
       AGENT_TOOLS,
+      undefined,
+      (delta) => deltas.push(delta),
     );
 
     expect(result.toolCalls).toEqual([{ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: 'an' } }]);
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(deltas).toEqual([]);
+    expect(String(fetchImpl.mock.calls[0][1]?.body)).toContain('chan_doan_hoc_sinh');
   });
 
-  it('asks Codex App Server to synthesize only after deterministic evidence exists', async () => {
+  it('asks Codex App Server to synthesize after deterministic evidence exists', async () => {
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       sseResponse(
         'event: delta\ndata: {"text":"An cần củng cố "}\n\n' +
@@ -50,7 +88,7 @@ describe('managed ChatGPT provider', () => {
     expect(result.content).toContain('Phân số bằng nhau');
     const body = JSON.parse(String(fetchImpl.mock.calls[0][1]?.body)) as { prompt: string };
     expect(body.prompt).toContain('Phân số bằng nhau');
-    expect(body.prompt).toContain('Chỉ diễn giải');
+    expect(body.prompt).toContain('CÔNG CỤ ĐÃ CHẠY');
   });
 
   it('uses evidence retained in a compacted capsule for a contextual follow-up', async () => {

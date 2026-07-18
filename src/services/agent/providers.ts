@@ -412,6 +412,7 @@ import { WebLlmAgentProvider } from './webllm-provider';
 import { ChatGptAgentProvider } from './chatgpt-provider';
 
 export const INTERNAL_RULE_PROVIDER = new RuleBasedProvider();
+export const CHATGPT_PROVIDER = new ChatGptAgentProvider();
 
 export const AGENT_PROVIDERS: readonly AgentProvider[] = [
   new DeterministicFirstProvider(
@@ -424,5 +425,5 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     INTERNAL_RULE_PROVIDER,
   ),
   new DeterministicFirstProvider(new WebLlmAgentProvider(), INTERNAL_RULE_PROVIDER),
-  new DeterministicFirstProvider(new ChatGptAgentProvider(), INTERNAL_RULE_PROVIDER),
+  CHATGPT_PROVIDER,
 ];

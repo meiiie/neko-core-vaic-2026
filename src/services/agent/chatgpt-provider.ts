@@ -1,12 +1,21 @@
 import type { AgentChatMessage, AgentCompletion, AgentProvider } from './loop';
-import { parseCapsule } from './context-manager';
-import { routeRuleQuestion } from './rule-router';
+import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
+
+export interface ChatGptModel {
+  readonly id: string;
+  readonly model: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly isDefault: boolean;
+}
 
 export interface ChatGptStatus {
   readonly available: boolean;
   readonly authenticated: boolean;
   readonly planType?: string | null;
+  readonly models?: readonly ChatGptModel[];
+  readonly defaultModel?: string | null;
 }
 
 export interface ChatGptBrowserLogin {
@@ -39,18 +48,15 @@ export async function logoutChatGpt(fetchImpl: typeof fetch = fetch): Promise<vo
   await jsonRequest(fetchImpl, '/api/ai/chatgpt/logout', { method: 'POST' });
 }
 
-function hasEvidenceAfterLatestUser(messages: readonly AgentChatMessage[]): boolean {
-  const lastUser = messages.findLastIndex((message) => message.role === 'user');
-  if (messages.slice(lastUser + 1).some((message) => message.role === 'tool')) return true;
-  const latest = messages[lastUser]?.content.trim() ?? '';
-  const isContextualFollowUp = /^(vì sao|tại sao|giải thích thêm)\??$/i.test(latest);
-  return (
-    isContextualFollowUp &&
-    messages.some((message) => (parseCapsule(message)?.evidence.length ?? 0) > 0)
+function agentPrompt(messages: readonly AgentChatMessage[], tools: readonly AgentTool[]): string {
+  const executedTools = new Set(
+    messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
   );
-}
-
-function synthesisPrompt(messages: readonly AgentChatMessage[]): string {
+  const toolMenu = tools
+    .map(
+      (tool) => `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.inputJsonSchema)}`,
+    )
+    .join('\n');
   const transcript = messages
     .map((message) => {
       if (message.role === 'tool') {
@@ -60,8 +66,15 @@ function synthesisPrompt(messages: readonly AgentChatMessage[]): string {
     })
     .join('\n\n');
   return (
-    'Chỉ diễn giải bằng chứng deterministic bên dưới. Không dùng công cụ khác, không bịa số liệu. ' +
-    'Nếu bằng chứng không đủ thì nói rõ. Trả lời tiếng Việt ngắn gọn cho giáo viên.\n\n' +
+    'Bạn là NekoPath, trợ lý hội thoại cho giáo viên. Trả lời tự nhiên bằng tiếng Việt, chỉ dùng văn bản thuần, không Markdown. ' +
+    'Với trò chuyện thông thường, hãy trả lời trực tiếp như một trợ lý thật. ' +
+    'Khi câu hỏi cần dữ liệu lớp, học sinh, kiến thức hoặc bài đã giao mà chưa có kết quả công cụ, ' +
+    'chỉ trả về đúng một JSON {"tool":"<tên>","args":{...}} và không thêm văn bản. ' +
+    'Khi đã có BẰNG CHỨNG, không gọi lại công cụ đó; hãy tổng hợp câu trả lời từ bằng chứng và không bịa số liệu.\n\n' +
+    `CÔNG CỤ KHẢ DỤNG:\n${toolMenu}\n\n` +
+    (executedTools.size > 0
+      ? `CÔNG CỤ ĐÃ CHẠY: ${[...executedTools].join(', ')}. Hãy trả lời từ kết quả, không xuất JSON gọi lại.\n\n`
+      : '') +
     transcript
   );
 }
@@ -114,22 +127,28 @@ export class ChatGptAgentProvider implements AgentProvider {
   readonly id = 'chatgpt';
   readonly label = 'ChatGPT đã đăng nhập (Codex App Server)';
   readonly contextWindow = 128_000;
-  constructor(private readonly fetchImpl: typeof fetch = fetch) {}
+  private selectedModel: string | null = null;
+
+  constructor(private readonly fetchImpl?: typeof fetch) {}
+
+  setModel(model: string | null): void {
+    this.selectedModel = model;
+  }
 
   async complete(
     messages: readonly AgentChatMessage[],
-    _tools: readonly AgentTool[],
+    tools: readonly AgentTool[],
     signal?: AbortSignal,
     onDelta?: (text: string) => void,
   ): Promise<AgentCompletion> {
-    if (!hasEvidenceAfterLatestUser(messages)) {
-      return routeRuleQuestion(messages);
-    }
-    const response = await this.fetchImpl('/api/ai/chatgpt/complete', {
+    const response = await (this.fetchImpl ?? fetch)('/api/ai/chatgpt/complete', {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt: synthesisPrompt(messages) }),
+      body: JSON.stringify({
+        prompt: agentPrompt(messages, tools),
+        ...(this.selectedModel ? { model: this.selectedModel } : {}),
+      }),
       signal,
     });
     if (!response.ok) {
@@ -142,6 +161,8 @@ export class ChatGptAgentProvider implements AgentProvider {
     let modelId = 'chatgpt';
     let usage: AgentCompletion['usage'];
     let streamError: Error | null = null;
+    let pendingVisibleText = '';
+    let visibilityDecided = false;
     await readSse(response, ({ event, data }) => {
       let value: Record<string, unknown>;
       try {
@@ -151,7 +172,17 @@ export class ChatGptAgentProvider implements AgentProvider {
       }
       if (event === 'delta' && typeof value.text === 'string') {
         content += value.text;
-        onDelta?.(value.text);
+        if (visibilityDecided) {
+          onDelta?.(value.text);
+        } else {
+          pendingVisibleText += value.text;
+          const first = pendingVisibleText.trimStart().charAt(0);
+          if (first && first !== '{' && first !== '`') {
+            visibilityDecided = true;
+            onDelta?.(pendingVisibleText);
+            pendingVisibleText = '';
+          }
+        }
       } else if (event === 'usage') {
         const inputTokens = Number(value.inputTokens);
         const outputTokens = Number(value.outputTokens);
@@ -173,8 +204,23 @@ export class ChatGptAgentProvider implements AgentProvider {
       }
     });
     if (streamError) throw streamError;
+    const answer = content || finalContent;
+    const executedTools = new Set(
+      messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
+    );
+    const envelope = parseJsonToolEnvelope(answer);
+    if (envelope && !executedTools.has(envelope.name)) {
+      return {
+        content: null,
+        toolCalls: [envelope],
+        finishReason: 'tool_call',
+        usage,
+        modelId,
+      };
+    }
+    if (!visibilityDecided && answer) onDelta?.(answer);
     return {
-      content: content || finalContent || null,
+      content: answer || null,
       toolCalls: [],
       finishReason: 'stop',
       usage,

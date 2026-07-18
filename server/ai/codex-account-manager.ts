@@ -7,6 +7,7 @@ import {
   type CodexAccountResult,
   type CodexBrowserLogin,
   type CodexCompletion,
+  type CodexModelInfo,
 } from './codex-app-server.ts';
 import type { CodexManagerPort } from './codex-routes.ts';
 
@@ -54,13 +55,18 @@ export class CodexAccountManager implements CodexManagerPort {
     return this.client(accountId).startBrowserLogin();
   }
 
+  async models(accountId: string): Promise<readonly CodexModelInfo[]> {
+    return this.client(accountId).models();
+  }
+
   async complete(
     accountId: string,
     prompt: string,
     onDelta?: (delta: string) => void,
     signal?: AbortSignal,
+    model?: string,
   ): Promise<CodexCompletion> {
-    return this.client(accountId).complete(prompt, onDelta, signal);
+    return this.client(accountId).complete(prompt, onDelta, signal, model);
   }
 
   async logout(accountId: string): Promise<void> {

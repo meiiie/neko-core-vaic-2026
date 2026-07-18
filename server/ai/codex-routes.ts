@@ -1,16 +1,23 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { CodexAccountResult, CodexBrowserLogin, CodexCompletion } from './codex-app-server.ts';
+import type {
+  CodexAccountResult,
+  CodexBrowserLogin,
+  CodexCompletion,
+  CodexModelInfo,
+} from './codex-app-server.ts';
 
 export interface CodexManagerPort {
   isEnabled(): boolean;
   status(accountId: string): Promise<CodexAccountResult>;
+  models(accountId: string): Promise<readonly CodexModelInfo[]>;
   startLogin(accountId: string): Promise<CodexBrowserLogin>;
   complete(
     accountId: string,
     prompt: string,
     onDelta?: (delta: string) => void,
     signal?: AbortSignal,
+    model?: string,
   ): Promise<CodexCompletion>;
   logout(accountId: string): Promise<void>;
   disposeAll(): void;
@@ -20,7 +27,12 @@ interface TeacherIdentity {
   readonly id: string;
 }
 
-const completionSchema = z.object({ prompt: z.string().min(1).max(30_000) }).strict();
+const completionSchema = z
+  .object({
+    prompt: z.string().min(1).max(30_000),
+    model: z.string().min(1).max(120).optional(),
+  })
+  .strict();
 
 function sseEvent(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -37,10 +49,14 @@ export function registerCodexRoutes(
     if (!manager.isEnabled()) return { available: false, authenticated: false };
     try {
       const state = await manager.status(teacher.id);
+      const authenticated = state.account?.type === 'chatgpt';
+      const models = authenticated ? await manager.models(teacher.id) : [];
       return {
         available: true,
-        authenticated: state.account?.type === 'chatgpt',
+        authenticated,
         planType: state.account?.planType ?? null,
+        models,
+        defaultModel: models.find((model) => model.isDefault)?.model ?? models[0]?.model ?? null,
       };
     } catch {
       return reply.code(503).send({ error: 'CODEX_APP_SERVER_UNAVAILABLE' });
@@ -93,6 +109,7 @@ export function registerCodexRoutes(
           }
         },
         controller.signal,
+        parsed.data.model,
       );
       if (result.usage) reply.raw.write(sseEvent('usage', result.usage));
       reply.raw.write(sseEvent('done', { content: result.content, modelId: result.modelId }));

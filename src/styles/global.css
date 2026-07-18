@@ -3426,6 +3426,8 @@ html:has(.question-selection-actions) {
 }
 
 .neko-foot {
+  display: grid;
+  gap: 0.5rem;
   padding: 0.25rem 1.25rem 1rem;
   font-size: 0.8125rem;
 }
@@ -3442,6 +3444,7 @@ html:has(.question-selection-actions) {
 
 .neko-foot select {
   font: inherit;
+  max-width: 68%;
   min-height: 2.75rem;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--rule, #e4e7ec);

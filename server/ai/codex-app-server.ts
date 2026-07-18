@@ -132,12 +132,16 @@ export interface CodexCompletion {
   readonly usage?: CodexUsage;
 }
 
-interface CodexModel {
+export interface CodexModelInfo {
   readonly id: string;
   readonly model: string;
-  readonly displayName?: string;
+  readonly displayName: string;
+  readonly description: string;
+  readonly isDefault: boolean;
+}
+
+interface CodexModel extends CodexModelInfo {
   readonly hidden?: boolean;
-  readonly isDefault?: boolean;
 }
 
 interface PendingRequest {
@@ -153,9 +157,9 @@ interface PendingTurn {
 }
 
 const DEVELOPER_INSTRUCTIONS =
-  'Bạn là NekoPath, trợ lý quyết định cho giáo viên. Chỉ diễn giải bằng chứng deterministic ' +
-  'được gửi trong nội dung người dùng. Không đọc tệp, không chạy lệnh, không sửa dữ liệu, không ' +
-  'dùng web và không bịa số liệu. Trả lời tiếng Việt ngắn gọn; nếu thiếu bằng chứng, nói rõ.';
+  'You are NekoPath, a conversational teaching assistant. Reply naturally in Vietnamese using plain text, not Markdown. ' +
+  'For claims about a class, learner, assignment, or curriculum, use only evidence included in the prompt. ' +
+  'Never invent school data. Do not read files, run commands, edit data, or browse the web.';
 
 export class CodexAppServerClient {
   private nextId = 1;
@@ -169,7 +173,7 @@ export class CodexAppServerClient {
   private readonly completionWaiters = new Map<string, PendingTurn>();
   private readonly transport: CodexTransport;
   private readonly options: { readonly cwd: string; readonly model?: string };
-  private selectedModel: string | null = null;
+  private modelCatalog: readonly CodexModelInfo[] | null = null;
 
   constructor(
     transport: CodexTransport,
@@ -212,13 +216,39 @@ export class CodexAppServerClient {
     };
   }
 
+  async models(): Promise<readonly CodexModelInfo[]> {
+    await this.initialize();
+    if (this.modelCatalog) return this.modelCatalog;
+    const models: CodexModel[] = [];
+    let cursor: string | null | undefined;
+    do {
+      const page = (await this.request('model/list', {
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      })) as { data?: CodexModel[]; nextCursor?: string | null };
+      models.push(...(page.data ?? []));
+      cursor = page.nextCursor;
+    } while (cursor);
+    this.modelCatalog = models
+      .filter((model) => !model.hidden)
+      .map((model) => ({
+        id: model.id,
+        model: model.model,
+        displayName: model.displayName || model.model || model.id,
+        description: model.description || '',
+        isDefault: model.isDefault === true,
+      }));
+    return this.modelCatalog;
+  }
+
   async complete(
     prompt: string,
     onDelta?: (delta: string) => void,
     signal?: AbortSignal,
+    requestedModel?: string,
   ): Promise<CodexCompletion> {
     await this.initialize();
-    const model = await this.resolveModel();
+    const model = await this.resolveModel(requestedModel);
     const thread = (await this.request('thread/start', {
       model,
       cwd: this.options.cwd,
@@ -231,16 +261,7 @@ export class CodexAppServerClient {
     const started = (await this.request('turn/start', {
       threadId: thread.thread.id,
       input: [{ type: 'text', text: prompt }],
-      cwd: this.options.cwd,
-      approvalPolicy: 'never',
-      sandboxPolicy: {
-        type: 'readOnly',
-        access: {
-          type: 'restricted',
-          includePlatformDefaults: true,
-          readableRoots: [this.options.cwd],
-        },
-      },
+      model,
     })) as { turn: { id: string } };
     const turnId = started.turn.id;
     if (onDelta) {
@@ -308,38 +329,22 @@ export class CodexAppServerClient {
     });
   }
 
-  private async resolveModel(): Promise<string> {
-    if (this.selectedModel) return this.selectedModel;
-    const models: CodexModel[] = [];
-    let cursor: string | null | undefined;
-    do {
-      const page = (await this.request('model/list', {
-        limit: 100,
-        ...(cursor ? { cursor } : {}),
-      })) as { data?: CodexModel[]; nextCursor?: string | null };
-      models.push(...(page.data ?? []));
-      cursor = page.nextCursor;
-    } while (cursor);
-    const visible = models.filter((model) => !model.hidden);
+  private async resolveModel(requestedModel?: string): Promise<string> {
+    const visible = await this.models();
     if (visible.length === 0) throw new Error('Tài khoản ChatGPT không có model khả dụng.');
 
-    if (this.options.model) {
+    const configured = requestedModel || this.options.model;
+    if (configured) {
       const explicit = visible.find(
-        (model) => model.model === this.options.model || model.id === this.options.model,
+        (model) => model.model === configured || model.id === configured,
       );
       if (!explicit) {
-        throw new Error(`Model cấu hình không có trong catalog: ${this.options.model}`);
+        throw new Error(`Model cấu hình không có trong catalog: ${configured}`);
       }
-      this.selectedModel = explicit.model;
-      return this.selectedModel;
+      return explicit.model;
     }
 
-    const selected =
-      visible.find((model) => model.model === 'gpt-5.5' || model.id === 'gpt-5.5') ??
-      visible.find((model) => model.isDefault) ??
-      visible[0];
-    this.selectedModel = selected.model;
-    return this.selectedModel;
+    return (visible.find((model) => model.isDefault) ?? visible[0]).model;
   }
 
   private waitForTurn(turnId: string): Promise<{ status: string; error?: string }> {
