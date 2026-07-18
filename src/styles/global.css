@@ -3201,7 +3201,7 @@ html:has(.question-selection-actions) {
   }
 }
 
-/* ---------- Neko panel (product-grade, Gemini-calibre) ---------- */
+/* ---------- Neko panel ---------- */
 
 .neko-panel {
   position: fixed;
@@ -3214,7 +3214,7 @@ html:has(.question-selection-actions) {
   flex-direction: column;
   border-left: 1px solid var(--rule, #e4e7ec);
   background: var(--surface, #fff);
-  box-shadow: -0.75rem 0 2rem rgb(16 24 40 / 10%);
+  box-shadow: -0.5rem 0 1.5rem rgb(16 24 40 / 8%);
 }
 
 .neko-panel-head {
@@ -3240,21 +3240,21 @@ html:has(.question-selection-actions) {
   height: 2.25rem;
   align-items: center;
   justify-content: center;
-  border-radius: 0.625rem;
-  background: var(--primary-soft, #eff4ff);
-  color: var(--primary, #155eef);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--primary, #006c62) 10%, transparent);
+  color: var(--primary, #006c62);
   font-size: 1.125rem;
 }
 
 .neko-scroll {
   flex: 1;
-  padding: 1.25rem;
+  padding: 1.5rem 1.25rem;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
 .neko-hello h2 {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
   margin-bottom: 0.5rem;
 }
 
@@ -3273,26 +3273,21 @@ html:has(.question-selection-actions) {
   min-height: 2.75rem;
   padding: 0.5rem 1rem;
   border: 1px solid var(--rule, #e4e7ec);
-  border-radius: 999px;
-  background: var(--surface-subtle, #f9fafb);
+  border-radius: 0.875rem;
+  background: transparent;
   color: var(--ink, #101828);
   cursor: pointer;
   text-align: left;
-  transition:
-    background-color 150ms ease,
-    border-color 150ms ease;
+  transition: background-color 150ms ease;
 }
 
 .neko-chip:hover {
-  border-color: var(--primary, #155eef);
-  background: var(--primary-soft, #eff4ff);
+  background: var(--surface-subtle, #f9fafb);
 }
 
 .neko-msg {
-  max-width: 92%;
-  margin-bottom: 0.875rem;
-  padding: 0.75rem 1rem;
-  border-radius: 1rem;
+  max-width: 94%;
+  margin-bottom: 1rem;
   line-height: 1.5;
 }
 
@@ -3302,17 +3297,22 @@ html:has(.question-selection-actions) {
 }
 
 .neko-msg--user {
+  width: fit-content;
   margin-left: auto;
-  border-bottom-right-radius: 0.25rem;
-  background: var(--primary, #155eef);
+  padding: 0.6875rem 0.875rem;
+  border-radius: 0.875rem 0.875rem 0.25rem;
+  background: var(--ink, #101828);
   color: #fff;
 }
 
 .neko-msg--assistant {
   margin-right: auto;
-  border-bottom-left-radius: 0.25rem;
-  border: 1px solid var(--rule, #e4e7ec);
-  background: var(--surface-subtle, #f9fafb);
+  padding: 0.25rem 0;
+  color: var(--ink, #101828);
+}
+
+.neko-msg--live {
+  color: var(--muted-strong, #475467);
 }
 
 .neko-sources {
@@ -3337,7 +3337,46 @@ html:has(.question-selection-actions) {
   color: var(--review, #b54708);
 }
 
+.neko-metrics {
+  margin-top: 0.5rem;
+  color: var(--muted, #667085);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.neko-metrics > span {
+  display: block;
+}
+
+.neko-metrics details {
+  margin-top: 0.25rem;
+}
+
+.neko-metrics summary {
+  min-height: 1.75rem;
+  cursor: pointer;
+}
+
+.neko-metrics dl {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.25rem 0 0;
+}
+
+.neko-metrics dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.neko-metrics dd {
+  margin: 0;
+  color: var(--muted-strong, #475467);
+  text-align: right;
+}
+
 .neko-progress {
+  margin: 0.75rem 0;
   color: var(--muted, #667085);
   font-size: 0.8125rem;
   text-align: center;
@@ -3356,12 +3395,20 @@ html:has(.question-selection-actions) {
   padding: 0.75rem;
   border: 1px solid var(--rule, #e4e7ec);
   border-radius: 0.75rem;
-  background: var(--surface-muted, #f8fafc);
+  background: var(--surface-subtle, #f9fafb);
   font-size: 0.8125rem;
 }
 
-.neko-login .button-secondary {
-  justify-self: start;
+.neko-login > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.neko-login a {
+  color: var(--primary, #006c62);
+  font-weight: 650;
 }
 
 .neko-input-row input {
@@ -3379,28 +3426,34 @@ html:has(.question-selection-actions) {
 }
 
 .neko-foot {
+  padding: 0.25rem 1.25rem 1rem;
+  font-size: 0.8125rem;
+}
+
+.neko-foot label {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.375rem 1.25rem 0.875rem;
-  font-size: 0.75rem;
-}
-
-.neko-foot label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
+  width: 100%;
   color: var(--muted, #667085);
   font-weight: 600;
 }
 
 .neko-foot select {
   font: inherit;
-  padding: 0.25rem 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
   border: 1px solid var(--rule, #e4e7ec);
   border-radius: 0.5rem;
   background: var(--surface, #fff);
+}
+
+.neko-chip:focus-visible,
+.neko-foot select:focus-visible,
+.neko-login a:focus-visible {
+  outline: 2px solid var(--primary, #006c62);
+  outline-offset: 2px;
 }
 
 @media (min-width: 75rem) {

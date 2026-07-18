@@ -4,9 +4,13 @@ import { registerAgentSession } from '../services/agent/agent-lifecycle';
 import {
   readChatGptStatus,
   startChatGptLogin,
-  type ChatGptDeviceLogin,
+  type ChatGptBrowserLogin,
   type ChatGptStatus,
 } from '../services/agent/chatgpt-provider';
+import {
+  GenerationTelemetry,
+  type GenerationMetrics,
+} from '../services/agent/generation-telemetry';
 import type { AgentTraceEvent } from '../services/agent/loop';
 import { AGENT_PROVIDERS } from '../services/agent/providers';
 import {
@@ -15,11 +19,11 @@ import {
 } from '../services/agent/session-controller';
 import { AgentSessionStore } from '../services/agent/session-store';
 import { AGENT_TOOLS } from '../services/agent/tools';
-import { isWebLlmCached, setWebLlmProgressListener } from '../services/agent/webllm-provider';
+import { setWebLlmProgressListener } from '../services/agent/webllm-provider';
 import { db } from '../storage/db';
 
 interface TraceLine {
-  readonly kind: 'call' | 'result' | 'note';
+  readonly kind: 'source' | 'note';
   readonly text: string;
 }
 
@@ -28,19 +32,22 @@ interface ChatMessage {
   readonly role: 'user' | 'assistant';
   readonly text: string;
   readonly trace?: readonly TraceLine[];
-}
-
-interface ProviderAvailability {
-  readonly openai: boolean;
-  readonly chatgpt: ChatGptStatus;
+  readonly metrics?: GenerationMetrics;
+  readonly fallback?: boolean;
 }
 
 const SUGGESTIONS = [
   'Hôm nay nên dạy lại gì cho lớp?',
   'Chẩn đoán của bạn An thế nào?',
   'Tiến độ các bài đã giao?',
-  'Giải thích kiến thức K02',
 ];
+
+const TOOL_LABELS: Readonly<Record<string, string>> = {
+  tong_quan_lop: 'Tổng quan lớp',
+  chan_doan_hoc_sinh: 'Hồ sơ học sinh',
+  giai_thich_kien_thuc: 'Bản đồ kiến thức',
+  bai_duoc_giao: 'Bài đã giao',
+};
 
 let messageId = 0;
 function nextId(): number {
@@ -58,6 +65,61 @@ function displayMessages(snapshot: AgentSessionSnapshot): ChatMessage[] {
   });
 }
 
+function duration(value: number): string {
+  return value < 1_000 ? `${Math.round(value)} ms` : `${(value / 1_000).toFixed(1)} s`;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
+}
+
+function Metrics({ metrics, fallback }: { metrics: GenerationMetrics; fallback?: boolean }) {
+  const compact = fallback
+    ? `Dự phòng cục bộ · Tổng ${duration(metrics.totalMs)}`
+    : [
+        metrics.ttftMs === null ? null : `TTFT ${duration(metrics.ttftMs)}`,
+        metrics.tokensPerSecond === null ? null : `${metrics.tokensPerSecond.toFixed(1)} tok/s`,
+        `Tổng ${duration(metrics.totalMs)}`,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+  return (
+    <div className="neko-metrics">
+      <span>{compact}</span>
+      {!fallback && metrics.outputTokens !== null ? (
+        <details>
+          <summary>Chi tiết</summary>
+          <dl>
+            <div>
+              <dt>Token đầu hiển thị</dt>
+              <dd>{metrics.firstFlushMs === null ? '—' : duration(metrics.firstFlushMs)}</dd>
+            </div>
+            <div>
+              <dt>Token đầu ra</dt>
+              <dd>{metrics.outputTokens}</dd>
+            </div>
+            <div>
+              <dt>TPOT</dt>
+              <dd>{metrics.tpotMs === null ? '—' : duration(metrics.tpotMs)}</dd>
+            </div>
+            <div>
+              <dt>ITL p50 / p99 / max</dt>
+              <dd>
+                {metrics.interTokenLatencyMs
+                  ? `${duration(metrics.interTokenLatencyMs.p50)} / ${duration(metrics.interTokenLatencyMs.p99)} / ${duration(metrics.interTokenLatencyMs.max)}`
+                  : '—'}
+              </dd>
+            </div>
+          </dl>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { account } = useSession();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -65,15 +127,18 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const [busy, setBusy] = useState(false);
   const [controllerReady, setControllerReady] = useState(false);
   const [streamText, setStreamText] = useState('');
-  const [progressNote, setProgressNote] = useState<string | null>(null);
-  const [providerId, setProviderId] = useState('rule');
-  const [availability, setAvailability] = useState<ProviderAvailability>({
-    openai: false,
-    chatgpt: { available: false, authenticated: false },
+  const [activity, setActivity] = useState<string | null>(null);
+  const [providerId, setProviderId] = useState('local');
+  const [chatGpt, setChatGpt] = useState<ChatGptStatus>({
+    available: false,
+    authenticated: false,
   });
-  const [deviceLogin, setDeviceLogin] = useState<ChatGptDeviceLogin | null>(null);
+  const [browserLogin, setBrowserLogin] = useState<ChatGptBrowserLogin | null>(null);
   const controllerRef = useRef<AgentSessionController | null>(null);
-  const stoppedRef = useRef(false);
+  const turnGenerationRef = useRef(0);
+  const stoppedByUserRef = useRef(false);
+  const bufferedTextRef = useRef('');
+  const frameRef = useRef<number | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const store = useMemo(() => new AgentSessionStore(db), []);
@@ -82,42 +147,29 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
   useEffect(() => {
     const log = logRef.current;
-    if (log && typeof log.scrollTo === 'function') {
-      log.scrollTo({ top: log.scrollHeight, behavior: 'smooth' });
-    }
-  }, [messages, streamText]);
+    if (!log || typeof log.scrollTo !== 'function') return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    log.scrollTo({
+      top: log.scrollHeight,
+      behavior: busy || reduceMotion ? 'auto' : 'smooth',
+    });
+  }, [busy, messages, streamText]);
 
   useEffect(() => {
     setWebLlmProgressListener(({ progress }) => {
-      setProgressNote(`Đang nạp Gemma trong trình duyệt… ${Math.round(progress * 100)}%`);
-      if (progress >= 1) setProgressNote(null);
+      setActivity(`Đang tải Gemma trên thiết bị… ${Math.round(progress * 100)}%`);
+      if (progress >= 1) setActivity('Gemma đã sẵn sàng trên thiết bị.');
     });
     return () => setWebLlmProgressListener(null);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      let openai = false;
-      try {
-        const response = await fetch('/api/ai/providers', { credentials: 'include' });
-        if (response.ok) {
-          const body = (await response.json()) as {
-            providers: { id: string; available: boolean }[];
-          };
-          openai = body.providers.find((item) => item.id === 'openai')?.available ?? false;
-        }
-      } catch {
-        // Remote providers remain unavailable; offline providers still work.
-      }
-      let chatgpt: ChatGptStatus = { available: false, authenticated: false };
-      try {
-        chatgpt = await readChatGptStatus();
-      } catch {
-        // Optional local/self-hosted provider.
-      }
-      if (!cancelled) setAvailability({ openai, chatgpt });
-    })();
+    void readChatGptStatus()
+      .then((status) => {
+        if (!cancelled) setChatGpt(status);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -161,6 +213,10 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     })();
     return () => {
       cancelled = true;
+      turnGenerationRef.current += 1;
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      bufferedTextRef.current = '';
       unregister();
       if (controllerRef.current === controller) controllerRef.current = null;
       controller?.abort('scope changed');
@@ -169,7 +225,16 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   }, [account?.id, provider, store]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      turnGenerationRef.current += 1;
+      controllerRef.current?.abort('dock closed');
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      bufferedTextRef.current = '';
+      setStreamText('');
+      setBusy(false);
+      return;
+    }
     inputRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
@@ -180,71 +245,81 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
   async function refreshChatGpt(): Promise<boolean> {
     try {
-      const chatgpt = await readChatGptStatus();
-      setAvailability((current) => ({ ...current, chatgpt }));
-      if (chatgpt.authenticated) {
-        setDeviceLogin(null);
+      const status = await readChatGptStatus();
+      setChatGpt(status);
+      if (status.authenticated) {
+        setBrowserLogin(null);
+        setActivity('ChatGPT đã kết nối.');
         setProviderId('chatgpt');
         return true;
       }
     } catch {
-      // The message below is more useful than a raw transport error.
+      // A concise status below is more useful than transport details.
     }
-    setProgressNote('ChatGPT chưa xác nhận đăng nhập. Hoàn tất mã thiết bị rồi kiểm tra lại.');
+    setActivity('Chưa hoàn tất đăng nhập ChatGPT. Hãy hoàn tất trong cửa sổ vừa mở.');
     return false;
   }
 
-  async function switchProvider(id: string) {
-    if (busy) controllerRef.current?.abort('provider switched');
-    if (id === 'web' && !(await isWebLlmCached())) {
-      setMessages((previous) => [
-        ...previous,
-        {
-          id: nextId(),
-          role: 'assistant',
-          text: 'Gemma chưa được tải đủ. Vào «Dữ liệu & ngoại tuyến» để tải trước khi chọn chế độ này.',
-        },
-      ]);
-      return;
-    }
-    if (id === 'openai' && !availability.openai) {
-      setProgressNote('OpenAI Responses chưa được cấu hình ở máy chủ.');
-      return;
-    }
-    if (id === 'chatgpt' && !availability.chatgpt.authenticated) {
+  function abandonTurn(reason: string): void {
+    turnGenerationRef.current += 1;
+    stoppedByUserRef.current = false;
+    controllerRef.current?.abort(reason);
+    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    bufferedTextRef.current = '';
+    setStreamText('');
+    setBusy(false);
+  }
+
+  async function switchProvider(id: string): Promise<void> {
+    if (busy) abandonTurn('provider switched');
+    if (id === 'chatgpt' && !chatGpt.authenticated) {
+      const popup = window.open('', '_blank');
+      if (popup) popup.opener = null;
+      setActivity('Đang tạo phiên đăng nhập ChatGPT…');
       try {
         const login = await startChatGptLogin();
-        setDeviceLogin(login);
-        setProgressNote(null);
+        setBrowserLogin(login);
+        if (popup && !popup.closed) popup.location.assign(login.authUrl);
+        setActivity('Hoàn tất đăng nhập trong cửa sổ ChatGPT, rồi kiểm tra lại.');
       } catch (error) {
-        setProgressNote(
-          error instanceof Error ? error.message : 'Không mở được đăng nhập ChatGPT.',
-        );
+        popup?.close();
+        setActivity(error instanceof Error ? error.message : 'Không thể mở đăng nhập ChatGPT.');
       }
       return;
     }
-    setProgressNote(null);
+    setBrowserLogin(null);
+    setActivity(id === 'web' ? 'Gemma sẽ được tải tại đây khi bạn gửi câu hỏi đầu tiên.' : null);
     setProviderId(id);
   }
 
-  async function ask(raw: string) {
+  async function ask(raw: string): Promise<void> {
     const question = raw.trim();
     const controller = controllerRef.current;
     if (!question || busy || !controller) return;
+    const generation = ++turnGenerationRef.current;
+    const telemetry = new GenerationTelemetry();
+    stoppedByUserRef.current = false;
+    bufferedTextRef.current = '';
     setMessages((previous) => [...previous, { id: nextId(), role: 'user', text: question }]);
     setBusy(true);
-    stoppedRef.current = false;
     setStreamText('');
+    setActivity('Đang chuẩn bị…');
     const trace: TraceLine[] = [];
     const beforeCompactions = controller.snapshot().compactionCount;
     const onTrace = (event: AgentTraceEvent) => {
+      if (generation !== turnGenerationRef.current) return;
       if (event.kind === 'tool_call') {
+        setActivity('Đang kiểm tra dữ liệu lớp…');
         trace.push({
-          kind: 'call',
-          text: `Kiểm tra: ${event.name}(${JSON.stringify(event.args)})`,
+          kind: 'source',
+          text: `Kiểm tra ${TOOL_LABELS[event.name] ?? 'dữ liệu hệ thống'}`,
         });
       } else if (event.kind === 'tool_result') {
-        trace.push({ kind: 'result', text: `${event.name} → ${event.summary}` });
+        trace.push({
+          kind: event.ok ? 'source' : 'note',
+          text: `${TOOL_LABELS[event.name] ?? 'Dữ liệu hệ thống'} · ${event.ok ? 'đã đối chiếu' : 'không khả dụng'}`,
+        });
       } else if (event.kind === 'note') {
         trace.push({ kind: 'note', text: event.text });
       }
@@ -252,46 +327,87 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     try {
       const result = await controller.run(question, {
         onTrace,
-        onDelta: (delta) => setStreamText((current) => current + delta),
+        onDelta: (delta) => {
+          if (generation !== turnGenerationRef.current || stoppedByUserRef.current) return;
+          telemetry.recordDelta();
+          bufferedTextRef.current += delta;
+          setActivity('Đang trả lời…');
+          if (frameRef.current !== null) return;
+          frameRef.current = window.requestAnimationFrame(() => {
+            frameRef.current = null;
+            if (generation !== turnGenerationRef.current || stoppedByUserRef.current) return;
+            telemetry.recordFlush();
+            setStreamText(bufferedTextRef.current);
+          });
+        },
       });
+      if (generation !== turnGenerationRef.current || stoppedByUserRef.current) return;
+      if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+      if (bufferedTextRef.current && !result.fallback) {
+        telemetry.recordFlush();
+        setStreamText(bufferedTextRef.current);
+      }
       const snapshot = controller.snapshot();
       if (snapshot.compactionCount > beforeCompactions) {
         trace.push({
           kind: 'note',
-          text: `Đã nén ngữ cảnh theo ngân sách token (lần ${snapshot.compactionCount}); không xóa theo số lượt.`,
+          text: `Đã nén ngữ cảnh theo ngân sách token · lần ${snapshot.compactionCount}.`,
         });
       }
       await store.save(snapshot, provider.id).catch(() => undefined);
+      if (generation !== turnGenerationRef.current) return;
+      const metrics = telemetry.finish(result.displayUsage);
       setMessages((previous) => [
         ...previous,
-        { id: nextId(), role: 'assistant', text: result.text, trace },
+        {
+          id: nextId(),
+          role: 'assistant',
+          text: result.text,
+          trace,
+          metrics,
+          fallback: result.fallback,
+        },
       ]);
+      setActivity(result.fallback ? 'Đã trả lời bằng dữ liệu cục bộ.' : null);
     } catch (error) {
-      if (stoppedRef.current) {
+      if (generation !== turnGenerationRef.current) return;
+      if (stoppedByUserRef.current) {
         setMessages((previous) => [
           ...previous,
           { id: nextId(), role: 'assistant', text: 'Đã dừng lượt đang xử lý.' },
         ]);
-      } else {
+        setActivity('Đã dừng.');
+      } else if (!isAbortError(error)) {
         setMessages((previous) => [
           ...previous,
           {
             id: nextId(),
             role: 'assistant',
-            text: `Không xử lý được: ${error instanceof Error ? error.message : 'lỗi không rõ'}${provider.id === 'local' ? '. Ollama đã chạy chưa? (ollama serve)' : ''}`,
+            text: `Không thể xử lý: ${error instanceof Error ? error.message : 'lỗi không rõ'}`,
           },
         ]);
+        setActivity('Có lỗi khi xử lý.');
       }
     } finally {
-      setStreamText('');
-      setBusy(false);
-      inputRef.current?.focus();
+      if (generation === turnGenerationRef.current) {
+        if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+        bufferedTextRef.current = '';
+        setStreamText('');
+        setBusy(false);
+        inputRef.current?.focus();
+      }
     }
   }
 
   function stop(): void {
-    stoppedRef.current = true;
-    controllerRef.current?.abort('user stopped');
+    stoppedByUserRef.current = true;
+    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    bufferedTextRef.current = '';
+    setStreamText('');
+    controllerRef.current?.abort(new DOMException('Stopped', 'AbortError'));
   }
 
   if (!open) return null;
@@ -305,22 +421,18 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         </span>
         <div>
           <strong>Neko</strong>
-          <small>Trợ lý lớp học · dữ kiện từ hệ thống</small>
+          <small>Trợ lý lớp học · dựa trên dữ liệu hệ thống</small>
         </div>
         <button type="button" className="dock-close" onClick={onClose} aria-label="Đóng (Esc)">
-          ✕
+          ×
         </button>
       </header>
 
       <div className="neko-scroll" ref={logRef} role="log" aria-live="polite">
         {messages.length === 0 ? (
           <div className="neko-hello">
-            <h2>
-              Chào {greetName} <span aria-hidden="true">👋</span>
-            </h2>
-            <p>
-              Tôi nắm dữ liệu lớp 7A — hỏi tôi về nhóm cần giúp, từng học sinh, hay bài đã giao.
-            </p>
+            <h2>Chào {greetName}</h2>
+            <p>Hỏi về lớp 7A, từng học sinh hoặc bài đã giao.</p>
             <div className="neko-chips">
               {SUGGESTIONS.map((suggestion) => (
                 <button
@@ -339,11 +451,12 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         {messages.map((message) => (
           <div key={message.id} className={`neko-msg neko-msg--${message.role}`}>
             <p>{message.text}</p>
+            {message.metrics ? (
+              <Metrics metrics={message.metrics} fallback={message.fallback} />
+            ) : null}
             {message.trace && message.trace.length > 0 ? (
               <details className="neko-sources">
-                <summary>
-                  Nguồn dữ kiện ({message.trace.filter((item) => item.kind === 'call').length})
-                </summary>
+                <summary>Nguồn dữ liệu</summary>
                 <ul>
                   {message.trace.map((line, index) => (
                     <li key={index} data-kind={line.kind}>
@@ -357,25 +470,32 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         ))}
 
         {busy ? (
-          <div className="neko-msg neko-msg--assistant">
-            <p>{streamText || 'Đang kiểm tra dữ liệu lớp…'}</p>
+          <div className="neko-msg neko-msg--assistant neko-msg--live">
+            <p>{streamText || activity || 'Đang kiểm tra dữ liệu lớp…'}</p>
           </div>
         ) : null}
-        {progressNote ? <p className="neko-progress">{progressNote}</p> : null}
+        {!busy && activity ? (
+          <p className="neko-progress" role="status">
+            {activity}
+          </p>
+        ) : null}
       </div>
 
-      {deviceLogin ? (
+      {browserLogin ? (
         <div className="neko-login" role="status">
-          <span>
-            Mở{' '}
-            <a href={deviceLogin.verificationUrl} target="_blank" rel="noreferrer">
-              trang xác nhận ChatGPT
-            </a>{' '}
-            và nhập mã <strong>{deviceLogin.userCode}</strong>.
-          </span>
-          <button type="button" className="button-secondary" onClick={() => void refreshChatGpt()}>
-            Kiểm tra lại
-          </button>
+          <span>Phiên đăng nhập ChatGPT đang chờ hoàn tất.</span>
+          <div>
+            <a href={browserLogin.authUrl} target="_blank" rel="noreferrer">
+              Mở lại trang đăng nhập
+            </a>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => void refreshChatGpt()}
+            >
+              Kiểm tra đăng nhập
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -414,29 +534,17 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
       <footer className="neko-foot">
         <label>
-          Bộ não
+          <span>Mô hình</span>
           <select
             value={providerId}
             onChange={(event) => void switchProvider(event.target.value)}
-            aria-label="Chọn bộ não cho Neko"
+            aria-label="Chọn mô hình cho Neko"
           >
-            <option value="rule">Cục bộ tức thời</option>
-            <option value="local">Ollama trên máy</option>
-            <option value="web">Gemma trong trình duyệt</option>
-            <option value="openai" disabled={!availability.openai}>
-              OpenAI Responses{availability.openai ? '' : ' (chưa cấu hình)'}
-            </option>
-            <option value="chatgpt" disabled={!availability.chatgpt.available}>
-              ChatGPT
-              {availability.chatgpt.authenticated
-                ? ' (đã đăng nhập)'
-                : availability.chatgpt.available
-                  ? ' (cần đăng nhập)'
-                  : ' (local mode tắt)'}
-            </option>
+            <option value="local">Local · Ollama</option>
+            <option value="web">Gemma · trên thiết bị</option>
+            <option value="chatgpt">ChatGPT{chatGpt.authenticated ? ' · đã kết nối' : ''}</option>
           </select>
         </label>
-        <span className="muted">Mọi con số đều truy vết được về dữ liệu lớp.</span>
       </footer>
     </aside>
   );

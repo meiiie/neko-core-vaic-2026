@@ -113,10 +113,17 @@ describe('NekoPath API', () => {
       }),
       startLogin: async () => ({
         loginId: 'login-1',
-        verificationUrl: 'https://auth.openai.com/codex/device',
-        userCode: 'ABCD-1234',
+        authUrl: 'https://auth.openai.com/authorize?client_id=codex',
       }),
-      complete: async () => 'Chỉ dựa trên bằng chứng.',
+      complete: async (_accountId, _prompt, onDelta) => {
+        onDelta?.('Chỉ dựa ');
+        onDelta?.('trên bằng chứng.');
+        return {
+          content: 'Chỉ dựa trên bằng chứng.',
+          modelId: 'gpt-5.5',
+          usage: { inputTokens: 12, outputTokens: 5 },
+        };
+      },
       logout,
       disposeAll: vi.fn(),
     };
@@ -150,20 +157,80 @@ describe('NekoPath API', () => {
           cookies: teacher,
         })
       ).json(),
-    ).toMatchObject({ userCode: 'ABCD-1234' });
-    expect(
-      (
-        await app.inject({
-          method: 'POST',
-          url: '/api/ai/chatgpt/complete',
-          cookies: teacher,
-          payload: { prompt: 'Bằng chứng.' },
-        })
-      ).json(),
-    ).toEqual({ content: 'Chỉ dựa trên bằng chứng.' });
+    ).toMatchObject({
+      loginId: 'login-1',
+      authUrl: 'https://auth.openai.com/authorize?client_id=codex',
+    });
+    const streamed = await app.inject({
+      method: 'POST',
+      url: '/api/ai/chatgpt/complete',
+      cookies: teacher,
+      payload: { prompt: 'Bằng chứng.' },
+    });
+    expect(streamed.headers['content-type']).toContain('text/event-stream');
+    expect(streamed.body).toContain('event: delta');
+    expect(streamed.body).toContain('Chỉ dựa ');
+    expect(streamed.body).toContain('event: usage');
+    expect(streamed.body).toContain('"modelId":"gpt-5.5"');
 
     await app.inject({ method: 'POST', url: '/api/auth/logout', cookies: teacher });
     expect(logout).toHaveBeenCalledWith('user-teacher-ha');
+    await app.close();
+  });
+
+  it('delivers a ChatGPT delta before completion and aborts on disconnect', async () => {
+    const disconnected = vi.fn();
+    let release: (() => void) | undefined;
+    const manager: CodexManagerPort = {
+      isEnabled: () => true,
+      status: async () => ({
+        account: { type: 'chatgpt', planType: 'plus' },
+        requiresOpenaiAuth: true,
+      }),
+      startLogin: async () => ({ loginId: 'login-1', authUrl: 'https://auth.openai.com/' }),
+      complete: (_accountId, _prompt, onDelta, signal) =>
+        new Promise((resolve, reject) => {
+          onDelta?.('delta-trước-khi-xong');
+          release = () => resolve({ content: 'delta-trước-khi-xong', modelId: 'gpt-5.5' });
+          signal?.addEventListener(
+            'abort',
+            () => {
+              disconnected();
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        }),
+      logout: async () => undefined,
+      disposeAll: vi.fn(),
+    };
+    const app = await makeApp({ codexManager: manager });
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    await app.listen({ host: '127.0.0.1', port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('Missing test listener address');
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/ai/chatgpt/complete`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        cookie: `nekopath_sid=${teacher.nekopath_sid}`,
+      },
+      body: JSON.stringify({ prompt: 'Bằng chứng.' }),
+    });
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let received = '';
+    while (!received.includes('delta-trước-khi-xong')) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      received += decoder.decode(chunk.value, { stream: true });
+    }
+
+    expect(received).toContain('event: delta');
+    expect(release).toBeTypeOf('function');
+    await reader.cancel();
+    await vi.waitFor(() => expect(disconnected).toHaveBeenCalledTimes(1));
     await app.close();
   });
 

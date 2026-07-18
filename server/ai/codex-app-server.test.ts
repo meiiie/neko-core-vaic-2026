@@ -36,10 +36,18 @@ class FakeTransport implements CodexTransport {
           break;
         case 'account/login/start':
           this.reply(wire.id!, {
-            type: 'chatgptDeviceCode',
+            type: 'chatgpt',
             loginId: 'login-1',
-            verificationUrl: 'https://auth.openai.com/codex/device',
-            userCode: 'ABCD-1234',
+            authUrl: 'https://auth.openai.com/authorize?client_id=codex',
+          });
+          break;
+        case 'model/list':
+          this.reply(wire.id!, {
+            data: [
+              { id: 'gpt-default', model: 'gpt-default', isDefault: true, hidden: false },
+              { id: 'gpt-5.5', model: 'gpt-5.5', isDefault: false, hidden: false },
+            ],
+            nextCursor: null,
           });
           break;
         case 'thread/start':
@@ -59,6 +67,13 @@ class FakeTransport implements CodexTransport {
             turnId: 'turn-1',
             itemId: 'message-1',
             delta: 'bằng nhau',
+          });
+          this.notify('thread/tokenUsage/updated', {
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            tokenUsage: {
+              last: { inputTokens: 120, outputTokens: 8, cachedInputTokens: 40 },
+            },
           });
           this.notify('turn/completed', {
             threadId: 'thread-1',
@@ -86,7 +101,7 @@ class FakeTransport implements CodexTransport {
 }
 
 describe('Codex App Server managed ChatGPT client', () => {
-  it('initializes, reads managed auth and starts device-code login', async () => {
+  it('initializes, reads managed auth and starts browser login', async () => {
     const transport = new FakeTransport();
     const client = new CodexAppServerClient(transport, { cwd: 'C:\\isolated-empty' });
     await client.initialize();
@@ -94,11 +109,13 @@ describe('Codex App Server managed ChatGPT client', () => {
     expect(await client.account()).toMatchObject({
       account: { type: 'chatgpt', planType: 'plus' },
     });
-    expect(await client.startDeviceLogin()).toEqual({
+    expect(await client.startBrowserLogin()).toEqual({
       loginId: 'login-1',
-      verificationUrl: 'https://auth.openai.com/codex/device',
-      userCode: 'ABCD-1234',
+      authUrl: 'https://auth.openai.com/authorize?client_id=codex',
     });
+    expect(
+      transport.writes.find((message) => message.method === 'account/login/start')?.params,
+    ).toEqual({ type: 'chatgpt' });
     expect(transport.writes[0]).toMatchObject({
       method: 'initialize',
       params: { capabilities: { experimentalApi: false, requestAttestation: false } },
@@ -116,15 +133,54 @@ describe('Codex App Server managed ChatGPT client', () => {
       deltas.push(delta),
     );
 
-    expect(answer).toBe('Phân số bằng nhau');
+    expect(answer).toEqual({
+      content: 'Phân số bằng nhau',
+      modelId: 'gpt-5.5',
+      usage: { inputTokens: 120, outputTokens: 8, cachedInputTokens: 40 },
+    });
     expect(deltas).toEqual(['Phân số ', 'bằng nhau']);
     const threadStart = transport.writes.find((message) => message.method === 'thread/start');
     expect(threadStart?.params).toMatchObject({
+      model: 'gpt-5.5',
       cwd: 'C:\\isolated-empty',
       approvalPolicy: 'never',
       sandbox: 'read-only',
       ephemeral: true,
     });
+  });
+
+  it('uses the catalog default when gpt-5.5 is absent and rejects a missing explicit model', async () => {
+    class CatalogTransport extends FakeTransport {
+      override send(message: unknown): void {
+        const wire = message as WireMessage;
+        if (wire.method !== 'model/list') return super.send(message);
+        this.writes.push(wire);
+        queueMicrotask(() => {
+          const handler = (this as unknown as { onMessage: (message: unknown) => void }).onMessage;
+          handler({
+            id: wire.id,
+            result: {
+              data: [{ id: 'gpt-default', model: 'gpt-default', isDefault: true, hidden: false }],
+              nextCursor: null,
+            },
+          });
+        });
+      }
+    }
+
+    const fallbackTransport = new CatalogTransport();
+    const fallbackClient = new CodexAppServerClient(fallbackTransport, {
+      cwd: 'C:\\isolated-empty',
+    });
+    const completion = await fallbackClient.complete('Dựa trên bằng chứng.');
+    expect(completion.modelId).toBe('gpt-default');
+
+    const explicitTransport = new CatalogTransport();
+    const explicitClient = new CodexAppServerClient(explicitTransport, {
+      cwd: 'C:\\isolated-empty',
+      model: 'missing-model',
+    });
+    await expect(explicitClient.complete('Dựa trên bằng chứng.')).rejects.toThrow('missing-model');
   });
 
   it('interrupts and rejects a pending turn immediately on abort', async () => {

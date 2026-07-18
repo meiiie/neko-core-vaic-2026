@@ -35,6 +35,23 @@ function previousToolResult(
   return evidence ? { name: evidence.toolName, payload: evidence.payload } : null;
 }
 
+export function hasEvidenceAfterLatestUser(messages: readonly AgentChatMessage[]): boolean {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  if (lastUser < 0) return false;
+  if (messages.slice(lastUser + 1).some((message) => message.role === 'tool')) return true;
+  const latest = messages[lastUser]?.content.trim() ?? '';
+  if (!/^(vì sao|tại sao|giải thích thêm)\??$/i.test(latest)) return false;
+  return messages.some((message) => (parseCapsule(message)?.evidence.length ?? 0) > 0);
+}
+
+function isAbortError(error: unknown, signal?: AbortSignal): boolean {
+  return (
+    signal?.aborted === true ||
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
+}
+
 export class RuleBasedProvider implements AgentProvider {
   readonly id = 'rule';
   readonly label = 'Bộ điều phối cục bộ (không cần model)';
@@ -60,6 +77,44 @@ export class RuleBasedProvider implements AgentProvider {
     }
 
     return routeRuleQuestion(messages);
+  }
+}
+
+export class DeterministicFirstProvider implements AgentProvider {
+  readonly id: string;
+  readonly label: string;
+  readonly contextWindow?: number;
+
+  constructor(
+    private readonly primary: AgentProvider,
+    private readonly rules: RuleBasedProvider = new RuleBasedProvider(),
+  ) {
+    this.id = primary.id;
+    this.label = primary.label;
+    this.contextWindow = primary.contextWindow;
+  }
+
+  async complete(
+    messages: readonly AgentChatMessage[],
+    tools: readonly AgentTool[],
+    signal?: AbortSignal,
+    onDelta?: (text: string) => void,
+  ): Promise<AgentCompletion> {
+    if (!hasEvidenceAfterLatestUser(messages)) {
+      return this.rules.complete(messages, tools);
+    }
+    try {
+      const completion = await this.primary.complete(messages, tools, signal, onDelta);
+      return { ...completion, modelId: completion.modelId ?? this.primary.id };
+    } catch (error) {
+      if (isAbortError(error, signal)) throw error;
+      const completion = await this.rules.complete(messages, tools);
+      return { ...completion, modelId: this.primary.id, fallback: true };
+    }
+  }
+
+  dispose(): Promise<void> | void {
+    return this.primary.dispose?.();
   }
 }
 
@@ -163,6 +218,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     onDelta?: (text: string) => void,
   ): Promise<AgentCompletion> {
     const stream = Boolean(onDelta);
+    const exposeDeltas = hasEvidenceAfterLatestUser(messages);
     const toolMenu = tools
       .map(
         (tool) =>
@@ -224,12 +280,15 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
 
     let content: string | null;
     let rawCalls: OpenAiToolCallShape[];
+    let usage: AgentCompletion['usage'];
 
     if (stream) {
       // NekoCore parseStream, miniaturised: accumulate content deltas and
       // index-keyed tool-call argument fragments.
       const acc = new Map<number, { name: string; argString: string }>();
       let text = '';
+      let pendingVisibleText = '';
+      let visibilityDecided = false;
       for await (const data of sseData(response)) {
         let chunk: {
           choices?: {
@@ -238,6 +297,11 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
               tool_calls?: ({ index?: number } & OpenAiToolCallShape)[];
             };
           }[];
+          usage?: {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            prompt_tokens_details?: { cached_tokens?: number };
+          };
         };
         try {
           chunk = JSON.parse(data);
@@ -245,9 +309,33 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
           continue;
         }
         const delta = chunk.choices?.[0]?.delta;
+        if (
+          Number.isFinite(chunk.usage?.prompt_tokens) &&
+          Number.isFinite(chunk.usage?.completion_tokens)
+        ) {
+          usage = {
+            inputTokens: chunk.usage?.prompt_tokens ?? 0,
+            outputTokens: chunk.usage?.completion_tokens ?? 0,
+            ...(Number.isFinite(chunk.usage?.prompt_tokens_details?.cached_tokens)
+              ? { cachedInputTokens: chunk.usage?.prompt_tokens_details?.cached_tokens ?? 0 }
+              : {}),
+          };
+        }
         if (delta?.content) {
           text += delta.content;
-          onDelta?.(delta.content);
+          if (exposeDeltas) {
+            if (visibilityDecided) {
+              onDelta?.(delta.content);
+            } else {
+              pendingVisibleText += delta.content;
+              const first = pendingVisibleText.trimStart().charAt(0);
+              if (first && first !== '{' && first !== '`') {
+                visibilityDecided = true;
+                onDelta?.(pendingVisibleText);
+                pendingVisibleText = '';
+              }
+            }
+          }
         }
         for (const call of delta?.tool_calls ?? []) {
           const index = call.index ?? 0;
@@ -264,10 +352,27 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     } else {
       const body = (await response.json()) as {
         choices?: { message?: { content?: string | null; tool_calls?: OpenAiToolCallShape[] } }[];
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+        };
       };
       const message = body.choices?.[0]?.message;
       content = message?.content ?? null;
       rawCalls = message?.tool_calls ?? [];
+      if (
+        Number.isFinite(body.usage?.prompt_tokens) &&
+        Number.isFinite(body.usage?.completion_tokens)
+      ) {
+        usage = {
+          inputTokens: body.usage?.prompt_tokens ?? 0,
+          outputTokens: body.usage?.completion_tokens ?? 0,
+          ...(Number.isFinite(body.usage?.prompt_tokens_details?.cached_tokens)
+            ? { cachedInputTokens: body.usage?.prompt_tokens_details?.cached_tokens ?? 0 }
+            : {}),
+        };
+      }
     }
 
     const toolCalls: AgentToolCall[] = rawCalls.flatMap((call) => {
@@ -286,7 +391,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     if (toolCalls.length === 0) {
       const envelope = parseJsonToolEnvelope(content);
       if (envelope && !executedTools.has(envelope.name)) {
-        return { content: null, toolCalls: [envelope] };
+        return { content: null, toolCalls: [envelope], usage };
       }
       if (envelope && content) {
         // Already-executed tool re-emitted: strip the JSON block and keep any
@@ -295,27 +400,29 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
           .replace(/```json[\s\S]*?```/g, '')
           .replace(/\{[\s\S]*\}/, '')
           .trim();
-        return { content: stripped || null, toolCalls: [] };
+        return { content: stripped || null, toolCalls: [], usage };
       }
     }
-    return { content, toolCalls };
+    return { content, toolCalls, usage };
   }
 }
 
 /** Provider profiles — data, not code. */
 import { WebLlmAgentProvider } from './webllm-provider';
-import { ResponsesAgentProvider } from './responses-provider';
 import { ChatGptAgentProvider } from './chatgpt-provider';
 
+export const INTERNAL_RULE_PROVIDER = new RuleBasedProvider();
+
 export const AGENT_PROVIDERS: readonly AgentProvider[] = [
-  new RuleBasedProvider(),
-  new OpenAiCompatAgentProvider(
-    'local',
-    'Model cục bộ (Ollama — ví dụ Gemma)',
-    'http://localhost:11434/v1',
-    'gemma3:4b',
+  new DeterministicFirstProvider(
+    new OpenAiCompatAgentProvider(
+      'local',
+      'Local · Ollama',
+      'http://localhost:11434/v1',
+      'gemma3:4b',
+    ),
+    INTERNAL_RULE_PROVIDER,
   ),
-  new WebLlmAgentProvider(),
-  new ResponsesAgentProvider(),
-  new ChatGptAgentProvider(),
+  new DeterministicFirstProvider(new WebLlmAgentProvider(), INTERNAL_RULE_PROVIDER),
+  new DeterministicFirstProvider(new ChatGptAgentProvider(), INTERNAL_RULE_PROVIDER),
 ];

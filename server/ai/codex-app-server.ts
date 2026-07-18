@@ -115,10 +115,29 @@ export interface CodexAccountResult {
   readonly requiresOpenaiAuth: boolean;
 }
 
-export interface CodexDeviceLogin {
+export interface CodexBrowserLogin {
   readonly loginId: string;
-  readonly verificationUrl: string;
-  readonly userCode: string;
+  readonly authUrl: string;
+}
+
+export interface CodexUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cachedInputTokens?: number;
+}
+
+export interface CodexCompletion {
+  readonly content: string;
+  readonly modelId: string;
+  readonly usage?: CodexUsage;
+}
+
+interface CodexModel {
+  readonly id: string;
+  readonly model: string;
+  readonly displayName?: string;
+  readonly hidden?: boolean;
+  readonly isDefault?: boolean;
 }
 
 interface PendingRequest {
@@ -145,10 +164,12 @@ export class CodexAppServerClient {
   private readonly pending = new Map<number, PendingRequest>();
   private readonly deltas = new Map<string, string[]>();
   private readonly deltaHooks = new Map<string, (delta: string) => void>();
+  private readonly usageByTurn = new Map<string, CodexUsage>();
   private readonly completedTurns = new Map<string, { status: string; error?: string }>();
   private readonly completionWaiters = new Map<string, PendingTurn>();
   private readonly transport: CodexTransport;
   private readonly options: { readonly cwd: string; readonly model?: string };
+  private selectedModel: string | null = null;
 
   constructor(
     transport: CodexTransport,
@@ -177,15 +198,17 @@ export class CodexAppServerClient {
     return (await this.request('account/read', { refreshToken: false })) as CodexAccountResult;
   }
 
-  async startDeviceLogin(): Promise<CodexDeviceLogin> {
+  async startBrowserLogin(): Promise<CodexBrowserLogin> {
     await this.initialize();
     const result = (await this.request('account/login/start', {
-      type: 'chatgptDeviceCode',
-    })) as CodexDeviceLogin & { type?: string };
+      type: 'chatgpt',
+    })) as CodexBrowserLogin & { type?: string };
+    if (!result.loginId || !result.authUrl) {
+      throw new Error('Codex App Server không trả về browser OAuth URL hợp lệ.');
+    }
     return {
       loginId: result.loginId,
-      verificationUrl: result.verificationUrl,
-      userCode: result.userCode,
+      authUrl: result.authUrl,
     };
   }
 
@@ -193,10 +216,11 @@ export class CodexAppServerClient {
     prompt: string,
     onDelta?: (delta: string) => void,
     signal?: AbortSignal,
-  ): Promise<string> {
+  ): Promise<CodexCompletion> {
     await this.initialize();
+    const model = await this.resolveModel();
     const thread = (await this.request('thread/start', {
-      ...(this.options.model ? { model: this.options.model } : {}),
+      model,
       cwd: this.options.cwd,
       approvalPolicy: 'never',
       sandbox: 'read-only',
@@ -241,11 +265,16 @@ export class CodexAppServerClient {
       if (completed.status !== 'completed') {
         throw new Error(completed.error ?? `Codex turn ${completed.status}.`);
       }
-      return (this.deltas.get(turnId) ?? []).join('').trim();
+      return {
+        content: (this.deltas.get(turnId) ?? []).join('').trim(),
+        modelId: model,
+        ...(this.usageByTurn.has(turnId) ? { usage: this.usageByTurn.get(turnId) } : {}),
+      };
     } finally {
       signal?.removeEventListener('abort', abort);
       this.deltaHooks.delete(turnId);
       this.deltas.delete(turnId);
+      this.usageByTurn.delete(turnId);
       this.completedTurns.delete(turnId);
     }
   }
@@ -261,6 +290,7 @@ export class CodexAppServerClient {
     this.failAll(new Error('Codex App Server đã đóng.'));
     this.deltas.clear();
     this.deltaHooks.clear();
+    this.usageByTurn.clear();
     this.completedTurns.clear();
     this.transport.stop();
   }
@@ -276,6 +306,40 @@ export class CodexAppServerClient {
       this.pending.set(id, { resolve, reject, timeout });
       this.transport.send({ method, id, ...(params === undefined ? {} : { params }) });
     });
+  }
+
+  private async resolveModel(): Promise<string> {
+    if (this.selectedModel) return this.selectedModel;
+    const models: CodexModel[] = [];
+    let cursor: string | null | undefined;
+    do {
+      const page = (await this.request('model/list', {
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      })) as { data?: CodexModel[]; nextCursor?: string | null };
+      models.push(...(page.data ?? []));
+      cursor = page.nextCursor;
+    } while (cursor);
+    const visible = models.filter((model) => !model.hidden);
+    if (visible.length === 0) throw new Error('Tài khoản ChatGPT không có model khả dụng.');
+
+    if (this.options.model) {
+      const explicit = visible.find(
+        (model) => model.model === this.options.model || model.id === this.options.model,
+      );
+      if (!explicit) {
+        throw new Error(`Model cấu hình không có trong catalog: ${this.options.model}`);
+      }
+      this.selectedModel = explicit.model;
+      return this.selectedModel;
+    }
+
+    const selected =
+      visible.find((model) => model.model === 'gpt-5.5' || model.id === 'gpt-5.5') ??
+      visible.find((model) => model.isDefault) ??
+      visible[0];
+    this.selectedModel = selected.model;
+    return this.selectedModel;
   }
 
   private waitForTurn(turnId: string): Promise<{ status: string; error?: string }> {
@@ -317,6 +381,35 @@ export class CodexAppServerClient {
       values.push(params.delta);
       this.deltas.set(params.turnId, values);
       this.deltaHooks.get(params.turnId)?.(params.delta);
+      return;
+    }
+    if (message.method === 'thread/tokenUsage/updated') {
+      const params = message.params as {
+        turnId?: string;
+        tokenUsage?: {
+          last?: {
+            inputTokens?: number;
+            outputTokens?: number;
+            cachedInputTokens?: number;
+          };
+        };
+      };
+      const last = params.tokenUsage?.last;
+      if (
+        !params.turnId ||
+        !last ||
+        !Number.isFinite(last.inputTokens) ||
+        !Number.isFinite(last.outputTokens)
+      ) {
+        return;
+      }
+      this.usageByTurn.set(params.turnId, {
+        inputTokens: last.inputTokens as number,
+        outputTokens: last.outputTokens as number,
+        ...(Number.isFinite(last.cachedInputTokens)
+          ? { cachedInputTokens: last.cachedInputTokens as number }
+          : {}),
+      });
       return;
     }
     if (message.method === 'turn/completed') {

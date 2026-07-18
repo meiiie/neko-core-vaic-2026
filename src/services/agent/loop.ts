@@ -25,6 +25,8 @@ export interface AgentCompletion {
   readonly toolCalls: readonly AgentToolCall[];
   readonly finishReason?: string;
   readonly usage?: AgentUsage;
+  readonly modelId?: string;
+  readonly fallback?: boolean;
 }
 
 export type AgentDeltaHook = (text: string) => void;
@@ -52,6 +54,9 @@ export interface AgentTurnResult {
   readonly text: string;
   readonly messages: readonly AgentChatMessage[];
   readonly usage: AgentUsage;
+  readonly displayUsage?: AgentUsage;
+  readonly modelId?: string;
+  readonly fallback: boolean;
 }
 
 const MAX_STEPS = 4;
@@ -120,6 +125,9 @@ export async function runAgentTurn(
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedInputTokens = 0;
+  let displayUsage: AgentUsage | undefined;
+  let modelId: string | undefined;
+  let fallback = false;
 
   for (let step = 1; step <= MAX_STEPS; step += 1) {
     const completion = await provider.complete(messages, tools, signal, onDelta);
@@ -129,6 +137,9 @@ export async function runAgentTurn(
     if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
 
     if (completion.toolCalls.length === 0) {
+      displayUsage = completion.usage;
+      modelId = completion.modelId;
+      fallback = completion.fallback ?? false;
       let answer =
         completion.content?.trim() || 'Tôi chưa có đủ dữ kiện từ công cụ để trả lời câu này.';
       if (
@@ -150,6 +161,9 @@ export async function runAgentTurn(
         text: answer,
         messages,
         usage: { inputTokens, outputTokens, cachedInputTokens },
+        displayUsage,
+        modelId,
+        fallback,
       };
     }
 
@@ -162,6 +176,9 @@ export async function runAgentTurn(
         text: stuck,
         messages,
         usage: { inputTokens, outputTokens, cachedInputTokens },
+        displayUsage,
+        modelId,
+        fallback,
       };
     }
     keys.forEach((key) => seenCalls.add(key));
@@ -196,16 +213,19 @@ export async function runAgentTurn(
     });
   }
 
-  const fallback =
+  const finalFallback =
     toolLog.length > 0
       ? `${composeCollectedEvidence(toolLog)}\n(Đã chạm giới hạn số bước; đây là bản tổng hợp deterministic.)`
       : 'Đã chạm giới hạn số bước của phiên hỏi này mà chưa thu được dữ kiện.';
-  onTrace({ kind: 'note', text: fallback });
-  messages.push({ role: 'assistant', content: fallback });
+  onTrace({ kind: 'note', text: finalFallback });
+  messages.push({ role: 'assistant', content: finalFallback });
   return {
-    text: fallback,
+    text: finalFallback,
     messages,
     usage: { inputTokens, outputTokens, cachedInputTokens },
+    displayUsage,
+    modelId,
+    fallback: false,
   };
 }
 

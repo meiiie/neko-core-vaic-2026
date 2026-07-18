@@ -5,7 +5,8 @@ import {
   CodexAppServerClient,
   NodeCodexTransport,
   type CodexAccountResult,
-  type CodexDeviceLogin,
+  type CodexBrowserLogin,
+  type CodexCompletion,
 } from './codex-app-server.ts';
 import type { CodexManagerPort } from './codex-routes.ts';
 
@@ -49,12 +50,17 @@ export class CodexAccountManager implements CodexManagerPort {
     return this.client(accountId).account();
   }
 
-  async startLogin(accountId: string): Promise<CodexDeviceLogin> {
-    return this.client(accountId).startDeviceLogin();
+  async startLogin(accountId: string): Promise<CodexBrowserLogin> {
+    return this.client(accountId).startBrowserLogin();
   }
 
-  async complete(accountId: string, prompt: string, signal?: AbortSignal): Promise<string> {
-    return this.client(accountId).complete(prompt, undefined, signal);
+  async complete(
+    accountId: string,
+    prompt: string,
+    onDelta?: (delta: string) => void,
+    signal?: AbortSignal,
+  ): Promise<CodexCompletion> {
+    return this.client(accountId).complete(prompt, onDelta, signal);
   }
 
   async logout(accountId: string): Promise<void> {

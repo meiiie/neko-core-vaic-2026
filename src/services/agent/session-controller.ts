@@ -63,7 +63,15 @@ export class AgentSessionController {
     });
   }
 
-  async run(question: string, runOptions: AgentSessionRunOptions = {}): Promise<{ text: string }> {
+  async run(
+    question: string,
+    runOptions: AgentSessionRunOptions = {},
+  ): Promise<{
+    text: string;
+    displayUsage?: AgentUsage;
+    modelId?: string;
+    fallback: boolean;
+  }> {
     if (this.disposed) throw new Error('Agent session đã đóng.');
     if (this.activeAbort) throw new Error('Agent session đang xử lý một lượt khác.');
     const trimmed = question.trim();
@@ -109,7 +117,12 @@ export class AgentSessionController {
         cachedInputTokens:
           (this.usage.cachedInputTokens ?? 0) + (result.usage.cachedInputTokens ?? 0),
       };
-      return { text: result.text };
+      return {
+        text: result.text,
+        displayUsage: result.displayUsage,
+        modelId: result.modelId,
+        fallback: result.fallback,
+      };
     } catch (error) {
       this.messages = before;
       throw error;

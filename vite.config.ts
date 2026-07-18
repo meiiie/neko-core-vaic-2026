@@ -85,6 +85,11 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // Keep Vite's discovery inside the application. The cloned reference
+    // repositories under ref/ have independent dependency graphs.
+    entries: ['index.html'],
+  },
   server: {
     proxy: { '/api': 'http://127.0.0.1:3001' },
   },

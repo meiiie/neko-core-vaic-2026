@@ -1,4 +1,5 @@
 import type { AgentChatMessage, AgentCompletion, AgentProvider } from './loop';
+import { parseCapsule } from './context-manager';
 import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
 
@@ -130,6 +131,17 @@ const ENVELOPE_INSTRUCTION =
   'Khi cần dữ kiện, trả lời DUY NHẤT một JSON {"tool":"<tên>","args":{...}}. ' +
   'Khi đã có kết quả công cụ, trả lời bằng văn bản thường dựa đúng trên các con số đó.';
 
+function hasEvidenceAfterLatestUser(messages: readonly AgentChatMessage[]): boolean {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  if (lastUser < 0) return false;
+  if (messages.slice(lastUser + 1).some((message) => message.role === 'tool')) return true;
+  const latest = messages[lastUser]?.content.trim() ?? '';
+  return (
+    /^(vì sao|tại sao|giải thích thêm)\??$/i.test(latest) &&
+    messages.some((message) => (parseCapsule(message)?.evidence.length ?? 0) > 0)
+  );
+}
+
 export class WebLlmAgentProvider implements AgentProvider {
   readonly id = 'web';
   readonly label = 'Gemma 3 trong trình duyệt (offline sau lần tải đầu)';
@@ -159,8 +171,11 @@ export class WebLlmAgentProvider implements AgentProvider {
     const executedTools = new Set(
       messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
     );
+    const exposeDeltas = hasEvidenceAfterLatestUser(messages);
 
     let content = '';
+    let pendingVisibleText = '';
+    let visibilityDecided = false;
     let inputTokens = 0;
     let outputTokens = 0;
     try {
@@ -199,7 +214,19 @@ export class WebLlmAgentProvider implements AgentProvider {
         const delta = chunk.choices?.[0]?.delta?.content;
         if (delta) {
           content += delta;
-          onDelta?.(delta);
+          if (exposeDeltas) {
+            if (visibilityDecided) {
+              onDelta?.(delta);
+            } else {
+              pendingVisibleText += delta;
+              const first = pendingVisibleText.trimStart().charAt(0);
+              if (first && first !== '{' && first !== '`') {
+                visibilityDecided = true;
+                onDelta?.(pendingVisibleText);
+                pendingVisibleText = '';
+              }
+            }
+          }
         }
         inputTokens = chunk.usage?.prompt_tokens ?? inputTokens;
         outputTokens = chunk.usage?.completion_tokens ?? outputTokens;
