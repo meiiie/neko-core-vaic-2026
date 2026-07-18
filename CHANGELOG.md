@@ -5,6 +5,27 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.6.0] — 2026-07-18
+
+### Added
+
+- A same-device, local-first evidence loop: new student answers now feed the
+  deterministic teacher dashboard without being multiplied across a simulated group.
+- Append-only teacher diagnosis overrides with a required professional reason; every
+  override re-runs grouping and the 15-minute attention plan without rewriting learner
+  evidence.
+- Resilient class-directory startup states with bounded session and directory requests.
+
+### Changed
+
+- The student dashboard and shared shell use quieter, task-led status presentation while
+  keeping sample-data disclosure next to the data it describes.
+
+### Fixed
+
+- Signed-out and stale PWA shells can recover from delayed or aborted authentication and
+  class-directory requests instead of waiting indefinitely.
+
 ## [0.5.0] — 2026-07-18
 
 ### Added
@@ -74,6 +95,7 @@ hackathon window).
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.6.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.2.0...v0.3.0
