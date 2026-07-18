@@ -1812,6 +1812,216 @@ details li {
   background: var(--surface-subtle);
 }
 
+.teacher-workflow-intro {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.9fr) minmax(28rem, 1.4fr);
+  gap: var(--s-6);
+  padding: var(--s-5);
+  border: 1px solid #b2ccff;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+}
+
+.teacher-workflow-intro h2,
+.teacher-group-purpose h2,
+.teacher-support-actions h2,
+.teacher-evidence-heading h2 {
+  font-size: 1.125rem;
+}
+
+.teacher-workflow-intro ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teacher-workflow-intro li {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-4);
+  border-left: 1px solid #b2ccff;
+}
+
+.teacher-workflow-intro li span {
+  color: var(--muted-strong);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.teacher-no-evidence {
+  max-width: none;
+}
+
+.teacher-group-purpose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.45fr);
+  gap: var(--s-6);
+  padding: var(--s-5);
+  border-left: 0.25rem solid var(--primary);
+  background: var(--primary-soft);
+}
+
+.teacher-group-purpose p:last-child {
+  margin-bottom: 0;
+}
+
+.teacher-group-suggestion {
+  align-self: center;
+  padding-left: var(--s-5);
+  border-left: 1px solid #b2ccff;
+  color: var(--muted-strong);
+}
+
+.teacher-evidence-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-5);
+  margin-bottom: var(--s-4);
+}
+
+.teacher-evidence-heading > p {
+  max-width: 30rem;
+  color: var(--muted-strong);
+  font-size: 0.875rem;
+}
+
+.wrong-question-disclosure-list {
+  display: grid;
+  gap: var(--s-3);
+}
+
+.wrong-question-disclosure {
+  overflow: clip;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.wrong-question-disclosure > summary {
+  display: grid;
+  min-height: var(--touch-target);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  cursor: pointer;
+}
+
+.wrong-question-disclosure > summary:hover {
+  background: var(--surface-subtle);
+}
+
+.wrong-question-disclosure > summary > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+
+.wrong-question-disclosure > summary small {
+  color: var(--muted);
+}
+
+.wrong-question-open-label {
+  color: var(--primary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.teacher-answer-table-wrap {
+  overflow-x: auto;
+  border-top: 1px solid var(--rule);
+}
+
+.teacher-answer-table {
+  width: 100%;
+  min-width: 48rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.teacher-answer-table th,
+.teacher-answer-table td {
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.teacher-answer-table thead th {
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+}
+
+.learner-roster-disclosure,
+.teacher-override-disclosure {
+  margin-top: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.learner-roster-disclosure > summary,
+.teacher-override-disclosure > summary {
+  min-height: var(--touch-target);
+  padding: var(--s-3) var(--s-4);
+  color: var(--primary);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.learner-roster-disclosure ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0 var(--s-4) var(--s-4);
+  list-style: none;
+}
+
+.learner-roster-disclosure li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.learner-roster-disclosure li span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.teacher-support-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-6);
+  padding: var(--s-5);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.teacher-support-actions .group-actions {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.teacher-override-disclosure {
+  margin-top: 0;
+}
+
+.teacher-override-disclosure .teacher-override {
+  margin: 0 var(--s-4) var(--s-4);
+}
+
 .wrong-question-summary-list {
   display: grid;
   gap: var(--s-2);
@@ -1957,6 +2167,18 @@ details li {
   font-size: 0.875rem;
 }
 
+.teacher-override-saved {
+  display: flex;
+  align-items: center;
+  flex: 1 1 30rem;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.teacher-override-saved .button-primary {
+  flex: 0 0 auto;
+}
+
 /* System and utility */
 
 .status-list {
@@ -2051,6 +2273,17 @@ details li {
 
   .group-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .teacher-workflow-intro,
+  .teacher-group-purpose {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-group-suggestion {
+    padding: var(--s-4) 0 0;
+    border-top: 1px solid #b2ccff;
+    border-left: 0;
   }
 }
 
@@ -2283,6 +2516,27 @@ details li {
 
   .teacher-group-detail-surface {
     padding: var(--s-4);
+  }
+
+  .teacher-workflow-intro ol,
+  .learner-roster-disclosure ul {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-workflow-intro li {
+    padding: var(--s-3) 0;
+    border-top: 1px solid #b2ccff;
+    border-left: 0;
+  }
+
+  .teacher-evidence-heading,
+  .teacher-support-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .teacher-support-actions .group-actions > * {
+    width: 100%;
   }
 }
 
@@ -3024,6 +3278,30 @@ html:has(.question-selection-actions) {
   margin-top: 6px;
 }
 
+.question-bank-list li .student-assignment-message,
+.student-assignment-message {
+  margin: var(--s-2) 0;
+  padding: var(--s-3);
+  border-left: 0.25rem solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+.question-bank-list li .student-assignment-message strong {
+  font-size: 0.875rem;
+}
+
+.question-bank-list li .student-assignment-message p,
+.student-assignment-message p {
+  margin: var(--s-1) 0 0;
+  color: var(--muted-strong);
+}
+
+.student-assignment-message--detail {
+  max-width: 48rem;
+}
+
 .question-library-panel .question-bank-list--managed {
   gap: 0;
   border-top: 1px solid var(--rule);
@@ -3356,6 +3634,381 @@ html:has(.question-selection-actions) {
       opacity: 0;
       transform: translateY(0.25rem);
     }
+  }
+}
+
+.intervention-common-error {
+  max-width: 52rem;
+  margin-top: var(--s-2);
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intervention-common-error strong {
+  color: var(--muted-strong);
+}
+
+.assignment-flow-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  list-style: none;
+}
+
+.assignment-flow-steps li {
+  padding: var(--s-3) var(--s-4);
+  border-right: 1px solid var(--rule);
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.assignment-flow-steps li:last-child {
+  border-right: 0;
+}
+
+.assignment-flow-steps li[data-active] {
+  background: var(--primary-soft);
+  color: var(--navigation-active-ink);
+}
+
+.targeted-assignment-form {
+  display: grid;
+  gap: var(--s-5);
+}
+
+.assignment-recommendation {
+  padding: var(--s-4) var(--s-5);
+  border-left: 0.25rem solid var(--primary);
+  background: var(--primary-soft);
+}
+
+.assignment-recommendation h2 {
+  margin-bottom: var(--s-1);
+  font-size: 1.25rem;
+}
+
+.assignment-compose-step {
+  display: grid;
+  gap: var(--s-4);
+  padding-top: var(--s-5);
+  border-top: 1px solid var(--rule);
+}
+
+.assignment-step-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+}
+
+.assignment-step-heading > span {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-weight: 800;
+}
+
+.assignment-step-heading h2,
+.assignment-compose-step > h2 {
+  margin-bottom: var(--s-1);
+  font-size: 1.125rem;
+}
+
+.assignment-step-heading p {
+  color: var(--muted-strong);
+  font-size: 0.875rem;
+}
+
+.assignment-step-heading--spread {
+  justify-content: space-between;
+}
+
+.selected-recipient-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.selected-recipient-chips span {
+  padding: var(--s-1) var(--s-3);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--navigation-active-ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.recipient-editor {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+
+.recipient-editor > summary {
+  min-height: var(--touch-target);
+  padding: var(--s-3) var(--s-4);
+  cursor: pointer;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.recipient-checklist {
+  display: grid;
+  max-height: 18rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-1) var(--s-4);
+  padding: 0 var(--s-4) var(--s-4);
+  overflow-y: auto;
+}
+
+.recipient-checklist label {
+  display: flex;
+  min-height: var(--touch-target);
+  align-items: center;
+  gap: var(--s-2);
+  font-weight: 500;
+}
+
+.assignment-package-grid,
+.question-package-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.assignment-package-card {
+  display: flex;
+  min-height: 7.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.assignment-package-card[aria-pressed='true'] {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  background: var(--primary-soft);
+}
+
+.assignment-package-card small,
+.question-package-card small {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.assignment-package-card strong {
+  margin: var(--s-1) 0;
+  line-height: 1.25rem;
+}
+
+.assignment-package-card span {
+  color: var(--muted-strong);
+  font-size: 0.8125rem;
+}
+
+.assignment-auto-note {
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--radius-sm);
+  background: var(--evidence-soft);
+  color: var(--evidence);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.random-question-control {
+  display: flex;
+  align-items: end;
+  gap: var(--s-2);
+}
+
+.random-question-control label,
+.assignment-settings > label {
+  display: grid;
+  gap: var(--s-1);
+  color: var(--muted-strong);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.random-question-control select,
+.assignment-settings input,
+.assignment-settings textarea {
+  min-height: var(--touch-target);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.assignment-settings textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+.assignment-review-button {
+  width: fit-content;
+}
+
+.assignment-sent-state,
+.assignment-review-panel {
+  padding: var(--s-6);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.assignment-sent-state {
+  border-left: 0.25rem solid var(--evidence);
+}
+
+.assignment-sent-state .button-secondary {
+  margin-top: var(--s-4);
+}
+
+.assignment-review-panel > header {
+  max-width: 42rem;
+  margin-bottom: var(--s-5);
+}
+
+.assignment-review-grid {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.65fr) minmax(22rem, 1.35fr) minmax(14rem, 0.75fr);
+  gap: var(--s-4);
+}
+
+.assignment-review-grid > section {
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+
+.assignment-review-grid h3 {
+  margin-bottom: var(--s-3);
+  font-size: 1rem;
+}
+
+.assignment-review-grid ul,
+.assignment-review-grid ol {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+  padding-left: var(--s-5);
+}
+
+.assignment-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+  margin-top: var(--s-5);
+}
+
+.question-package-overview {
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-5);
+  border: 1px solid #b2ccff;
+  border-radius: var(--radius-md);
+  background: var(--primary-soft);
+}
+
+.question-package-overview > header {
+  max-width: 42rem;
+}
+
+.question-package-overview h2 {
+  font-size: 1.25rem;
+}
+
+.question-package-card {
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.question-package-card h3 {
+  min-height: 2.5rem;
+  margin: var(--s-1) 0 var(--s-2);
+  font-size: 1rem;
+}
+
+.question-package-card .text-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+@media (max-width: 64rem) {
+  .assignment-package-grid,
+  .question-package-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .assignment-review-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 52rem) {
+  .assignment-flow-steps,
+  .assignment-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-flow-steps li {
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .assignment-flow-steps li:last-child {
+    border-bottom: 0;
+  }
+
+  .recipient-checklist,
+  .assignment-package-grid,
+  .question-package-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-step-heading--spread,
+  .random-question-control,
+  .assignment-review-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .assignment-review-actions > *,
+  .assignment-review-button {
+    width: 100%;
   }
 }
 

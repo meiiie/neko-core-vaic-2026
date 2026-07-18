@@ -160,4 +160,22 @@ describe('Teacher question bank workflow', () => {
     expect(screen.getByText(PAGINATED_QUESTIONS[0].prompt)).toBeTruthy();
     expect(screen.getByText('1–10 / 12 câu')).toBeTruthy();
   });
+
+  it('groups the bank by lesson and opens the selected package', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ questions: QUESTIONS })),
+    );
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <TeacherQuestionsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Chọn bài để xem câu hỏi' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Xem 1 câu trong gói Phân số bằng nhau' }));
+    expect(screen.getByText(QUESTIONS[0].prompt)).toBeTruthy();
+    expect(screen.queryByText(QUESTIONS[1].prompt)).toBeNull();
+  });
 });

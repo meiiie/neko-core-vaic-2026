@@ -106,6 +106,14 @@ export function TeacherQuestionsPage() {
 
     return filtered;
   }, [difficulty, questions, search, sortOrder, topic]);
+  const questionPackages = useMemo(
+    () =>
+      HERO_GRAPH.nodes.flatMap((node) => {
+        const count = (questions ?? []).filter((question) => question.kcId === node.id).length;
+        return count > 0 ? [{ kcId: node.id, name: node.name, count }] : [];
+      }),
+    [questions],
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -374,6 +382,36 @@ export function TeacherQuestionsPage() {
           ) : null}
         </form>
       </details>
+
+      <section className="question-package-overview" aria-labelledby="question-packages-heading">
+        <header>
+          <p className="eyebrow">Gói câu hỏi theo bài học</p>
+          <h2 id="question-packages-heading">Chọn bài để xem câu hỏi</h2>
+          <p>Mỗi gói gom các câu hỏi cùng một nội dung để cô tìm và giao bài nhanh hơn.</p>
+        </header>
+        <div className="question-package-grid">
+          {questionPackages.map((item) => (
+            <article key={item.kcId} className="question-package-card">
+              <small>Bài học</small>
+              <h3>{item.name}</h3>
+              <p>{item.count} câu hỏi</p>
+              <button
+                className="text-link"
+                type="button"
+                aria-label={`Xem ${item.count} câu trong gói ${item.name}`}
+                onClick={() => {
+                  setTopic(item.kcId);
+                  setDifficulty('ALL');
+                  setSearch('');
+                  setPage(1);
+                }}
+              >
+                Xem câu hỏi
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="summary-panel question-library-panel">
         <header className="panel-heading question-library-heading">

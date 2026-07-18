@@ -1,5 +1,5 @@
-import type { CurriculumGraph, Item, LearnerEvent, MethodValidity } from '../domain';
-import { PRACTICE_QUESTIONS } from './hero-practice';
+import type { CurriculumGraph, Item, LearnerEvent, MethodValidity } from '../domain/index.ts';
+import { PRACTICE_QUESTIONS } from './hero-practice.ts';
 
 export const HERO_GRAPH: CurriculumGraph = {
   version: 'hero-demo-v2-unreviewed',

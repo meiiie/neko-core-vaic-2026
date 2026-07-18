@@ -1,15 +1,11 @@
 import {
   actionLabel,
-  buildHeroClassDashboard,
-  diagnoseHero,
   GROUP_STATUS_LABELS,
   HERO_TARGET_KC_ID,
-  isHeroLearnerId,
   kcName,
-  STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH } from '../../content';
-import { listEventsByLearner } from '../../storage/event-repository';
+import { fetchTeacherDashboard } from '../../features/teacher/teacher-api';
 
 /**
  * Agent tools — the ONLY way the console agent may know anything.
@@ -38,53 +34,81 @@ const tongQuanLop: AgentTool = {
   description: 'Tổng quan lớp 7A: các nhóm can thiệp, ưu tiên, lỗ hổng toàn lớp.',
   parameters: {},
   async run() {
-    const dashboard = buildHeroClassDashboard();
-    const groups = [...dashboard.groups]
-      .sort((a, b) => b.priorityScore - a.priorityScore)
-      .map((group) => ({
-        nhom: GROUP_STATUS_LABELS[group.status] ?? group.status,
-        kienThucGoc: group.rootKcId ? kcName(group.rootKcId) : null,
-        soHocSinh: group.totalLearnerCount,
-        duBangChung: group.sufficientEvidenceCount,
-        diemUuTien: group.priorityScore,
-        hanhDong: actionLabel(group.suggestedActionId),
+    try {
+      const dashboard = await fetchTeacherDashboard();
+      const groups = [...dashboard.groups]
+        .sort((a, b) => b.priorityScore - a.priorityScore)
+        .map((group) => ({
+          nhom: GROUP_STATUS_LABELS[group.status] ?? group.status,
+          kienThucGoc: group.rootKcId ? kcName(group.rootKcId) : null,
+          soHocSinh: group.totalLearnerCount,
+          duBangChung: group.sufficientEvidenceCount,
+          soCauSaiCanKiemTra: group.wrongQuestions.length,
+          diemUuTien: group.priorityScore,
+          hanhDong: actionLabel(group.suggestedActionId),
+        }));
+      const gaps = dashboard.classWideGaps.map((gap) => ({
+        kienThuc: kcName(gap.rootKcId),
+        tuSo: gap.learnerCount,
+        mauSo: gap.classSize,
+        nguongPhanTram: Math.round(gap.thresholdRate * 100),
       }));
-    const gaps = dashboard.classWideGaps.map((gap) => ({
-      kienThuc: kcName(gap.rootKcId),
-      tuSo: gap.learnerCount,
-      mauSo: gap.classSize,
-      nguongPhanTram: Math.round(gap.thresholdRate * 100),
-    }));
-    return {
-      ok: true,
-      data: { siSo: dashboard.learners.length, nhom: groups, loHongToanLop: gaps },
-    };
+      return {
+        ok: true,
+        data: {
+          nguon: 'Máy chủ',
+          siSo: dashboard.rosterCount,
+          daCoBaiLam: dashboard.evaluatedLearnerCount,
+          nhom: groups,
+          loHongToanLop: gaps,
+        },
+      };
+    } catch {
+      return { ok: false, error: 'Không đọc được dữ liệu lớp từ máy chủ.' };
+    }
   },
 };
 
 const chanDoanHocSinh: AgentTool = {
   name: 'chan_doan_hoc_sinh',
-  description: 'Chẩn đoán hiện tại của một học sinh hero (an, binh, chi, minh).',
-  parameters: { hoc_sinh: 'ID học sinh: an | binh | chi | minh' },
+  description: 'Nhóm hỗ trợ và bằng chứng hiện tại của một học sinh trong dữ liệu máy chủ.',
+  parameters: { hoc_sinh: 'Tên hoặc ID học sinh trong lớp' },
   async run(args) {
-    const learnerId = (args.hoc_sinh ?? '').toLowerCase().trim();
-    if (!isHeroLearnerId(learnerId)) {
-      return { ok: false, error: 'Chỉ có bốn hồ sơ demo: an, binh, chi, minh.' };
+    const query = (args.hoc_sinh ?? '').toLocaleLowerCase('vi-VN').trim();
+    if (!query) return { ok: false, error: 'Cần nhập tên hoặc ID học sinh.' };
+    try {
+      const dashboard = await fetchTeacherDashboard();
+      const learner = dashboard.learners.find(
+        (candidate) =>
+          candidate.id.toLocaleLowerCase('vi-VN') === query ||
+          candidate.displayLabel.toLocaleLowerCase('vi-VN').includes(query),
+      );
+      if (!learner) return { ok: false, error: 'Không tìm thấy học sinh trong lớp.' };
+      const group = dashboard.groups.find((candidate) => candidate.learnerIds.includes(learner.id));
+      return {
+        ok: true,
+        data: {
+          hocSinh: learner.displayLabel,
+          trangThai: group
+            ? (GROUP_STATUS_LABELS[group.status] ?? group.status)
+            : 'Chưa có nhóm hỗ trợ',
+          kienThucGoc: group?.rootKcId ? kcName(group.rootKcId) : null,
+          duongBu: [],
+          soBangChung: learner.eventCount,
+          soCauTraLoi: learner.eventCount,
+          nhom: group ? (GROUP_STATUS_LABELS[group.status] ?? group.status) : null,
+          kienThucCanOn: group?.rootKcId ? kcName(group.rootKcId) : null,
+          cauSaiGanNhat:
+            group?.wrongQuestions
+              .filter((question) =>
+                question.answers.some((answer) => answer.learnerId === learner.id),
+              )
+              .map((question) => question.prompt) ?? [],
+        },
+      };
+    } catch {
+      return { ok: false, error: 'Không đọc được dữ liệu học sinh từ máy chủ.' };
     }
-    const localRecords = await listEventsByLearner(learnerId);
-    const result = diagnoseHero(learnerId, localRecords);
-    return {
-      ok: true,
-      data: {
-        hocSinh: learnerId,
-        trangThai: STATUS_LABELS[result.status],
-        kienThucGoc: result.rootKcId ? kcName(result.rootKcId) : null,
-        giaThuyetCanhTranh: result.competingKcIds.map((id) => kcName(id)),
-        duongBu: result.pathKcIds.map((id) => kcName(id)),
-        soBangChung: result.evidenceEventIds.length,
-        cauHoiTiepTheo: result.nextItemId ?? null,
-      },
-    };
   },
 };
 

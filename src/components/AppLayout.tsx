@@ -26,7 +26,7 @@ const NAVIGATION: Record<Role, readonly NavItem[]> = {
   ],
   TEACHER: [
     { to: '/teacher', label: 'Tổng quan lớp', end: true },
-    { to: '/teacher/class', label: 'Nhóm cần hỗ trợ' },
+    { to: '/teacher/class', label: 'Bài học cần ôn' },
     { to: '/teacher/questions', label: 'Ngân hàng câu hỏi' },
     { to: '/teacher/assignments', label: 'Giao bài' },
   ],
@@ -236,7 +236,7 @@ export function AppLayout() {
             </nav>
 
             <div className="sidebar-foot">
-              <ConnectionStatus />
+              <ConnectionStatus serverAuthoritative={isTeacher} />
             </div>
 
             <div className="sidebar-account">

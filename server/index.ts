@@ -24,11 +24,18 @@ const app = buildApp(db);
 if (process.env.NODE_ENV === 'production') {
   await app.register(fastifyStatic, {
     root: resolve(process.cwd(), 'dist'),
-    wildcard: false,
+    // Resolve hashed assets at request time. A production rebuild can change
+    // filenames while this local server stays up.
+    wildcard: true,
   });
   app.setNotFoundHandler((request, reply) => {
-    if (request.raw.url?.startsWith('/api/')) {
+    const path = request.raw.url?.split('?', 1)[0] ?? '/';
+    if (path.startsWith('/api/')) {
       void reply.code(404).send({ error: 'NOT_FOUND' });
+      return;
+    }
+    if (path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path)) {
+      void reply.code(404).type('text/plain').send('Not found');
       return;
     }
     void reply.sendFile('index.html');
