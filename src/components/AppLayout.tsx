@@ -28,6 +28,7 @@ const NAVIGATION: Record<Role, readonly NavItem[]> = {
     { to: '/teacher', label: 'Tổng quan lớp', end: true },
     { to: '/teacher/class', label: 'Bài học cần ôn' },
     { to: '/teacher/questions', label: 'Ngân hàng câu hỏi' },
+    { to: '/teacher/lessons', label: 'Học liệu' },
     { to: '/teacher/assignments', label: 'Giao bài' },
   ],
 };

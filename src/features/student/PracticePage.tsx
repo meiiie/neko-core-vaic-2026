@@ -10,7 +10,8 @@ import { studentContextForAccount, useStudentEvents } from '../../app/adapters/s
 import { nextPracticeQuestion } from '../../app/adapters/practice-selection';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
-import { lessonForKc, type PracticeQuestion } from '../../content';
+import { type PracticeQuestion } from '../../content';
+import { useLesson } from '../../services/lessons';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
 import { recordAnswer } from '../../services/sync';
 
@@ -51,6 +52,7 @@ export function PracticePage() {
       ? null
       : diagnoseHero(learnerContext, localRecords);
   const rootKcId = result?.status === 'DIAGNOSED' ? result.rootKcId : undefined;
+  const rootLesson = useLesson(rootKcId ?? '');
   const explainKey = rootKcId ? `${learnerId}-${rootKcId}` : null;
   const explain = explainState && explainState.key === explainKey ? explainState.reply : null;
 
@@ -280,7 +282,7 @@ export function PracticePage() {
           <p>
             Trả lời đúng vài câu liên tiếp để chứng minh em đã vững — hệ thống sẽ tự chuyển sang
             bước tiếp theo.
-            {lessonForKc(rootKcId) ? (
+            {rootLesson?.lesson ? (
               <>
                 {' '}
                 <Link className="text-link" to={`/student/lesson/${rootKcId}`}>

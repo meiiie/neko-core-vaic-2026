@@ -4,20 +4,21 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { installApiStub } from '../../test/api-stub';
 import { App } from '../../app/App';
-import { LESSON_SUMMARIES } from '../../content';
+import { LESSON_SUMMARIES } from '../../content/lessons.v1';
+import { refreshLessons } from '../../services/lessons';
 
-describe('lesson summaries (EXPLAIN step, offline content pack)', () => {
+describe('lesson materials (server-owned rows, device mirror for offline)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('covers every KC in the content graph slice', () => {
-    const kcIds = LESSON_SUMMARIES.map((lesson) => lesson.kcId);
-    expect(new Set(kcIds).size).toBe(12);
-    // Every lesson stays honestly labelled until a named reviewer accepts it.
+  it('seeds every KC in the slice and keeps drafts honestly labelled', () => {
+    expect(new Set(LESSON_SUMMARIES.map((lesson) => lesson.kcId)).size).toBe(12);
     expect(LESSON_SUMMARIES.every((lesson) => lesson.reviewState === 'UNREVIEWED')).toBe(true);
   });
 
-  it('renders the K02 summary with the mandatory draft label and practice CTA', async () => {
+  it('renders a mirrored lesson with the draft label and practice CTA', async () => {
     installApiStub('an@nekopath.edu.vn');
+    await refreshLessons(); // what the app shell does on start/reconnect
+
     render(
       <MemoryRouter initialEntries={['/student/lesson/K02']}>
         <App />
@@ -33,7 +34,7 @@ describe('lesson summaries (EXPLAIN step, offline content pack)', () => {
     expect(screen.getByRole('link', { name: 'Bắt đầu luyện tập' })).toBeTruthy();
   });
 
-  it('shows a calm empty state for an unknown lesson', async () => {
+  it('offers a retry instead of pretending when the lesson is not on the device', async () => {
     installApiStub('an@nekopath.edu.vn');
     render(
       <MemoryRouter initialEntries={['/student/lesson/K99']}>
@@ -42,8 +43,8 @@ describe('lesson summaries (EXPLAIN step, offline content pack)', () => {
     );
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Chưa có tóm tắt cho phần này' }),
+      await screen.findByRole('heading', { level: 1, name: 'Tài liệu chưa có trên thiết bị này' }),
     ).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Về lộ trình học' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tải tài liệu' })).toBeTruthy();
   });
 });

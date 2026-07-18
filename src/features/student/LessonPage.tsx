@@ -1,23 +1,41 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { kcName } from '../../app/adapters/hero-tutor';
-import { lessonForKc } from '../../content';
+import { refreshLessons, useLesson } from '../../services/lessons';
 
 /**
- * EXPLAIN step of the learning loop (Explain → Practice → Post-check),
- * adapted from LMS_hohulili's lesson sections. The summary ships inside the
- * content pack, so it opens fully offline. Content is team-authored and
- * UNREVIEWED — the draft label is mandatory on this surface.
+ * EXPLAIN step of the learning loop (Explain → Practice → Post-check). The
+ * material is a real server-owned row the teacher can edit; this page reads
+ * the device mirror, so once refreshed it opens fully offline. Team-seeded
+ * drafts carry the mandatory not-yet-reviewed label; a teacher edit replaces
+ * it with their name.
  */
 export function LessonPage() {
   const { kcId = '' } = useParams();
-  const lesson = lessonForKc(kcId);
+  const state = useLesson(kcId);
+  const [retrying, setRetrying] = useState(false);
 
+  if (state === undefined) {
+    return <div className="page-loading" aria-label="Đang mở tài liệu" />;
+  }
+
+  const lesson = state.lesson;
   if (!lesson) {
     return (
       <section className="empty-state">
-        <h1>Chưa có tóm tắt cho phần này</h1>
-        <p>Bài học này chưa được biên soạn. Em có thể quay lại lộ trình để chọn bước khác.</p>
-        <Link className="button-primary" to="/student/path">
+        <h1>Tài liệu chưa có trên thiết bị này</h1>
+        <p>Lần tải đầu tiên cần có mạng; sau đó tài liệu mở được cả khi ngoại tuyến.</p>
+        <button
+          className="button-primary"
+          type="button"
+          disabled={retrying}
+          onClick={() => {
+            setRetrying(true);
+            void refreshLessons().finally(() => setRetrying(false));
+          }}
+        >
+          {retrying ? 'Đang tải…' : 'Tải tài liệu'}
+        </button>{' '}
+        <Link className="button-secondary" to="/student/path">
           Về lộ trình học
         </Link>
       </section>
@@ -27,8 +45,8 @@ export function LessonPage() {
   return (
     <div className="page-stack lesson-page">
       <header className="page-heading">
-        <p className="eyebrow">Tóm tắt kiến thức · {kcName(lesson.kcId)}</p>
-        <h1>{lesson.titleVi}</h1>
+        <p className="eyebrow">Tóm tắt kiến thức · Toán 7</p>
+        <h1>{lesson.title}</h1>
         <p className="page-meta">
           Đọc trong khoảng 2 phút · Lưu sẵn trên thiết bị, mở được khi mất mạng
         </p>
@@ -37,7 +55,7 @@ export function LessonPage() {
       <section className="summary-panel lesson-panel" aria-labelledby="lesson-key-points">
         <h2 id="lesson-key-points">Ý chính cần nhớ</h2>
         <ul className="lesson-points">
-          {lesson.keyPointsVi.map((point) => (
+          {lesson.keyPoints.map((point) => (
             <li key={point}>{point}</li>
           ))}
         </ul>
@@ -45,9 +63,9 @@ export function LessonPage() {
 
       <section className="summary-panel lesson-panel" aria-labelledby="lesson-example">
         <h2 id="lesson-example">Ví dụ có lời giải</h2>
-        <p className="lesson-problem">{lesson.workedExampleVi.problem}</p>
+        <p className="lesson-problem">{lesson.exampleProblem}</p>
         <ol className="lesson-steps">
-          {lesson.workedExampleVi.steps.map((step) => (
+          {lesson.exampleSteps.map((step) => (
             <li key={step}>{step}</li>
           ))}
         </ol>
@@ -58,7 +76,7 @@ export function LessonPage() {
         aria-labelledby="lesson-mistake"
       >
         <h2 id="lesson-mistake">Lỗi thường gặp</h2>
-        <p>{lesson.commonMistakeVi}</p>
+        <p>{lesson.commonMistake}</p>
       </section>
 
       <div className="lesson-actions">
@@ -71,7 +89,9 @@ export function LessonPage() {
       </div>
 
       <p className="data-footnote">
-        Bản nháp do đội biên soạn theo định hướng GDPT 2018 — chưa được giáo viên duyệt.
+        {lesson.status === 'PUBLISHED'
+          ? `Tài liệu do ${lesson.updatedByName ?? 'giáo viên'} cập nhật.`
+          : 'Bản nháp do đội biên soạn theo định hướng GDPT 2018 — chưa được giáo viên duyệt.'}
       </p>
     </div>
   );

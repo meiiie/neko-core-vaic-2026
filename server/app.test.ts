@@ -576,6 +576,61 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('serves seeded lessons to students and lets only teachers publish edits', async () => {
+    const app = await makeApp();
+    const student = await loginCookie(app, STUDENT_EMAIL);
+
+    const listed = await app.inject({ method: 'GET', url: '/api/lessons', cookies: student });
+    const body = listed.json() as { lessons: { kcId: string; status: string }[] };
+    expect(body.lessons).toHaveLength(12);
+    expect(body.lessons.every((lesson) => lesson.status === 'DRAFT')).toBe(true);
+
+    const edit = {
+      title: 'Phân số bằng nhau (bản của cô)',
+      keyPoints: ['Nhân cả tử và mẫu với cùng một số khác 0.'],
+      exampleProblem: 'Tìm số thích hợp: 3/5 = ?/20.',
+      exampleSteps: ['Mẫu nhân 4 nên tử cũng nhân 4: 3 × 4 = 12.'],
+      commonMistake: 'Cộng thêm cùng một số vào tử và mẫu.',
+    };
+    const forbidden = await app.inject({
+      method: 'PUT',
+      url: '/api/lessons/K02',
+      cookies: student,
+      payload: edit,
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const unknown = await app.inject({
+      method: 'PUT',
+      url: '/api/lessons/K99',
+      cookies: teacher,
+      payload: edit,
+    });
+    expect(unknown.statusCode).toBe(404);
+
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/lessons/K02',
+      cookies: teacher,
+      payload: edit,
+    });
+    expect(saved.statusCode).toBe(200);
+
+    const after = await app.inject({ method: 'GET', url: '/api/lessons', cookies: student });
+    const updated = (
+      after.json() as {
+        lessons: { kcId: string; title: string; status: string; updatedByName: string | null }[];
+      }
+    ).lessons.find((lesson) => lesson.kcId === 'K02');
+    expect(updated).toMatchObject({
+      title: 'Phân số bằng nhau (bản của cô)',
+      status: 'PUBLISHED',
+      updatedByName: 'Nguyễn Thu Hà',
+    });
+    await app.close();
+  });
+
   it('quarantines a resent event ID whose content differs instead of overwriting', async () => {
     const app = await makeApp();
     const student = await loginCookie(app, STUDENT_EMAIL);

@@ -42,22 +42,43 @@ export interface OutboxRecord {
   nextRetryAt: string;
 }
 
+/**
+ * Local mirror of a server-owned lesson row, kept so students can read
+ * materials offline. The server is the source of truth; the mirror refreshes
+ * on app start and reconnect.
+ */
+export interface LessonRecord {
+  kcId: string;
+  title: string;
+  keyPoints: string[];
+  exampleProblem: string;
+  exampleSteps: string[];
+  commonMistake: string;
+  status: 'DRAFT' | 'PUBLISHED';
+  updatedAt: string;
+  updatedByName: string | null;
+}
+
 export const DB_NAME = 'nekopath';
-export const DB_SCHEMA_VERSION = 1;
+export const DB_SCHEMA_VERSION = 2;
 
 export class NekoPathDb extends Dexie {
   meta!: Table<MetaRecord, string>;
   events!: Table<LearnerEventRecord, string>;
   overrides!: Table<OverrideRecord, string>;
   outbox!: Table<OutboxRecord, string>;
+  lessons!: Table<LessonRecord, string>;
 
   constructor(name: string = DB_NAME) {
     super(name);
-    this.version(DB_SCHEMA_VERSION).stores({
+    this.version(1).stores({
       meta: 'key',
       events: 'id, [learnerId+sequence], learnerId, itemId, occurredAt',
       overrides: 'id, learnerId, targetKcId, updatedAt',
       outbox: 'eventId, status, createdAt, nextRetryAt',
+    });
+    this.version(DB_SCHEMA_VERSION).stores({
+      lessons: 'kcId',
     });
   }
 }

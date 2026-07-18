@@ -56,6 +56,11 @@ const TeacherGroupDetailPage = lazy(() =>
 const TeacherPage = lazy(() =>
   import('../features/teacher/TeacherPage').then(({ TeacherPage }) => ({ default: TeacherPage })),
 );
+const TeacherLessonsPage = lazy(() =>
+  import('../features/teacher/TeacherLessonsPage').then(({ TeacherLessonsPage }) => ({
+    default: TeacherLessonsPage,
+  })),
+);
 const TeacherQuestionsPage = lazy(() =>
   import('../features/teacher/TeacherQuestionsPage').then(({ TeacherQuestionsPage }) => ({
     default: TeacherQuestionsPage,
@@ -143,6 +148,7 @@ function AppContent() {
                 <Route path="teacher/class" element={<TeacherClassPage />} />
                 <Route path="teacher/class/:groupId" element={<TeacherGroupDetailPage />} />
                 <Route path="teacher/questions" element={<TeacherQuestionsPage />} />
+                <Route path="teacher/lessons" element={<TeacherLessonsPage />} />
                 <Route path="teacher/assignments" element={<TeacherAssignmentsPage />} />
               </Route>
               <Route path="system" element={<SystemPage />} />

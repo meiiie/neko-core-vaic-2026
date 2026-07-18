@@ -11,8 +11,11 @@ import {
   userForSession,
   verifyPassword,
 } from './auth.ts';
+import { LESSON_SUMMARIES } from '../src/content/lessons.v1.ts';
 import { CLASS_7A_ID } from './seed.ts';
 import { buildTeacherDashboard } from './teacher-dashboard.ts';
+
+const LESSON_KC_IDS = new Set(LESSON_SUMMARIES.map((lesson) => lesson.kcId));
 
 /**
  * NekoPath API — one Fastify unit (master plan §9). The server owns identity,
@@ -60,6 +63,14 @@ const assignmentSchema = z.object({
   dueAt: z.string().datetime().nullable().default(null),
   allowRetake: z.boolean().default(false),
   shuffleAnswers: z.boolean().default(false),
+});
+
+const lessonSchema = z.object({
+  title: z.string().min(4).max(120),
+  keyPoints: z.array(z.string().min(4).max(300)).min(1).max(6),
+  exampleProblem: z.string().min(8).max(500),
+  exampleSteps: z.array(z.string().min(4).max(300)).min(1).max(8),
+  commonMistake: z.string().min(8).max(500),
 });
 
 const eventSchema = z.object({
@@ -743,6 +754,84 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       events,
       nextOffset: hasMore ? query.data.offset + EVENT_PAGE_SIZE : null,
     };
+  });
+
+  /**
+   * Lesson materials. The server is the source of truth; the client mirrors
+   * rows into IndexedDB so students can read them offline. Team-seeded rows
+   * start as DRAFT; a teacher edit publishes the row in their name.
+   */
+  app.get('/api/lessons', (request, reply) => {
+    const user = requireUser(request, reply);
+    if (!user) return;
+    const rows = db
+      .prepare(
+        `SELECT l.kc_id, l.title, l.key_points_json, l.example_problem, l.example_steps_json,
+                l.common_mistake, l.status, l.updated_at, u.name AS updated_by_name
+         FROM lessons l LEFT JOIN users u ON u.id = l.updated_by
+         ORDER BY l.kc_id`,
+      )
+      .all() as {
+      kc_id: string;
+      title: string;
+      key_points_json: string;
+      example_problem: string;
+      example_steps_json: string;
+      common_mistake: string;
+      status: string;
+      updated_at: string;
+      updated_by_name: string | null;
+    }[];
+    return {
+      lessons: rows.map((row) => ({
+        kcId: row.kc_id,
+        title: row.title,
+        keyPoints: JSON.parse(row.key_points_json) as string[],
+        exampleProblem: row.example_problem,
+        exampleSteps: JSON.parse(row.example_steps_json) as string[],
+        commonMistake: row.common_mistake,
+        status: row.status,
+        updatedAt: row.updated_at,
+        updatedByName: row.updated_by_name,
+      })),
+    };
+  });
+
+  app.put('/api/lessons/:kcId', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    const { kcId } = request.params as { kcId: string };
+    if (!LESSON_KC_IDS.has(kcId)) return reply.code(404).send({ error: 'UNKNOWN_KC' });
+    const parsed = lessonSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', detail: parsed.error.issues });
+    }
+    const body = parsed.data;
+    db.prepare(
+      `INSERT INTO lessons
+       (kc_id, title, key_points_json, example_problem, example_steps_json, common_mistake,
+        status, updated_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'PUBLISHED', ?, ?)
+       ON CONFLICT(kc_id) DO UPDATE SET
+         title = excluded.title,
+         key_points_json = excluded.key_points_json,
+         example_problem = excluded.example_problem,
+         example_steps_json = excluded.example_steps_json,
+         common_mistake = excluded.common_mistake,
+         status = 'PUBLISHED',
+         updated_by = excluded.updated_by,
+         updated_at = excluded.updated_at`,
+    ).run(
+      kcId,
+      body.title,
+      JSON.stringify(body.keyPoints),
+      body.exampleProblem,
+      JSON.stringify(body.exampleSteps),
+      body.commonMistake,
+      user.id,
+      new Date().toISOString(),
+    );
+    return { ok: true };
   });
 
   /**

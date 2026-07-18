@@ -1,13 +1,10 @@
 /**
- * Tóm tắt kiến thức theo từng KC — vai trò EXPLAIN trong vòng học
- * Explain → Practice → Post-check (LMS_hohulili lesson-section pattern,
- * adapted: thay vì tải theo khoá học, học liệu nằm ngay trong content pack
- * nên offline mặc định từ lần tải đầu).
- *
- * Toàn bộ nội dung do đội biên soạn (TEAM_AUTHORED) và giữ UNREVIEWED cho
- * đến khi có người duyệt chuyên môn được nêu tên; mọi bề mặt hiển thị phải
- * kèm nhãn nháp. Mỗi "lỗi thường gặp" bám đúng misconception mà engine chẩn
- * đoán trên KC đó.
+ * SEED SOURCE ONLY — these team-authored drafts are inserted once into the
+ * server `lessons` table (server/seed.ts, INSERT OR IGNORE) where they become
+ * real rows the teacher edits and owns. The runtime NEVER reads this module:
+ * students read the device mirror of the server rows (services/lessons.ts),
+ * teachers edit via /teacher/lessons. Mỗi "lỗi thường gặp" bám đúng
+ * misconception mà engine chẩn đoán trên KC đó.
  */
 
 export interface LessonSummary {
@@ -263,9 +260,3 @@ export const LESSON_SUMMARIES: readonly LessonSummary[] = [
     reviewState: 'UNREVIEWED',
   },
 ];
-
-const byKc = new Map(LESSON_SUMMARIES.map((lesson) => [lesson.kcId, lesson]));
-
-export function lessonForKc(kcId: string): LessonSummary | undefined {
-  return byKc.get(kcId);
-}

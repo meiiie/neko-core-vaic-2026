@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import type { TeacherDashboardDto } from '../features/teacher/teacher-api';
+import { LESSON_SUMMARIES } from '../content/lessons.v1';
 
 /**
  * Deterministic fetch stub for UI tests: emulates the real API contract
@@ -243,6 +244,21 @@ export function installApiStub(
         return json({ id: 'assignment-test' }, 201);
       }
       if (url.endsWith('/api/assignments')) return json({ assignments: [] });
+      if (url.endsWith('/api/lessons')) {
+        return json({
+          lessons: LESSON_SUMMARIES.map((lesson) => ({
+            kcId: lesson.kcId,
+            title: lesson.titleVi,
+            keyPoints: lesson.keyPointsVi,
+            exampleProblem: lesson.workedExampleVi.problem,
+            exampleSteps: lesson.workedExampleVi.steps,
+            commonMistake: lesson.commonMistakeVi,
+            status: 'DRAFT',
+            updatedAt: '2026-07-18T00:00:00.000Z',
+            updatedByName: null,
+          })),
+        });
+      }
       return json({ error: 'NOT_FOUND' }, 404);
     }),
   );

@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type LearnerEventRecord, type NekoPathDb } from '../storage/db';
 import { appendEvent, learnerEventSchema, type AppendResult } from '../storage/event-repository';
 import { fetchWithDeadline } from './fetch-with-deadline';
+import { refreshLessons } from './lessons';
 import { readBoundProfileId, SIGNED_OUT_PROFILE } from './profile-binding';
 import {
   duePendingOutbox,
@@ -198,11 +199,15 @@ let triggersRegistered = false;
 export function registerSyncTriggers(): void {
   if (triggersRegistered || typeof window === 'undefined') return;
   triggersRegistered = true;
-  window.addEventListener('online', () => void flushOutbox());
+  window.addEventListener('online', () => {
+    void flushOutbox();
+    void refreshLessons();
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void flushOutbox();
   });
   void flushOutbox();
+  void refreshLessons();
 }
 
 export interface SyncStatus {

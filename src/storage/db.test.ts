@@ -37,14 +37,15 @@ describe('Dexie schema v1', () => {
     }
   });
 
-  it('opens with the four v1 tables', async () => {
+  it('opens at schema v2 with the lesson mirror added to the v1 tables', async () => {
     const database = makeDb();
     dbs.push(database);
     await database.open();
 
-    expect(database.verno).toBe(1);
+    expect(database.verno).toBe(2);
     expect(database.tables.map((t) => t.name).sort()).toEqual([
       'events',
+      'lessons',
       'meta',
       'outbox',
       'overrides',

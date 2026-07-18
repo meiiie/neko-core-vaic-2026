@@ -11,11 +11,12 @@ import {
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
-import { lessonForKc } from '../../content';
+import { useLessonKcIds } from '../../services/lessons';
 
 export function PathPage() {
   const { account } = useSession();
   const learnerContext = studentContextForAccount(account);
+  const lessonKcIds = useLessonKcIds();
   const {
     records: localRecords,
     migrationError,
@@ -122,7 +123,7 @@ export function PathPage() {
                   </small>
                   <strong>{kcName(kcId)}</strong>
                 </span>
-                {lessonForKc(kcId) ? (
+                {lessonKcIds?.has(kcId) ? (
                   <Link className="step-lesson-link" to={`/student/lesson/${kcId}`}>
                     Ôn tóm tắt
                   </Link>

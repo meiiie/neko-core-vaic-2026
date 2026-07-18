@@ -98,6 +98,17 @@ export function openDb(path: string): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_teacher_overrides_lookup
       ON teacher_overrides(class_id, learner_id, target_kc_id, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS lessons (
+      kc_id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      key_points_json TEXT NOT NULL,
+      example_problem TEXT NOT NULL,
+      example_steps_json TEXT NOT NULL,
+      common_mistake TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'DRAFT',
+      updated_by TEXT,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS sync_conflicts (
       event_id TEXT NOT NULL,
       learner_id TEXT NOT NULL,
