@@ -18,7 +18,9 @@ compose=(sudo docker compose -f ops/compose.yml)
 sudo install -d -m 0700 "$backup_dir"
 
 cleanup() {
-  "${compose[@]}" exec -T app rm -f "$container_path" >/dev/null 2>&1 || true
+  "${compose[@]}" exec -T app rm -f \
+    "$container_path" "${container_path}-wal" "${container_path}-shm" \
+    >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
