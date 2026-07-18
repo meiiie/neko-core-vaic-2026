@@ -29,10 +29,13 @@ The multimedia and deep-agent release.
 
 ### Fixed
 
-- **Production crash-loop root-caused and closed**: the runtime image now ships all
-  of `src/` (a hand-maintained COPY allowlist broke when a new server cross-import
-  landed), and recovery deploys are no longer blocked by the pre-deploy snapshot
-  when the container is already down.
+- **Production crash-loop root-caused and closed** (two stacked failures): the
+  runtime image now ships all of `src/` (a hand-maintained COPY allowlist broke when
+  a new server cross-import landed), a directory import that Vite/vitest resolve but
+  plain Node ESM rejects was made explicit, and the Docker release gate now
+  boot-smokes the server module graph with plain Node — a green test suite can no
+  longer ship a server that cannot boot. Recovery deploys are no longer blocked by
+  the pre-deploy snapshot when the container is already down.
 - Local database schema advanced to v4 (lesson/resource mirrors + scoped agent
   sessions) with safe upgrade paths for devices on any prior version.
 
