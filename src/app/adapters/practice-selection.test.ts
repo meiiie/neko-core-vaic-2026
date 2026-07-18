@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LearnerEventRecord } from '../../storage/db';
-import { nextPracticeQuestion } from './practice-selection';
+import { nextPracticeQuestion, practiceQuestionForPhase } from './practice-selection';
 
 function record(itemId: string, id = itemId): LearnerEventRecord {
   return {
@@ -15,6 +15,10 @@ function record(itemId: string, id = itemId): LearnerEventRecord {
 }
 
 describe('adaptive practice selection', () => {
+  it('keeps guided practice and the independent post-check on distinct items', () => {
+    expect(practiceQuestionForPhase('K02', 'GUIDED_PRACTICE')?.itemId).toBe('K02-CHECK-1');
+    expect(practiceQuestionForPhase('K02', 'POST_CHECK')?.itemId).toBe('K02-CHECK-2');
+  });
   it('starts with the first deterministic question when there are no attempts', () => {
     expect(nextPracticeQuestion('K02', [])?.itemId).toBe('K02-CHECK-1');
   });

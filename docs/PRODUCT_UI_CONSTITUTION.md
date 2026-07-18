@@ -378,3 +378,11 @@ Next polish:
 - [Design Tokens Format Module 2025.10](https://www.w3.org/community/reports/design-tokens/CG-FINAL-format-20251028/): shared semantic token names create cross-tool vocabulary. For this 48-hour product, CSS variables remain the source of truth; adding a token build pipeline would be unnecessary.
 
 Papers first appearing after 2026-07-15 are deliberately excluded from this decision record.
+
+## 16. Student plan hierarchy amendment (2026-07-18)
+
+For student learning tasks, information order is fixed: `next action -> plan steps -> why this
+step -> technical audit`. The first viewport contains one dominant CTA derived from the current
+plan phase. Source grade, estimated time and honest offline availability are visible without
+opening the technical audit. Diagnosis codes, event counts and engine dispositions remain inside
+the `Xem căn cứ kỹ thuật` disclosure.

@@ -117,11 +117,19 @@ export function openDb(path: string): DatabaseSync {
       id TEXT PRIMARY KEY,
       kc_id TEXT NOT NULL,
       kind TEXT NOT NULL CHECK (kind IN ('PDF','VIDEO')),
+      role TEXT NOT NULL DEFAULT 'SUMMARY',
       title TEXT NOT NULL,
       file_name TEXT NOT NULL,
       mime_type TEXT NOT NULL,
+      duration_seconds INTEGER,
+      transcript_vi TEXT,
       byte_size INTEGER NOT NULL,
       sha256 TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'DRAFT',
+      review_state TEXT NOT NULL DEFAULT 'UNREVIEWED',
+      grade_min INTEGER NOT NULL DEFAULT 5,
+      grade_max INTEGER NOT NULL DEFAULT 7,
       uploaded_by TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
@@ -180,5 +188,20 @@ export function openDb(path: string): DatabaseSync {
   db.exec(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;',
   );
+
+  const resourceColumns = db.prepare('PRAGMA table_info(resources)').all() as { name: string }[];
+  const addResourceColumn = (name: string, definition: string) => {
+    if (!resourceColumns.some((column) => column.name === name)) {
+      db.exec(`ALTER TABLE resources ADD COLUMN ${name} ${definition};`);
+    }
+  };
+  addResourceColumn('role', "TEXT NOT NULL DEFAULT 'SUMMARY'");
+  addResourceColumn('duration_seconds', 'INTEGER');
+  addResourceColumn('transcript_vi', 'TEXT');
+  addResourceColumn('sort_order', 'INTEGER NOT NULL DEFAULT 0');
+  addResourceColumn('status', "TEXT NOT NULL DEFAULT 'DRAFT'");
+  addResourceColumn('review_state', "TEXT NOT NULL DEFAULT 'UNREVIEWED'");
+  addResourceColumn('grade_min', 'INTEGER NOT NULL DEFAULT 5');
+  addResourceColumn('grade_max', 'INTEGER NOT NULL DEFAULT 7');
   return db;
 }

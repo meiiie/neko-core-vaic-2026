@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { HeroSimulationProfileId } from '../../content';
 import type { StudentDiagnosisContext } from '../../app/adapters/hero-tutor';
 import type { LearnerEventRecord } from '../../storage/db';
 import { storedHeroRecords } from '../../test/hero-evidence';
@@ -19,11 +20,16 @@ const { pathState } = vi.hoisted(() => ({
 vi.mock('../../app/session', () => ({
   useSession: () => ({
     account: {
-      id: 'user-student-minh',
+      id: pathState.context.learnerId,
       role: 'STUDENT',
-      learnerId: 'user-student-minh',
-      simulationProfileId: 'minh',
-      shortName: 'Minh',
+      learnerId: pathState.context.learnerId,
+      simulationProfileId: pathState.context.simulationProfileId,
+      shortName:
+        pathState.context.simulationProfileId === 'an'
+          ? 'An'
+          : pathState.context.simulationProfileId === 'chi'
+            ? 'Chi'
+            : 'Minh',
     },
   }),
 }));
@@ -37,14 +43,57 @@ vi.mock('../../app/adapters/student-context', () => ({
   }),
 }));
 
-vi.mock('../../services/lessons', () => ({ useLessonKcIds: () => new Set<string>() }));
+vi.mock('../../services/lessons', () => ({ useLessonKcIds: () => new Set(['K02']) }));
+
+function setProfile(profileId: HeroSimulationProfileId): void {
+  pathState.context = {
+    learnerId: `user-student-${profileId}`,
+    simulationProfileId: profileId,
+  };
+}
 
 describe('continuous student path', () => {
   beforeEach(() => {
-    pathState.context = {
-      learnerId: 'user-student-minh',
-      simulationProfileId: 'minh',
-    };
+    setProfile('minh');
+    pathState.records = storedHeroRecords('minh');
+  });
+
+  it('shows an actionable cross-grade current step', () => {
+    setProfile('an');
+    pathState.records = storedHeroRecords('an');
+    render(
+      <MemoryRouter>
+        <PathPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByText(/Kiến thức nền lớp 5-6/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Bước hiện tại · Xem hoặc đọc/)).toBeTruthy();
+    expect(screen.getAllByRole('link', { name: 'Mở tóm tắt 2 phút' }).length).toBeGreaterThan(0);
+    expect(screen.getByText('Tóm tắt chữ có sẵn ngoại tuyến')).toBeTruthy();
+  });
+
+  it('does not render an empty timeline before check-in', () => {
+    setProfile('chi');
+    pathState.records = storedHeroRecords('chi');
+    render(
+      <MemoryRouter>
+        <PathPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', {
+        name: 'Câu trả lời đã được ghi nhận, nhưng chưa đủ để tìm nguyên nhân gốc',
+      }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Trả lời câu xác minh để mở lộ trình' })).toBeTruthy();
+    expect(
+      screen.queryByRole('heading', { name: 'Từ kiến thức nền tới mục tiêu lớp 7' }),
+    ).toBeNull();
+  });
+
+  it('offers evidence-based maintenance after the current remediation path is complete', () => {
     pathState.records = [
       ...storedHeroRecords('minh'),
       {
@@ -67,9 +116,7 @@ describe('continuous student path', () => {
           '{"version":"review-schedule-v1","kcId":"K10","sourceEventId":"answer-transfer","dueAt":"2020-01-04T08:00:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
       },
     ];
-  });
 
-  it('offers evidence-based maintenance after the current remediation path is complete', () => {
     render(
       <MemoryRouter>
         <PathPage />

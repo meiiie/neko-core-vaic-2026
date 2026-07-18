@@ -96,6 +96,7 @@ interface HeroAnswerPayload {
 export interface LocalAnswerEvidence {
   readonly methodValidity?: MethodValidity;
   readonly misconceptionId?: string;
+  readonly kind?: 'ANSWER' | 'PRACTICE_ANSWER' | 'POST_CHECK_ANSWER';
 }
 
 function parsePayload(payload: string): HeroAnswerPayload | null {
@@ -225,7 +226,7 @@ export function buildLocalAnswerRecord(
     itemId,
     sequence: existingLocalCount + 1,
     occurredAt: new Date().toISOString(),
-    kind: 'ANSWER',
+    kind: evidence.kind ?? 'ANSWER',
     payload: JSON.stringify({
       choiceId,
       correct,
@@ -239,6 +240,9 @@ export function buildLocalAnswerRecord(
 export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerEvent[] {
   const events: LearnerEvent[] = [];
   for (const record of records) {
+    // Guided practice may shape feedback, but it cannot prove independent
+    // mastery or complete a remediation step.
+    if (record.kind === 'PRACTICE_ANSWER' || record.kind === 'RESOURCE_VIEWED') continue;
     const payload = parsePayload(record.payload);
     const canonicalItemId = canonicalHeroItemId(record.itemId);
     const item = HERO_ITEMS.find((candidate) => candidate.id === canonicalItemId);

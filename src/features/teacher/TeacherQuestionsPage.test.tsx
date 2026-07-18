@@ -283,7 +283,9 @@ describe('Teacher question bank workflow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Thêm 1 câu vào gói' }));
     expect(
-      await screen.findByRole('heading', { name: 'Đã thêm 1 câu vào nhóm Ý nghĩa phân số' }),
+      await screen.findByRole('heading', {
+        name: 'Đã thêm 1 câu vào nhóm Ý nghĩa và biểu diễn phân số',
+      }),
     ).toBeTruthy();
     expect(importBody).toMatchObject({ kcId: 'K01' });
     expect(importBody?.questions).toHaveLength(1);

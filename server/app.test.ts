@@ -790,6 +790,20 @@ describe('NekoPath API', () => {
       intervalDays: 1,
       reason: 'REMEDIATE_SOON',
     });
+
+    const completedDetail = await app.inject({
+      method: 'GET',
+      url: `/api/assignments/${assignmentId}`,
+      cookies: student,
+    });
+    expect(completedDetail.json()).toMatchObject({
+      result: {
+        answeredCount: 1,
+        correctCount: 0,
+        questionCount: 1,
+        knowledgeAreas: [{ kcId: 'K08', answeredCount: 1, incorrectCount: 1 }],
+      },
+    });
     const history = await app.inject({ method: 'GET', url: '/api/events', cookies: student });
     expect((history.json() as { events: { id: string }[] }).events).toEqual(
       expect.arrayContaining([
@@ -1234,7 +1248,18 @@ describe('NekoPath API', () => {
     const pdfBytes = Buffer.from('%PDF-1.4 NekoPath resource test payload for K02');
 
     const upload = multipartUpload(
-      { kcId: 'K02', title: 'Tóm tắt PDF: Phân số bằng nhau' },
+      {
+        kcId: 'K02',
+        title: 'Tóm tắt PDF: Phân số bằng nhau',
+        role: 'SUMMARY',
+        durationSeconds: '',
+        transcriptVi: '',
+        sortOrder: '1',
+        status: 'PUBLISHED',
+        reviewState: 'ACCEPTED',
+        gradeMin: '5',
+        gradeMax: '6',
+      },
       'k02.pdf',
       pdfBytes,
     );
@@ -1245,7 +1270,7 @@ describe('NekoPath API', () => {
       headers: upload.headers,
       payload: upload.payload,
     });
-    expect(created.statusCode).toBe(201);
+    expect(created.statusCode, created.body).toBe(201);
     const resourceId = (created.json() as { id: string }).id;
     expect((created.json() as { byteSize: number }).byteSize).toBe(pdfBytes.length);
 
@@ -1262,9 +1287,28 @@ describe('NekoPath API', () => {
 
     const listed = await app.inject({ method: 'GET', url: '/api/resources', cookies: student });
     const resource = (
-      listed.json() as { resources: { id: string; kcId: string; kind: string }[] }
+      listed.json() as {
+        resources: {
+          id: string;
+          kcId: string;
+          kind: string;
+          role: string;
+          status: string;
+          reviewState: string;
+          gradeMin: number;
+          gradeMax: number;
+        }[];
+      }
     ).resources.find((r) => r.id === resourceId);
-    expect(resource).toMatchObject({ kcId: 'K02', kind: 'PDF' });
+    expect(resource).toMatchObject({
+      kcId: 'K02',
+      kind: 'PDF',
+      role: 'SUMMARY',
+      status: 'PUBLISHED',
+      reviewState: 'ACCEPTED',
+      gradeMin: 5,
+      gradeMax: 6,
+    });
 
     const full = await app.inject({
       method: 'GET',

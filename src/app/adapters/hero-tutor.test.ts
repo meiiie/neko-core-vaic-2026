@@ -178,6 +178,32 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     ]);
   });
 
+  it('keeps a teacher-assignment failure actionable after the surface checks are exhausted', () => {
+    const learnerId = 'user-student-7a-09';
+    const records: LearnerEventRecord[] = ['K09-CHECK-1', 'K09-CHECK-2'].map((itemId, index) => ({
+      id: `assignment-k09-${index + 1}`,
+      learnerId,
+      itemId: `bank-${itemId}`,
+      sequence: index + 1,
+      occurredAt: `2026-07-18T16:09:0${index}.000Z`,
+      kind: 'ASSIGNMENT_ANSWER',
+      payload: JSON.stringify({
+        choiceId: 'wrong',
+        correct: false,
+        methodValidity: 'UNKNOWN',
+      }),
+    }));
+
+    const result = diagnoseHero({ learnerId }, records);
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_MORE_EVIDENCE',
+      disposition: 'ASK_VERIFY',
+      competingKcIds: ['K09'],
+    });
+    expect(['K08-CHECK-1', 'K08-CHECK-2']).toContain(result.nextItemId);
+  });
+
   it('rejects a confirmed assignment event owned by another account', () => {
     expect(
       buildConfirmedAssignmentRecord(
@@ -259,6 +285,21 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     };
     broken.payload = 'not-json';
     expect(toDomainEvents([broken])).toEqual([]);
+  });
+
+  it('keeps guided practice and resource views out of mastery evidence', () => {
+    const practice = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-CHECK-1', 'a', true, 0, {
+      kind: 'PRACTICE_ANSWER',
+    });
+    const resource = {
+      ...practice,
+      id: 'resource-view',
+      itemId: 'text:K02',
+      kind: 'RESOURCE_VIEWED',
+      payload: '{"kcId":"K02"}',
+    };
+
+    expect(toDomainEvents([practice, resource])).toEqual([]);
   });
 
   it('feeds local answers into a fresh deterministic diagnosis', () => {

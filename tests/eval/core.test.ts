@@ -199,6 +199,27 @@ describe('hero diagnosis contract', () => {
     expect(['K02-DIAGNOSTIC', 'K07-DIAGNOSTIC']).toContain(chi.nextItemId);
   });
 
+  it('checks an unverified prerequisite when a failed surface skill has no unused probe', () => {
+    const result = diagnose({
+      learnerId: 'surface-gap',
+      targetKcId: 'K10',
+      graph: HERO_GRAPH,
+      items: HERO_ITEMS,
+      events: eventsFor('surface-gap', [
+        ['K09-CHECK-1', false],
+        ['K09-CHECK-2', false],
+      ]),
+      config: HERO_DEMO_CONFIG,
+    });
+
+    expect(result).toMatchObject({
+      status: 'NEEDS_MORE_EVIDENCE',
+      disposition: 'ASK_VERIFY',
+      competingKcIds: ['K09'],
+    });
+    expect(['K08-CHECK-1', 'K08-CHECK-2']).toContain(result.nextItemId);
+  });
+
   it('does not select unreviewed content unless demo mode is explicit', () => {
     const chi = diagnose({
       learnerId: 'chi',

@@ -1,6 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { buildResourceViewedRecord, gradeBandVi } from '../../app/adapters/student-learning-plan';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { useSession } from '../../app/session';
+import { curriculumCatalogDraft } from '../../content';
 import { refreshLessons, useLesson } from '../../services/lessons';
+import { appendEvent } from '../../storage/event-repository';
 import { LessonResources } from './LessonResources';
 
 /**
@@ -12,14 +17,27 @@ import { LessonResources } from './LessonResources';
  */
 export function LessonPage() {
   const { kcId = '' } = useParams();
+  const { account } = useSession();
+  const learnerContext = studentContextForAccount(account);
+  const { records } = useStudentEvents(learnerContext);
   const state = useLesson(kcId);
   const [retrying, setRetrying] = useState(false);
+  const lesson = state?.lesson;
+  const curriculumNode = curriculumCatalogDraft.find((node) => node.id === kcId);
+  const targetNode = curriculumCatalogDraft.find((node) => node.id === 'K10');
+  const grades = [...new Set(curriculumNode?.anchors.map((anchor) => anchor.grade) ?? [])];
+
+  useEffect(() => {
+    if (!lesson || !learnerContext || !records) return;
+    const viewed = buildResourceViewedRecord(learnerContext.learnerId, kcId, records);
+    if (records.some((record) => record.id === viewed.id)) return;
+    void appendEvent(viewed).catch(() => undefined);
+  }, [kcId, learnerContext, lesson, records]);
 
   if (state === undefined) {
     return <div className="page-loading" aria-label="Đang mở tài liệu" />;
   }
 
-  const lesson = state.lesson;
   if (!lesson) {
     return (
       <section className="empty-state">
@@ -46,7 +64,9 @@ export function LessonPage() {
   return (
     <div className="page-stack lesson-page">
       <header className="page-heading">
-        <p className="eyebrow">Tóm tắt kiến thức · Toán 7</p>
+        <p className="eyebrow">
+          {gradeBandVi(grades)} · phục vụ {targetNode?.titleVi ?? 'mục tiêu'} lớp 7
+        </p>
         <h1>{lesson.title}</h1>
         <p className="page-meta">
           Đọc trong khoảng 2 phút · Lưu sẵn trên thiết bị, mở được khi mất mạng
@@ -83,8 +103,8 @@ export function LessonPage() {
       <LessonResources kcId={lesson.kcId} />
 
       <div className="lesson-actions">
-        <Link className="button-primary" to="/student/practice">
-          Bắt đầu luyện tập
+        <Link className="button-primary" to={`/student/practice?phase=guided&kc=${lesson.kcId}`}>
+          Luyện có gợi ý
         </Link>
         <Link className="button-secondary" to="/student/path">
           Về lộ trình học

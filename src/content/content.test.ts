@@ -5,9 +5,13 @@ import {
   contentGraphDraft,
   contentGraphSchema,
   curriculumGraphDraft,
+  HERO_GRAPH,
   HERO_ITEMS,
   HERO_MISCONCEPTIONS,
   HERO_QUESTIONS,
+  HERO_SUPPORTED_KC_IDS,
+  pilotCurriculumIssues,
+  assertPilotCurriculumReady,
 } from './index';
 
 describe('curriculum draft gate', () => {
@@ -15,6 +19,24 @@ describe('curriculum draft gate', () => {
     expect(contentGraphDraft.nodes).toHaveLength(12);
     expect(contentGraphDraft.edges).toHaveLength(13);
     expect(topologicalOrder(curriculumGraphDraft)).toHaveLength(12);
+  });
+
+  it('derives the supported runtime graph from the parsed content graph', () => {
+    expect(HERO_GRAPH.version).toBe(curriculumGraphDraft.version);
+    expect(HERO_GRAPH.nodes.map(({ id }) => id)).toEqual(
+      curriculumGraphDraft.nodes
+        .filter(({ id }) =>
+          HERO_SUPPORTED_KC_IDS.includes(id as (typeof HERO_SUPPORTED_KC_IDS)[number]),
+        )
+        .map(({ id }) => id),
+    );
+    expect(HERO_GRAPH.edges).toEqual(
+      curriculumGraphDraft.edges.filter(
+        ({ from, to }) =>
+          HERO_SUPPORTED_KC_IDS.includes(from as (typeof HERO_SUPPORTED_KC_IDS)[number]) &&
+          HERO_SUPPORTED_KC_IDS.includes(to as (typeof HERO_SUPPORTED_KC_IDS)[number]),
+      ),
+    );
   });
 
   it('keeps every curriculum claim explicitly unreviewed', () => {
@@ -27,6 +49,13 @@ describe('curriculum draft gate', () => {
     expect(reviews.every((review) => review.reviewer === null && review.reviewedAt === null)).toBe(
       true,
     );
+  });
+
+  it('fails the pilot gate instead of promoting unreviewed content', () => {
+    expect(pilotCurriculumIssues()).toEqual(
+      expect.arrayContaining(['node:K02:UNREVIEWED', 'lesson:K10:UNREVIEWED']),
+    );
+    expect(() => assertPilotCurriculumReady()).toThrow('Pilot curriculum is not human-reviewed');
   });
 
   it('keeps every hero item unreviewed and labels every visible question', () => {
