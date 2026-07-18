@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createInterface } from 'node:readline';
+import pkg from '../../package.json' with { type: 'json' };
 
 interface RpcMessage {
   readonly id?: number | string;
@@ -248,7 +249,7 @@ export class CodexAppServerClient {
       (error) => this.failAll(error),
     );
     await this.request('initialize', {
-      clientInfo: { name: 'nekopath', title: 'NekoPath', version: '0.2.0' },
+      clientInfo: { name: 'nekopath', title: 'NekoPath', version: pkg.version },
       capabilities: { experimentalApi: true, requestAttestation: false },
     });
     this.transport.send({ method: 'initialized', params: {} });

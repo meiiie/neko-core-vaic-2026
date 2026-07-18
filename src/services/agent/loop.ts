@@ -99,6 +99,20 @@ function numericClaims(value: string): Set<string> {
   return new Set(value.match(/\b\d+(?:[.,]\d+)?(?:\s*%)?\b/g) ?? []);
 }
 
+function normalizedIntent(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/đ/g, 'd')
+    .toLocaleLowerCase('vi-VN');
+}
+
+function requiresToolEvidence(question: string): boolean {
+  return /\b(chan doan|hoc sinh|lop|nhom|uu tien|lo hong|tien do|bai (?:duoc )?giao|giao bai|kien thuc goc|quan he kien thuc|k(?:0?[1-9]|10))\b/.test(
+    normalizedIntent(question),
+  );
+}
+
 function isGrounded(answer: string, question: string, toolPayloads: readonly string[]): boolean {
   if (toolPayloads.length === 0) return true;
   const allowedNumbers = numericClaims(`${question}\n${toolPayloads.join('\n')}`);
@@ -111,7 +125,21 @@ function isGrounded(answer: string, question: string, toolPayloads: readonly str
   return anchors.size === 0 || [...anchors].some((anchor) => answer.includes(anchor));
 }
 
-function composeCollectedEvidence(toolLog: readonly { name: string; payload: string }[]): string {
+interface ToolLogEntry {
+  readonly name: string;
+  readonly payload: string;
+  readonly ok: boolean;
+}
+
+function toolPayloadSucceeded(payload: string): boolean {
+  try {
+    return (JSON.parse(payload) as { ok?: unknown }).ok === true;
+  } catch {
+    return false;
+  }
+}
+
+function composeCollectedEvidence(toolLog: readonly ToolLogEntry[]): string {
   const parts = toolLog.map((entry) => composeAnswer(entry.name, entry.payload));
   return [...new Set(parts)].join('\n');
 }
@@ -119,15 +147,29 @@ function composeCollectedEvidence(toolLog: readonly { name: string; payload: str
 function contextualEvidence(
   question: string,
   history: readonly AgentChatMessage[],
-): { name: string; payload: string }[] {
+): ToolLogEntry[] {
   if (!/^(vì sao|tại sao|giải thích thêm)\??$/i.test(question.trim())) return [];
   const latestTool = [...history].reverse().find((message) => message.role === 'tool');
   if (latestTool) {
-    return [{ name: latestTool.toolName ?? '', payload: latestTool.content }];
+    return [
+      {
+        name: latestTool.toolName ?? '',
+        payload: latestTool.content,
+        ok: toolPayloadSucceeded(latestTool.content),
+      },
+    ];
   }
   const capsule = history.map(parseCapsule).find((value) => value !== null);
   const evidence = capsule?.evidence.at(-1);
-  return evidence ? [{ name: evidence.toolName, payload: evidence.payload }] : [];
+  return evidence
+    ? [
+        {
+          name: evidence.toolName,
+          payload: evidence.payload,
+          ok: toolPayloadSucceeded(evidence.payload),
+        },
+      ]
+    : [];
 }
 
 export async function runAgentTurn(
@@ -143,7 +185,7 @@ export async function runAgentTurn(
   if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
   const messages: AgentChatMessage[] = [...history, { role: 'user', content: question }];
   const seenCalls = new Set<string>();
-  const toolLog: { name: string; payload: string }[] = contextualEvidence(question, history);
+  const toolLog: ToolLogEntry[] = contextualEvidence(question, history);
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedInputTokens = 0;
@@ -217,7 +259,7 @@ export async function runAgentTurn(
         toolName: call.name,
         toolCallId: call.id,
       });
-      toolLog.push({ name: call.name, payload });
+      toolLog.push({ name: call.name, payload, ok: result.ok });
     }
 
     if (completion.toolCalls.length === 0) {
@@ -226,7 +268,20 @@ export async function runAgentTurn(
       fallback = completion.fallback ?? false;
       let answer =
         completion.content?.trim() || 'Tôi chưa có đủ dữ kiện từ công cụ để trả lời câu này.';
-      if (
+      const hasSuccessfulEvidence = toolLog.some((entry) => entry.ok);
+      if (toolLog.length > 0 && !hasSuccessfulEvidence) {
+        onTrace({
+          kind: 'note',
+          text: 'Không có công cụ nào trả về bằng chứng hợp lệ — dùng kết quả từ chối deterministic.',
+        });
+        answer = composeCollectedEvidence(toolLog);
+      } else if (requiresToolEvidence(question) && !hasSuccessfulEvidence) {
+        onTrace({
+          kind: 'note',
+          text: 'Câu hỏi cần dữ kiện nhưng model không gọi công cụ — từ chối thay vì suy đoán.',
+        });
+        answer = 'Tôi chưa có đủ dữ kiện từ công cụ NekoPath để trả lời câu này.';
+      } else if (
         !isGrounded(
           answer,
           question,
@@ -296,7 +351,7 @@ export async function runAgentTurn(
         toolName: call.name,
         toolCallId: call.id,
       });
-      toolLog.push({ name: call.name, payload });
+      toolLog.push({ name: call.name, payload, ok: result.ok });
     });
   }
 

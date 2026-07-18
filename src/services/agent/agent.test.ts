@@ -151,9 +151,40 @@ describe('agent loop with the rule-based brain', () => {
       ([input, init]) => String(input).endsWith('/api/assignments') && init?.method === 'POST',
     );
     expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
+      operationId: expect.any(String),
       title: 'Luyện tập Phân số bằng nhau',
       questionIds: ['q-k02-1', 'q-k02-2'],
     });
+  });
+
+  it('reuses an assignment operation ID after an ambiguous network failure', async () => {
+    const requestBodies: { operationId: string }[] = [];
+    let attempt = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBodies.push(JSON.parse(String(init?.body)) as { operationId: string });
+        attempt += 1;
+        if (attempt === 1) throw new TypeError('connection closed after request upload');
+        return Response.json({ id: 'assignment-deduplicated', deduplicated: true });
+      }),
+    );
+    const args = {
+      title: 'Luyện tập Phân số bằng nhau',
+      question_ids: ['q-k02-1'],
+      allow_retake: false,
+      shuffle_answers: true,
+    };
+    const tool = toolByName('giao_bai')!;
+
+    await expect(tool.run(args)).resolves.toMatchObject({ ok: false });
+    await expect(tool.run(args)).resolves.toMatchObject({
+      ok: true,
+      data: { id: 'assignment-deduplicated' },
+    });
+
+    expect(requestBodies).toHaveLength(2);
+    expect(requestBodies[0].operationId).toBe(requestBodies[1].operationId);
   });
 
   it('stops a spinning provider that repeats the same tool call (stuck guard)', async () => {

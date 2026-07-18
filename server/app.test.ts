@@ -707,20 +707,31 @@ describe('NekoPath API', () => {
     });
     expect(edited.statusCode).toBe(200);
 
+    const assignmentPayload = {
+      operationId: '00000000-0000-4000-8000-000000000010',
+      title: 'Bài kiểm tra tỉ số',
+      questionIds: [questionId],
+      dueAt: '2099-07-20T10:00:00.000Z',
+      allowRetake: true,
+      shuffleAnswers: true,
+    };
     const assigned = await app.inject({
       method: 'POST',
       url: '/api/assignments',
       cookies: teacher,
-      payload: {
-        title: 'Bài kiểm tra tỉ số',
-        questionIds: [questionId],
-        dueAt: '2099-07-20T10:00:00.000Z',
-        allowRetake: true,
-        shuffleAnswers: true,
-      },
+      payload: assignmentPayload,
     });
     expect(assigned.statusCode).toBe(201);
     const assignmentId = (assigned.json() as { id: string }).id;
+
+    const retried = await app.inject({
+      method: 'POST',
+      url: '/api/assignments',
+      cookies: teacher,
+      payload: assignmentPayload,
+    });
+    expect(retried.statusCode).toBe(200);
+    expect(retried.json()).toMatchObject({ id: assignmentId, deduplicated: true });
 
     const student = await loginCookie(app, STUDENT_EMAIL);
     const opened = await app.inject({
@@ -733,7 +744,7 @@ describe('NekoPath API', () => {
     const titles = (list.json() as { assignments: { title: string }[] }).assignments.map(
       (a) => a.title,
     );
-    expect(titles).toContain('Bài kiểm tra tỉ số');
+    expect(titles.filter((title) => title === 'Bài kiểm tra tỉ số')).toHaveLength(1);
 
     // Students must not receive the answer key with the assignment payload.
     const detail = await app.inject({
