@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { HERO_GRAPH } from '../../content';
-import { ASSIGNMENTS_CHANGED_EVENT } from '../../services/agent/tools';
+import { ASSIGNMENTS_CHANGED_EVENT } from '../../services/assignment-events';
 import type { TeacherDashboardDto, TeacherSupportGroupDto } from './teacher-api';
 
 interface ApiQuestionSummary {
