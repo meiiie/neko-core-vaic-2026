@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { CodexAppServerClient, type CodexTransport } from './codex-app-server.ts';
+import pkg from '../../package.json' with { type: 'json' };
 
 interface WireMessage {
   id?: number;
@@ -146,7 +147,10 @@ describe('Codex App Server managed ChatGPT client', () => {
     ).toEqual({ type: 'chatgpt' });
     expect(transport.writes[0]).toMatchObject({
       method: 'initialize',
-      params: { capabilities: { experimentalApi: true, requestAttestation: false } },
+      params: {
+        clientInfo: { name: 'nekopath', title: 'NekoPath', version: pkg.version },
+        capabilities: { experimentalApi: true, requestAttestation: false },
+      },
     });
     expect(transport.writes.some((message) => message.method === 'initialized')).toBe(true);
   });

@@ -5,6 +5,34 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.10.0] — 2026-07-18
+
+The hardened Neko classroom-assistant release.
+
+### Added
+
+- Bounded prompt queue, true stop/streaming states, account-scoped drafts and session
+  validation, mobile dialog semantics, focus containment and accessible answer announcements.
+- `agent-eval-v1` scenarios for missing-evidence refusal, prompt-injection containment,
+  mutation approval and honest token/latency reporting.
+- A Node-runtime Fastify boot smoke in CI so the production module graph is exercised outside
+  Vite and Vitest before deployment.
+
+### Changed
+
+- Codex App Server now advertises the NekoPath package version instead of a stale hard-coded
+  client version.
+- Public production continues to leave managed ChatGPT accounts disabled. The integration is
+  shipped behind `NEKOPATH_CODEX_APP_SERVER_ENABLED` until a real multi-user OAuth smoke and
+  encrypted credential-at-rest design are reviewed.
+
+### Fixed
+
+- Assignment tool writes now carry a short-lived operation ID; the server derives a stable,
+  teacher-scoped assignment ID and deduplicates ambiguous timeout/retry requests.
+- Tool-envelope parsing, mutation timeout semantics, learner-name matching, session rollback
+  races and several NekoDock accessibility/interaction failures found during PR review.
+
 ## [0.9.0] — 2026-07-18
 
 The multimedia and deep-agent release.
@@ -207,6 +235,7 @@ Baseline release for the per-feature deepening phase.
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.10.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.1...v0.7.0
