@@ -22,6 +22,15 @@ function installMobileViewport() {
   );
 }
 
+function abortAwarePendingFetch() {
+  return vi.fn(
+    (_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+      }),
+  );
+}
+
 describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transport)', () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -111,6 +120,20 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
       </MemoryRouter>,
     );
     expect(await screen.findByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeTruthy();
+  });
+
+  it('shows a meaningful branded status while session restoration is pending', () => {
+    vi.stubGlobal('fetch', abortAwarePendingFetch());
+
+    render(
+      <MemoryRouter initialEntries={['/teacher']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const status = screen.getByRole('status');
+    expect(status.textContent).toContain('NekoPath');
+    expect(status.textContent).toContain('Đang mở không gian học tập');
   });
 
   it('bounds class-directory loading and retries in place', async () => {
