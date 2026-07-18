@@ -3432,3 +3432,114 @@ details li {
   padding: 0;
   min-height: auto;
 }
+
+/* Auth combobox (anchored dropdown class roll) */
+
+.auth-combobox {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.auth-combo-field {
+  position: relative;
+  display: block;
+}
+
+.auth-combo-field input {
+  width: 100%;
+  min-height: 2.875rem;
+  padding: 0 2.5rem 0 0.875rem;
+  border: 1px solid var(--rule-strong, #d0d5dd);
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+  color: var(--ink, #101828);
+  font-size: 1rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.auth-combo-field input:focus-visible {
+  border-color: var(--primary, #155eef);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-soft, #eff4ff);
+  cursor: text;
+}
+
+.auth-combo-chevron {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  transform: translateY(-50%);
+  color: var(--muted, #667085);
+  pointer-events: none;
+  transition: transform 160ms ease;
+}
+
+.auth-combo-field[data-open] .auth-combo-chevron {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.auth-dropdown {
+  position: absolute;
+  top: calc(100% + 0.375rem);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 16rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 1px solid var(--rule, #e4e7ec);
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+  box-shadow: 0 1rem 2.5rem rgb(16 24 40 / 14%);
+  transform-origin: top center;
+}
+
+.auth-option {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.auth-option[data-active] {
+  background: var(--primary-soft, #eff4ff);
+}
+
+.auth-option[aria-selected='true'] .auth-option-name {
+  font-weight: 700;
+}
+
+.auth-option-sub {
+  color: var(--muted, #667085);
+  font-size: 0.8125rem;
+}
+
+.auth-option-check {
+  margin-left: auto;
+  color: var(--primary, #155eef);
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .auth-dropdown {
+    animation: auth-drop 140ms ease-out;
+  }
+
+  @keyframes auth-drop {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem) scale(0.99);
+    }
+  }
+}

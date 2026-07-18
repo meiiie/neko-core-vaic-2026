@@ -29,7 +29,7 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('opens on the searchable class roll (no password field, no Google)', async () => {
+  it('opens on the class-roll combobox — folded by default, no password field, no Google', async () => {
     installApiStub(null);
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -38,14 +38,15 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     );
 
     expect(screen.getByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeTruthy();
-    expect(await screen.findByRole('searchbox', { name: 'Tìm tên của bạn' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Trần Ngọc An/ })).toBeTruthy();
+    const combo = await screen.findByRole('combobox', { name: 'Chọn tên của bạn' });
+    expect(combo.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('listbox')).toBeNull(); // dropdown folded until tapped
     expect(screen.queryByLabelText(/Mật khẩu/)).toBeNull();
     expect(screen.queryByText(/tài khoản mẫu/i)).toBeNull();
     expect(screen.queryByText(/Google/)).toBeNull();
   });
 
-  it('signs in by searching and tapping a name — no typing a password', async () => {
+  it('signs in by opening the dropdown, filtering and picking a name — no password typing', async () => {
     installApiStub(null);
     const user = userEvent.setup();
     render(
@@ -54,10 +55,16 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
       </MemoryRouter>,
     );
 
-    // Diacritic-insensitive search: "ngoc an" finds "Trần Ngọc An".
-    await user.type(await screen.findByRole('searchbox', { name: 'Tìm tên của bạn' }), 'ngoc an');
-    await user.click(screen.getByRole('button', { name: /Trần Ngọc An/ }));
-    await user.click(screen.getByRole('button', { name: /Đăng nhập — Trần Ngọc An/ }));
+    const combo = await screen.findByRole('combobox', { name: 'Chọn tên của bạn' });
+    await user.click(combo);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    // Diacritic-insensitive filter: "ngoc an" finds "Trần Ngọc An".
+    await user.type(combo, 'ngoc an');
+    await user.click(screen.getByRole('option', { name: /Trần Ngọc An/ }));
+    // Picking folds the dropdown and shows the chosen name in the field.
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect((combo as HTMLInputElement).value).toBe('Trần Ngọc An');
+    await user.click(screen.getByRole('button', { name: 'Đăng nhập' }));
 
     const navigation = await screen.findByRole('navigation', { name: 'Điều hướng chính' });
     expect([...navigation.querySelectorAll('a')].map((link) => link.textContent)).toEqual([
