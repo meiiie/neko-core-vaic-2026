@@ -126,7 +126,8 @@ Design decisions that matter:
 ### Where the AI actually is
 
 NekoPath's core AI is not a chatbot. It is a **probabilistic learner model plus a
-graph-constrained decision engine**, running entirely on the device:
+graph-constrained decision engine**. Student diagnosis runs on the device; the server-backed
+teacher dashboard invokes the same pure domain core over account-scoped evidence:
 
 1. A Bayesian Knowledge Tracing–style learner model (versioned slip/guess/learn parameters,
    deterministic over the canonicalized event log) updates mastery estimates after every answer.
@@ -155,12 +156,14 @@ npm ci
 npm run seed     # create and seed the local SQLite database
 npm run server   # Fastify API on port 3001
 npm run dev      # Vite dev server (proxies /api to the local API)
-npm run test     # 94 application tests (Vitest)
-npm run eval     # 28 disclosed synthetic evaluation tests
+npm run test     # 167 application and integration tests (Vitest)
+npm run eval     # 29 disclosed synthetic evaluation tests
 npm run build    # type-checked production build
+npm run verify   # complete local verification in one command
 ```
 
-The full local gate mirrors CI: `format:check`, `lint`, `typecheck`, `test`, `build`.
+`npm run verify` runs format, lint, typecheck, application tests, eval and build. CI repeats those
+steps and additionally validates operations scripts and the generated PWA artifacts.
 
 ## Quality and release engineering
 
