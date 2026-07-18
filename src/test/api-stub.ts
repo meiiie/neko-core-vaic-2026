@@ -40,6 +40,16 @@ const USERS: Record<string, StubUser> = {
     subtitle: 'Học sinh • Lớp 7A',
     learnerProfile: 'chi',
   },
+  'hs01@nekopath.edu.vn': {
+    id: 'user-student-7a-01',
+    email: 'hs01@nekopath.edu.vn',
+    role: 'STUDENT',
+    name: 'Nguyễn Gia Hân',
+    initials: 'GH',
+    shortName: 'Hân',
+    subtitle: 'Học sinh • Lớp 7A',
+    learnerProfile: null,
+  },
   'co.ha@nekopath.edu.vn': {
     id: 'user-teacher-ha',
     email: 'co.ha@nekopath.edu.vn',

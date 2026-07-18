@@ -1,4 +1,3 @@
-import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
 import {
@@ -10,18 +9,18 @@ import {
   REASON_LABELS,
   STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
-import { listEventsByLearner } from '../../storage/event-repository';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 
 export function PathPage() {
   const { account } = useSession();
-  const learnerId = account?.learnerId ?? 'chi';
-  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
+  const learnerContext = studentContextForAccount(account);
+  const localRecords = useStudentEvents(learnerContext);
 
-  if (localRecords === undefined) {
+  if (localRecords === undefined || !learnerContext) {
     return <div className="page-loading" aria-label="Đang tải lộ trình" />;
   }
 
-  const result = diagnoseHero(learnerId, localRecords);
+  const result = diagnoseHero(learnerContext, localRecords);
   const supported = result.status === 'DIAGNOSED' || result.status === 'FAST_PATH';
 
   return (

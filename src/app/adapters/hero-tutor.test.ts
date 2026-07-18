@@ -41,6 +41,33 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     });
   });
 
+  it('rekeys hero evidence to the account ID while preserving the simulated outcome', () => {
+    const context = { learnerId: 'user-student-an', simulationProfileId: 'an' } as const;
+    const result = diagnoseHero(context);
+    const record = buildLocalAnswerRecord(context, 'K02-DIAGNOSTIC', 'a', true, 0);
+
+    expect(result).toMatchObject({
+      learnerId: 'user-student-an',
+      status: 'DIAGNOSED',
+      rootKcId: 'K02',
+    });
+    expect(result.evidenceEventIds.every((id) => id.startsWith('user-student-an-'))).toBe(true);
+    expect(record).toMatchObject({ learnerId: 'user-student-an', sequence: 8 });
+  });
+
+  it('starts a non-hero student from isolated empty evidence instead of Chi', () => {
+    const context = { learnerId: 'user-student-7a-01' } as const;
+    const result = diagnoseHero(context);
+    const record = buildLocalAnswerRecord(context, 'K02-DIAGNOSTIC', 'a', true, 0);
+
+    expect(result).toMatchObject({
+      learnerId: 'user-student-7a-01',
+      status: 'NEEDS_MORE_EVIDENCE',
+    });
+    expect(result.evidenceEventIds).toEqual([]);
+    expect(record).toMatchObject({ learnerId: 'user-student-7a-01', sequence: 1 });
+  });
+
   it('persists structured misconception evidence from an authored distractor', () => {
     const record = buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'b', false, 0, {
       misconceptionId: 'ADDITIVE_EQUIVALENCE',

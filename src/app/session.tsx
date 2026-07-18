@@ -25,7 +25,10 @@ export interface Account {
   readonly initials: string;
   readonly shortName: string;
   readonly subtitle: string;
-  readonly learnerId?: 'an' | 'binh' | 'chi' | 'minh';
+  /** Stable opaque storage/inference key. Every student uses the API user ID. */
+  readonly learnerId?: string;
+  /** Optional synthetic evidence fixture. Never used as the learner's storage key. */
+  readonly simulationProfileId?: 'an' | 'binh' | 'chi' | 'minh';
 }
 
 export interface DeviceProfile extends Account {
@@ -51,6 +54,10 @@ interface ApiUser {
 
 function toAccount(user: ApiUser): Account {
   const profile = user.learnerProfile;
+  const simulationProfileId =
+    profile === 'an' || profile === 'binh' || profile === 'chi' || profile === 'minh'
+      ? profile
+      : undefined;
   return {
     id: user.id,
     role: user.role,
@@ -58,10 +65,8 @@ function toAccount(user: ApiUser): Account {
     initials: user.initials,
     shortName: user.shortName,
     subtitle: user.subtitle,
-    learnerId:
-      profile === 'an' || profile === 'binh' || profile === 'chi' || profile === 'minh'
-        ? profile
-        : undefined,
+    ...(user.role === 'STUDENT' ? { learnerId: user.id } : {}),
+    ...(simulationProfileId ? { simulationProfileId } : {}),
   };
 }
 
@@ -79,10 +84,45 @@ export const DEVICE_PROFILES_KEY = 'nekopath.device-profiles.v1';
 export const SESSION_RESTORE_DEADLINE_MS = 3_000;
 export const SIGN_IN_DEADLINE_MS = 8_000;
 
+function normalizeAccount(value: unknown): Account | null {
+  if (!value || typeof value !== 'object') return null;
+  const parsed = value as Partial<Account>;
+  if (
+    typeof parsed.id !== 'string' ||
+    (parsed.role !== 'STUDENT' && parsed.role !== 'TEACHER') ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.initials !== 'string' ||
+    typeof parsed.shortName !== 'string' ||
+    typeof parsed.subtitle !== 'string'
+  ) {
+    return null;
+  }
+  const legacyProfile = parsed.learnerId;
+  const simulationProfileId =
+    parsed.simulationProfileId ??
+    (legacyProfile === 'an' ||
+    legacyProfile === 'binh' ||
+    legacyProfile === 'chi' ||
+    legacyProfile === 'minh'
+      ? legacyProfile
+      : undefined);
+  return {
+    id: parsed.id,
+    role: parsed.role,
+    name: parsed.name,
+    initials: parsed.initials,
+    shortName: parsed.shortName,
+    subtitle: parsed.subtitle,
+    ...(parsed.role === 'STUDENT' ? { learnerId: parsed.id } : {}),
+    ...(simulationProfileId ? { simulationProfileId } : {}),
+  };
+}
+
 function readCache(): Account | null {
   try {
     const raw = window.localStorage.getItem(CACHE_KEY);
-    return raw ? (JSON.parse(raw) as Account) : null;
+    if (!raw) return null;
+    return normalizeAccount(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -97,28 +137,21 @@ function writeCache(account: Account | null): void {
   }
 }
 
-function isDeviceProfile(value: unknown): value is DeviceProfile {
-  if (!value || typeof value !== 'object') return false;
+function normalizeDeviceProfile(value: unknown): DeviceProfile | null {
+  if (!value || typeof value !== 'object') return null;
   const profile = value as Partial<DeviceProfile>;
-  const learnerIds = ['an', 'binh', 'chi', 'minh'];
-  return (
-    typeof profile.email === 'string' &&
-    profile.email.includes('@') &&
-    typeof profile.id === 'string' &&
-    (profile.role === 'STUDENT' || profile.role === 'TEACHER') &&
-    typeof profile.name === 'string' &&
-    typeof profile.initials === 'string' &&
-    typeof profile.shortName === 'string' &&
-    typeof profile.subtitle === 'string' &&
-    (profile.learnerId === undefined || learnerIds.includes(profile.learnerId))
-  );
+  if (typeof profile.email !== 'string' || !profile.email.includes('@')) return null;
+  const account = normalizeAccount(profile);
+  return account ? { ...account, email: profile.email } : null;
 }
 
 function readDeviceProfiles(): DeviceProfile[] {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(DEVICE_PROFILES_KEY) ?? '[]') as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isDeviceProfile);
+    return parsed
+      .map(normalizeDeviceProfile)
+      .filter((profile): profile is DeviceProfile => profile !== null);
   } catch {
     return [];
   }
