@@ -94,6 +94,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Reference repositories and UX/research labs are evidence, not part of
+    // this application's test graph. In particular, ref/neko-core carries its
+    // own Vitest suites and dependency assumptions.
+    exclude: ['**/node_modules/**', '**/dist/**', 'ref/**', 'lab/**', 'labs/**'],
     alias: {
       // The virtual module only exists inside the Vite plugin pipeline.
       'virtual:pwa-register/react': fileURLToPath(

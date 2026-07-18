@@ -2,7 +2,7 @@
 
 Ngày: 2026-07-18
 
-Trạng thái: chờ người phụ trách sản phẩm duyệt văn bản trước implementation
+Trạng thái: đã được người phụ trách sản phẩm duyệt; triển khai vertical slice từ 2026-07-18
 
 Phạm vi: Neko trong cổng giáo viên; không thay đổi UX/UI trong đặc tả này
 
@@ -452,9 +452,20 @@ Subsystem này hoàn thành khi:
 7. Không có raw sensitive content trong logs/session capsule.
 8. Full repository verification qua trên Node version được project pin; `ref/` không được test runner thu thập.
 
-## 16. Không nằm trong implementation đầu tiên
+## 16. Provider slice được duyệt để triển khai
 
-- thay đổi UX/UI hoặc login;
+Vertical slice đầu tiên gồm ba đường chạy cùng chung một `AgentSessionController` và cùng tool/evidence contract:
+
+1. **Rule provider** luôn khả dụng và là deterministic fallback.
+2. **Gemma 3 1B trong trình duyệt** chạy qua WebLLM Web Worker; tải trước có chủ đích, dùng cache chính thức, abort/unload được và hoạt động ngoại tuyến sau khi tải đủ.
+3. **OpenAI Responses API** đi qua Fastify cùng origin; API key chỉ tồn tại ở server, mặc định model `gpt-5.6-sol` nhưng cho phép cấu hình bằng biến môi trường.
+4. **ChatGPT managed account** chỉ dành cho local/self-hosted mode, dùng public Codex App Server protocol để Codex quản lý OAuth/refresh token. Không gọi trực tiếp private `chatgpt.com/backend-api/*`, không đưa token ra browser và không bật mặc định trên public deployment.
+
+Memory của cả bốn đường chạy là canonical memory do NekoPath sở hữu. Không có logic “đủ 10 lượt thì xóa”. Compaction được kích hoạt bởi token estimate/usage so với context window và có thể chạy lặp lại vô hạn; mỗi lần phải giữ nguyên system contract, original task, confirmed constraints/corrections, evidence refs và recent complete turns.
+
+## 17. Không nằm trong implementation đầu tiên
+
+- thay đổi thiết kế UX/UI tổng thể hoặc login tài khoản NekoPath;
 - real auth/JWT;
 - student free-chat;
 - automatic answer generation;
