@@ -3867,6 +3867,59 @@ html:has(.question-selection-actions) {
   font-weight: 650;
 }
 
+/* Lesson summaries (EXPLAIN step; ships in the content pack, offline by default) */
+
+.lesson-page .page-heading {
+  max-width: 44rem;
+}
+
+.lesson-panel {
+  max-width: 44rem;
+}
+
+.lesson-points,
+.lesson-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--s-2);
+}
+
+.lesson-points li,
+.lesson-steps li {
+  line-height: 1.5rem;
+}
+
+.lesson-problem {
+  font-weight: 650;
+}
+
+.lesson-panel--mistake {
+  border-left: 0.25rem solid var(--review);
+}
+
+.lesson-panel--mistake p {
+  margin-bottom: 0;
+}
+
+.lesson-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.path-steps li:has(.step-lesson-link) {
+  grid-template-columns: 3.5rem 1fr auto;
+}
+
+.path-steps .step-lesson-link {
+  align-self: center;
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* Sign-in status states */
 
 .auth-loading {

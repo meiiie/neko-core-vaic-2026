@@ -11,6 +11,7 @@ import {
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
+import { lessonForKc } from '../../content';
 
 export function PathPage() {
   const { account } = useSession();
@@ -121,6 +122,11 @@ export function PathPage() {
                   </small>
                   <strong>{kcName(kcId)}</strong>
                 </span>
+                {lessonForKc(kcId) ? (
+                  <Link className="step-lesson-link" to={`/student/lesson/${kcId}`}>
+                    Ôn tóm tắt
+                  </Link>
+                ) : null}
               </li>
             ))}
           </ol>

@@ -22,6 +22,9 @@ const AssignmentTakePage = lazy(() =>
 const LearnPage = lazy(() =>
   import('../features/student/LearnPage').then(({ LearnPage }) => ({ default: LearnPage })),
 );
+const LessonPage = lazy(() =>
+  import('../features/student/LessonPage').then(({ LessonPage }) => ({ default: LessonPage })),
+);
 const PracticePage = lazy(() =>
   import('../features/student/PracticePage').then(({ PracticePage }) => ({
     default: PracticePage,
@@ -133,6 +136,7 @@ function AppContent() {
                 <Route path="student/assignments" element={<AssignmentsPage />} />
                 <Route path="student/assignments/:assignmentId" element={<AssignmentTakePage />} />
                 <Route path="student/path" element={<PathPage />} />
+                <Route path="student/lesson/:kcId" element={<LessonPage />} />
               </Route>
               <Route element={<RequireRole role="TEACHER" />}>
                 <Route path="teacher" element={<TeacherPage />} />

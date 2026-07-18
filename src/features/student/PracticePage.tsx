@@ -9,7 +9,7 @@ import {
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
-import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
+import { lessonForKc, practiceQuestionsForKc, type PracticeQuestion } from '../../content';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
 import { recordAnswer } from '../../services/sync';
 import type { LearnerEventRecord } from '../../storage/db';
@@ -296,6 +296,14 @@ export function PracticePage() {
           <p>
             Trả lời đúng vài câu liên tiếp để chứng minh em đã vững — hệ thống sẽ tự chuyển sang
             bước tiếp theo.
+            {lessonForKc(rootKcId) ? (
+              <>
+                {' '}
+                <Link className="text-link" to={`/student/lesson/${rootKcId}`}>
+                  Xem tóm tắt kiến thức trước
+                </Link>
+              </>
+            ) : null}
           </p>
         </div>
         <span className="status-label status-label--neutral">Lưu trên thiết bị</span>
