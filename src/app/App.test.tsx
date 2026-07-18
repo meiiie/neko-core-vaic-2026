@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,7 +27,10 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     window.localStorage.clear();
     document.body.style.overflow = '';
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it('opens on the class-roll combobox — folded by default, no password field, no Google', async () => {
     installApiStub(null);
@@ -108,6 +111,63 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
       </MemoryRouter>,
     );
     expect(await screen.findByRole('heading', { level: 1, name: 'Đăng nhập' })).toBeTruthy();
+  });
+
+  it('bounds class-directory loading and retries in place', async () => {
+    vi.useFakeTimers();
+    let directoryAttempts = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/auth/me')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: 'UNAUTHENTICATED' }), { status: 401 }),
+          );
+        }
+        if (url.endsWith('/api/auth/directory')) {
+          directoryAttempts += 1;
+          if (directoryAttempts === 1) {
+            return new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+                once: true,
+              });
+            });
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                accounts: [
+                  {
+                    email: 'an@nekopath.edu.vn',
+                    name: 'Trần Ngọc An',
+                    role: 'STUDENT',
+                    subtitle: 'Học sinh • Lớp 7A',
+                  },
+                ],
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            ),
+          );
+        }
+        return Promise.resolve(new Response('{}', { status: 404 }));
+      }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    expect(screen.getByRole('alert').textContent).toContain('Không tải được danh sách lớp');
+
+    screen.getByRole('button', { name: 'Thử lại' }).click();
+    await act(async () => Promise.resolve());
+
+    expect(screen.getByRole('combobox', { name: 'Chọn tên của bạn' })).toBeTruthy();
+    expect(directoryAttempts).toBe(2);
   });
 
   it('keeps mobile drawer focus and exit behavior continuous', async () => {
