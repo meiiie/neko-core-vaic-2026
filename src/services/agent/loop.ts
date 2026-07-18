@@ -10,6 +10,7 @@ export interface AgentChatMessage {
   readonly content: string;
   readonly toolName?: string;
   readonly toolCallId?: string;
+  readonly toolArgs?: Readonly<Record<string, unknown>>;
 }
 
 export interface AgentUsage {
@@ -160,6 +161,7 @@ export async function runAgentTurn(
         content: `[gọi công cụ ${call.name}]`,
         toolName: call.name,
         toolCallId: call.id,
+        toolArgs: call.args,
       });
       messages.push({
         role: 'tool',

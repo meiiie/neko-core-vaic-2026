@@ -1,13 +1,13 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { buildApp } from './app.ts';
+import { describe, expect, it, vi } from 'vitest';
+import { buildApp, type AppOptions } from './app.ts';
 import { openDb } from './db.ts';
 import { DEMO_PASSWORD, seed } from './seed.ts';
 
-async function makeApp() {
+async function makeApp(options?: AppOptions) {
   const db = openDb(':memory:');
   seed(db);
-  const app = buildApp(db);
+  const app = buildApp(db, options);
   await app.ready();
   return app;
 }
@@ -25,6 +25,75 @@ async function loginCookie(app: Awaited<ReturnType<typeof makeApp>>, username: s
 }
 
 describe('NekoPath API', () => {
+  it('reports provider availability without exposing secrets', async () => {
+    const app = await makeApp({ openAiApiKey: '' });
+    const teacher = await loginCookie(app, 'co.ha');
+    const response = await app.inject({ method: 'GET', url: '/api/ai/providers', cookies: teacher });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      providers: expect.arrayContaining([
+        expect.objectContaining({ id: 'openai', available: false }),
+      ]),
+    });
+    expect(response.body).not.toContain('apiKey');
+    await app.close();
+  });
+
+  it('keeps Responses teacher-only and forwards a strict server-owned request', async () => {
+    const upstream = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(
+        'data: {"type":"response.output_text.delta","delta":"Đã rõ"}\n\n' +
+          'data: {"type":"response.completed","response":{"usage":{"input_tokens":4,"output_tokens":2}}}\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
+    );
+    const app = await makeApp({
+      openAiApiKey: 'server-secret',
+      openAiModel: 'gpt-test',
+      fetchImpl: upstream,
+    });
+    const teacher = await loginCookie(app, 'co.ha');
+    const student = await loginCookie(app, 'an.tn');
+    const payload = {
+      input: [{ role: 'user', content: 'Chào' }],
+      tools: [
+        {
+          type: 'function',
+          name: 'fact',
+          description: 'Read facts.',
+          parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+          strict: true,
+        },
+      ],
+    };
+
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/ai/responses', cookies: student, payload }))
+        .statusCode,
+    ).toBe(403);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/ai/responses',
+      cookies: teacher,
+      payload,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/event-stream');
+    expect(response.body).toContain('response.output_text.delta');
+    const [url, init] = upstream.mock.calls[0];
+    expect(url).toBe('https://api.openai.com/v1/responses');
+    expect((init?.headers as Record<string, string>).authorization).toBe('Bearer server-secret');
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      model: 'gpt-test',
+      store: false,
+      stream: true,
+      input: payload.input,
+    });
+    await app.close();
+  });
+
   it('rejects wrong credentials and unauthenticated access', async () => {
     const app = await makeApp();
     const bad = await app.inject({

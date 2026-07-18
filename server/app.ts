@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
+import { registerResponsesRoutes } from './ai/responses.ts';
 import { createSession, destroySession, userForSession, verifyPassword } from './auth.ts';
 import { CLASS_7A_ID } from './seed.ts';
 
@@ -94,7 +95,14 @@ function stableOrder(seed: string): number {
   return hash >>> 0;
 }
 
-export function buildApp(db: DatabaseSync): FastifyInstance {
+export interface AppOptions {
+  readonly fetchImpl?: typeof fetch;
+  readonly openAiApiKey?: string;
+  readonly openAiModel?: string;
+  readonly chatGptAvailable?: () => boolean;
+}
+
+export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 });
   void app.register(fastifyCookie);
 
@@ -120,6 +128,14 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     }
     return user;
   }
+
+  registerResponsesRoutes(app, {
+    apiKey: options.openAiApiKey ?? process.env.OPENAI_API_KEY ?? '',
+    model: options.openAiModel ?? process.env.NEKOPATH_OPENAI_MODEL ?? 'gpt-5.6-sol',
+    fetchImpl: options.fetchImpl ?? fetch,
+    requireTeacher,
+    chatGptAvailable: options.chatGptAvailable,
+  });
 
   app.get('/api/healthz', () => ({ status: 'ok', time: new Date().toISOString() }));
 
