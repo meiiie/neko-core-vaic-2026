@@ -5,6 +5,40 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.8.0] — 2026-07-18
+
+Baseline release for the per-feature deepening phase.
+
+### Added
+
+- Teacher-owned lesson materials: a server `lessons` table (12 team drafts seeded as
+  editable rows), a `/teacher/lessons` authoring surface that publishes under the
+  teacher's name, and an offline device mirror so students read materials without a
+  network — with provenance labels (draft vs teacher-updated) on every lesson.
+- Server-backed teacher intelligence: support groups, targeted review and per-learner
+  evidence tracing now read real synced records instead of on-device aggregates only.
+- Account-owned evidence hydration: paginated server history restores a student's
+  append-only log on any device; assignment answers feed diagnosis and practice
+  progress on equal footing with check-in answers.
+- End-to-end adaptive-contract tests over real Fastify + in-memory SQLite: the same
+  surface error yields different diagnosed roots and different remediation paths, with
+  an explicit abstention case — no API mocks.
+- Public governance set: requirement-by-requirement problem-fit audit, engineering
+  standards benchmarked against industry practice, and an honest architecture review
+  against the team's mature LMS with a tiered adoption plan.
+
+### Changed
+
+- Deploys are pipeline-only: keyless Workload Identity Federation + IAP from GitHub
+  Actions; hand SSH demoted to reported break-glass. One-command local gate
+  `npm run verify` mirrors CI exactly.
+- Learner evidence is isolated per account; assigned and practice progress unified.
+
+### Fixed
+
+- Assigned-answer evidence hardening; deploy-time SQLite snapshot flow simplified
+  after the sidecar approach proved redundant.
+
 ## [0.7.0] — 2026-07-18
 
 ### Added
@@ -139,6 +173,7 @@ hackathon window).
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.8.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.5.0...v0.6.0
