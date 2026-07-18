@@ -1336,7 +1336,6 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     grade_max: number;
     created_at: string;
     uploaded_by_name: string | null;
-    duration_seconds: number | null;
     media_width: number | null;
     media_height: number | null;
     poster_data_url: string | null;
