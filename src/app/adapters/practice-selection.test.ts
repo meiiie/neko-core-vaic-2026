@@ -32,4 +32,13 @@ describe('adaptive practice selection', () => {
       ])?.itemId,
     ).toBe('K02-CHECK-2');
   });
+
+  it('does not count a persisted review schedule as another learner attempt', () => {
+    expect(
+      nextPracticeQuestion('K02', [
+        record('K02-CHECK-1', 'answer-1'),
+        { ...record('K02-CHECK-1', 'review-answer-1'), kind: 'REVIEW_SCHEDULED', sequence: 9 },
+      ])?.itemId,
+    ).toBe('K02-CHECK-2');
+  });
 });

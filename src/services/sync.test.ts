@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NekoPathDb, type LearnerEventRecord } from '../storage/db';
 import { appendEvent } from '../storage/event-repository';
 import { duePendingOutbox, queueOutbox } from '../storage/outbox-repository';
-import { flushOutbox, recordAnswer, recordConfirmedAnswer } from './sync';
+import {
+  flushOutbox,
+  recordAnswer,
+  recordAnswerWithReview,
+  recordConfirmedAnswer,
+  recordConfirmedAnswerWithReview,
+} from './sync';
 import { bindBrowserProfile, markBrowserSignedOut } from './profile-binding';
 
 function makeDb(): NekoPathDb {
@@ -23,6 +29,25 @@ function makeEvent(
     occurredAt: '2026-07-17T09:00:00.000Z',
     kind: 'ANSWER',
     payload: '{"choiceId":"a","correct":true}',
+  };
+}
+
+function makeReview(answer: LearnerEventRecord): LearnerEventRecord {
+  return {
+    id: `review-${answer.id}`,
+    learnerId: answer.learnerId,
+    itemId: answer.itemId,
+    sequence: answer.sequence + 1,
+    occurredAt: answer.occurredAt,
+    kind: 'REVIEW_SCHEDULED',
+    payload: JSON.stringify({
+      version: 'review-schedule-v1',
+      kcId: 'K02',
+      sourceEventId: answer.id,
+      dueAt: '2026-07-20T09:00:00.000Z',
+      intervalDays: 3,
+      reason: 'RECOVERY_CHECK',
+    }),
   };
 }
 
@@ -201,6 +226,21 @@ describe('outbox sync bridge', () => {
     await database.delete();
   });
 
+  it('queues the answer and persisted review schedule in one local transaction', async () => {
+    const database = makeDb();
+    markBrowserSignedOut();
+    const answer = makeEvent('evt-paired', 4);
+    const review = makeReview(answer);
+
+    expect(await recordAnswerWithReview(answer, review, database)).toBe('APPENDED');
+    expect(await database.events.bulkGet([answer.id, review.id])).toEqual([answer, review]);
+    expect(await database.outbox.bulkGet([answer.id, review.id])).toEqual([
+      expect.objectContaining({ eventId: answer.id, status: 'PENDING' }),
+      expect.objectContaining({ eventId: review.id, status: 'PENDING' }),
+    ]);
+    await database.delete();
+  });
+
   it('stores a server-confirmed assignment answer without queueing it again', async () => {
     const database = makeDb();
     const event = { ...makeEvent('evt-confirmed', 8), kind: 'ASSIGNMENT_ANSWER' };
@@ -212,6 +252,17 @@ describe('outbox sync bridge', () => {
 
     expect(await recordConfirmedAnswer(event, database)).toBe('DUPLICATE_IGNORED');
     expect(await database.events.count()).toBe(1);
+    await database.delete();
+  });
+
+  it('mirrors a server-confirmed answer and review without creating outbox rows', async () => {
+    const database = makeDb();
+    const answer = { ...makeEvent('evt-confirmed-pair', 8), kind: 'ASSIGNMENT_ANSWER' };
+    const review = makeReview(answer);
+
+    expect(await recordConfirmedAnswerWithReview(answer, review, database)).toBe('APPENDED');
+    expect(await database.events.bulkGet([answer.id, review.id])).toEqual([answer, review]);
+    expect(await database.outbox.count()).toBe(0);
     await database.delete();
   });
 });

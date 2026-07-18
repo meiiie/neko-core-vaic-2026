@@ -79,6 +79,11 @@ export function canonicalHeroItemId(itemId: string): string | undefined {
   )?.id;
 }
 
+export function kcIdForItem(itemId: string): string | undefined {
+  const canonicalItemId = canonicalHeroItemId(itemId);
+  return HERO_ITEMS.find((item) => item.id === canonicalItemId)?.kcIds[0];
+}
+
 /** Payload stored in the local Dexie event record for a hero answer. */
 interface HeroAnswerPayload {
   choiceId: string;
@@ -150,6 +155,16 @@ export interface ConfirmedAssignmentEvent {
   readonly payload: string;
 }
 
+export interface ConfirmedReviewScheduleEvent {
+  readonly id: string;
+  readonly learnerId: string;
+  readonly itemId: string;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly kind: 'REVIEW_SCHEDULED';
+  readonly payload: string;
+}
+
 /** Re-sequence a server-confirmed answer after the local seeded walkthrough. */
 export function buildConfirmedAssignmentRecord(
   context: StudentDiagnosisContext,
@@ -157,6 +172,24 @@ export function buildConfirmedAssignmentRecord(
   existingLocalCount: number,
 ): LearnerEventRecord | null {
   if (event.learnerId !== context.learnerId || event.kind !== 'ASSIGNMENT_ANSWER') return null;
+  return {
+    id: event.id,
+    learnerId: context.learnerId,
+    itemId: event.itemId,
+    sequence: seededMaxSequence(context) + existingLocalCount + 1,
+    occurredAt: event.occurredAt,
+    kind: event.kind,
+    payload: event.payload,
+  };
+}
+
+/** Re-sequence a server-confirmed review schedule immediately after its answer. */
+export function buildConfirmedReviewScheduleRecord(
+  context: StudentDiagnosisContext,
+  event: ConfirmedReviewScheduleEvent,
+  existingLocalCount: number,
+): LearnerEventRecord | null {
+  if (event.learnerId !== context.learnerId || event.kind !== 'REVIEW_SCHEDULED') return null;
   return {
     id: event.id,
     learnerId: context.learnerId,

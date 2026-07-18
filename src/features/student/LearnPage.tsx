@@ -7,13 +7,15 @@ import { useSession } from '../../app/session';
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
+  kcIdForItem,
   kcName,
   questionForItem,
 } from '../../app/adapters/hero-tutor';
 import { reviewRecommendation, REVIEW_REASON_LABELS } from '../../app/adapters/review-selection';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
-import { recordAnswer } from '../../services/sync';
+import { recordAnswerWithReview } from '../../services/sync';
+import { buildReviewScheduleRecord } from '../../storage/review-schedule-repository';
 
 const QUESTION_BUDGET = 3;
 
@@ -44,7 +46,7 @@ export function LearnPage() {
   const result = diagnoseHero(activeLearnerContext, localRecords);
   const recommendedQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
   const review = reassessment
-    ? reviewRecommendation(activeLearnerContext, result, localRecords)
+    ? reviewRecommendation(activeLearnerContext, result, localRecords, new Date().toISOString())
     : undefined;
   const candidateQuestion = recommendedQuestion ?? review?.question;
   const roundComplete = answeredThisRound >= QUESTION_BUDGET;
@@ -66,7 +68,10 @@ export function LearnPage() {
         selectedChoiceId === probeQuestion.correctChoiceId,
         localRecords.length,
       );
-      await recordAnswer(record);
+      const kcId = kcIdForItem(record.itemId);
+      if (!kcId) throw new Error('UNKNOWN_REVIEW_KC');
+      const reviewRecord = buildReviewScheduleRecord(record, kcId, localRecords);
+      await recordAnswerWithReview(record, reviewRecord);
       setSelectedChoiceId(null);
       setSaveState('saved');
       setAnsweredThisRound((count) => count + 1);

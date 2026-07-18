@@ -21,7 +21,27 @@ vi.mock('../../app/adapters/student-context', () => ({
     simulationProfileId: 'minh',
   }),
   useStudentEvents: () => ({
-    records: [],
+    records: [
+      {
+        id: 'answer-transfer',
+        learnerId: 'user-student-minh',
+        itemId: 'K10-TRANSFER',
+        sequence: 100,
+        occurredAt: '2020-01-01T08:00:00.000Z',
+        kind: 'ANSWER',
+        payload: '{"choiceId":"a","correct":true,"methodValidity":"UNKNOWN"}',
+      },
+      {
+        id: 'review-answer-transfer',
+        learnerId: 'user-student-minh',
+        itemId: 'K10-TRANSFER',
+        sequence: 101,
+        occurredAt: '2020-01-01T08:00:00.000Z',
+        kind: 'REVIEW_SCHEDULED',
+        payload:
+          '{"version":"review-schedule-v1","kcId":"K10","sourceEventId":"answer-transfer","dueAt":"2020-01-04T08:00:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
+      },
+    ],
     migrationError: false,
     retryMigration: vi.fn(),
   }),
@@ -42,9 +62,7 @@ describe('continuous student path', () => {
         name: 'Ôn thông minh: Tìm giá trị chưa biết trong tỉ lệ thức',
       }),
     ).toBeTruthy();
-    expect(
-      screen.getByText('Kiểm tra lại phần từng sai nhiều nhưng gần đây đã cải thiện.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Kiểm tra lại phần từng sai sau một khoảng phục hồi.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Bắt đầu lượt ôn 3 câu' }).getAttribute('href')).toBe(
       '/student/check-in?mode=review',
     );

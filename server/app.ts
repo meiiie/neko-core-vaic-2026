@@ -9,6 +9,11 @@ import { CodexAccountManager } from './ai/codex-account-manager.ts';
 import { registerCodexRoutes, type CodexManagerPort } from './ai/codex-routes.ts';
 import { registerResponsesRoutes } from './ai/responses.ts';
 import {
+  buildReviewSchedulePayload,
+  reviewScheduleEventId,
+} from '../src/domain/review-schedule.ts';
+import { reviewSchedulePayloadSchema } from '../src/storage/review-schedule-repository.ts';
+import {
   createSession,
   credentialsByEmail,
   destroySession,
@@ -77,16 +82,28 @@ const lessonSchema = z.object({
   commonMistake: z.string().min(8).max(500),
 });
 
-const eventSchema = z.object({
-  id: z.string().min(1),
-  learnerId: z.string().min(1),
-  itemId: z.string().min(1),
-  assignmentId: z.string().nullable().optional(),
-  sequence: z.number().int().nonnegative(),
-  occurredAt: z.string().min(1),
-  kind: z.string().min(1),
-  payload: z.string(),
-});
+const eventSchema = z
+  .object({
+    id: z.string().min(1),
+    learnerId: z.string().min(1),
+    itemId: z.string().min(1),
+    assignmentId: z.string().nullable().optional(),
+    sequence: z.number().int().nonnegative(),
+    occurredAt: z.string().min(1),
+    kind: z.string().min(1),
+    payload: z.string(),
+  })
+  .superRefine((event, context) => {
+    if (event.kind !== 'REVIEW_SCHEDULED') return;
+    try {
+      const payload = reviewSchedulePayloadSchema.safeParse(JSON.parse(event.payload));
+      if (!payload.success || event.id !== reviewScheduleEventId(payload.data.sourceEventId)) {
+        context.addIssue({ code: 'custom', path: ['payload'], message: 'INVALID_REVIEW_SCHEDULE' });
+      }
+    } catch {
+      context.addIssue({ code: 'custom', path: ['payload'], message: 'INVALID_REVIEW_SCHEDULE' });
+    }
+  });
 
 const teacherOverrideSchema = z
   .object({
@@ -703,15 +720,6 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     const picked = choices.find((choice) => choice.id === body.data.choiceId);
     if (!picked) return reply.code(400).send({ error: 'INVALID_CHOICE' });
     const misconceptionId = !correct ? picked?.misconceptionTag : undefined;
-    const sequence = (
-      db
-        .prepare(
-          'SELECT COALESCE(MAX(sequence), 0) AS maxSequence FROM events WHERE learner_id = ?',
-        )
-        .get(user.id) as {
-        maxSequence: number;
-      }
-    ).maxSequence;
     const eventId = `evt-${randomUUID()}`;
     const occurredAt = new Date().toISOString();
     const payload = JSON.stringify({
@@ -720,20 +728,76 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       methodValidity: misconceptionId ? 'INVALID' : 'UNKNOWN',
       ...(misconceptionId ? { misconceptionId } : {}),
     });
-    db.prepare(
-      `INSERT OR IGNORE INTO events
-       (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'ASSIGNMENT_ANSWER', ?, ?)`,
-    ).run(
-      eventId,
-      user.id,
-      body.data.questionId,
-      id,
-      sequence + 1,
+    const previousSchedule = (
+      db
+        .prepare(
+          `SELECT payload FROM events
+           WHERE learner_id = ? AND kind = 'REVIEW_SCHEDULED'
+           ORDER BY rowid DESC`,
+        )
+        .all(user.id) as { payload: string }[]
+    )
+      .map((row) => {
+        try {
+          return reviewSchedulePayloadSchema.safeParse(JSON.parse(row.payload));
+        } catch {
+          return null;
+        }
+      })
+      .find((parsed) => parsed?.success && parsed.data.kcId === question.kc_id);
+    const reviewPayload = buildReviewSchedulePayload({
+      kcId: question.kc_id,
+      sourceEventId: eventId,
       occurredAt,
-      payload,
-      new Date().toISOString(),
-    );
+      correct,
+      ...(previousSchedule?.success
+        ? { previousIntervalDays: previousSchedule.data.intervalDays }
+        : {}),
+    });
+    const reviewEventId = reviewScheduleEventId(eventId);
+    let sequence: number;
+    const receivedAt = new Date().toISOString();
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      sequence = (
+        db
+          .prepare(
+            'SELECT COALESCE(MAX(sequence), 0) AS maxSequence FROM events WHERE learner_id = ?',
+          )
+          .get(user.id) as { maxSequence: number }
+      ).maxSequence;
+      const insert = db.prepare(
+        `INSERT INTO events
+         (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      insert.run(
+        eventId,
+        user.id,
+        body.data.questionId,
+        id,
+        sequence + 1,
+        occurredAt,
+        'ASSIGNMENT_ANSWER',
+        payload,
+        receivedAt,
+      );
+      insert.run(
+        reviewEventId,
+        user.id,
+        body.data.questionId,
+        null,
+        sequence + 2,
+        occurredAt,
+        'REVIEW_SCHEDULED',
+        JSON.stringify(reviewPayload),
+        receivedAt,
+      );
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
     return {
       correct,
       correctChoiceId: question.correct_choice_id,
@@ -748,6 +812,15 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         occurredAt,
         kind: 'ASSIGNMENT_ANSWER',
         payload,
+      },
+      reviewEvent: {
+        id: reviewEventId,
+        learnerId: user.id,
+        itemId: body.data.questionId,
+        sequence: sequence + 2,
+        occurredAt,
+        kind: 'REVIEW_SCHEDULED',
+        payload: JSON.stringify(reviewPayload),
       },
     };
   });
@@ -891,6 +964,61 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     ) {
       return reply.code(403).send({ error: 'EVENT_ACCOUNT_MISMATCH' });
     }
+    const eventsById = new Map(parsed.data.events.map((event) => [event.id, event]));
+    const selectSource = db.prepare(
+      `SELECT id, learner_id AS learnerId, item_id AS itemId, sequence, occurred_at AS occurredAt,
+              kind, payload
+       FROM events WHERE id = ?`,
+    );
+    for (const event of parsed.data.events) {
+      if (event.kind !== 'REVIEW_SCHEDULED') continue;
+      const schedule = reviewSchedulePayloadSchema.parse(JSON.parse(event.payload));
+      const source =
+        eventsById.get(schedule.sourceEventId) ??
+        (selectSource.get(schedule.sourceEventId) as
+          | {
+              id: string;
+              learnerId: string;
+              itemId: string;
+              sequence: number;
+              occurredAt: string;
+              kind: string;
+              payload: string;
+            }
+          | undefined);
+      let sourceCorrect: boolean | undefined;
+      try {
+        const sourcePayload = JSON.parse(source?.payload ?? '') as { correct?: unknown };
+        sourceCorrect =
+          typeof sourcePayload.correct === 'boolean' ? sourcePayload.correct : undefined;
+      } catch {
+        sourceCorrect = undefined;
+      }
+      const expectedReason = sourceCorrect
+        ? schedule.intervalDays === 3
+          ? 'RECOVERY_CHECK'
+          : 'SPACED_REVIEW'
+        : 'REMEDIATE_SOON';
+      const sourceTimestamp = source ? Date.parse(source.occurredAt) : Number.NaN;
+      const expectedDueAt = Number.isFinite(sourceTimestamp)
+        ? new Date(sourceTimestamp + schedule.intervalDays * 24 * 60 * 60 * 1_000).toISOString()
+        : null;
+      if (
+        !source ||
+        source.learnerId !== user.id ||
+        source.itemId !== event.itemId ||
+        (source.kind !== 'ANSWER' && source.kind !== 'ASSIGNMENT_ANSWER') ||
+        sourceCorrect === undefined ||
+        event.sequence !== source.sequence + 1 ||
+        event.occurredAt !== source.occurredAt ||
+        expectedDueAt !== schedule.dueAt ||
+        schedule.reason !== expectedReason ||
+        (sourceCorrect && schedule.intervalDays === 1) ||
+        (!sourceCorrect && schedule.intervalDays !== 1)
+      ) {
+        return reply.code(400).send({ error: 'INVALID_REVIEW_LINK' });
+      }
+    }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events
        (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
@@ -929,47 +1057,71 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         .digest('hex');
     let accepted = 0;
     const conflictIds: string[] = [];
-    for (const event of parsed.data.events) {
-      const result = insert.run(
-        event.id,
-        user.id,
-        event.itemId,
-        event.assignmentId ?? null,
-        event.sequence,
-        event.occurredAt,
-        event.kind,
-        event.payload,
-        new Date().toISOString(),
-      );
-      if (Number(result.changes) > 0) {
-        accepted += 1;
-        continue;
-      }
-      const existing = selectExisting.get(event.id) as
-        | {
-            learner_id: string;
-            item_id: string;
-            assignment_id: string | null;
-            sequence: number;
-            occurred_at: string;
-            kind: string;
-            payload: string;
+    const conflictedSourceIds = new Set<string>();
+    const orderedEvents = [...parsed.data.events].sort(
+      (left, right) =>
+        Number(left.kind === 'REVIEW_SCHEDULED') - Number(right.kind === 'REVIEW_SCHEDULED') ||
+        left.sequence - right.sequence ||
+        left.id.localeCompare(right.id),
+    );
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      for (const event of orderedEvents) {
+        if (event.kind === 'REVIEW_SCHEDULED') {
+          const schedule = reviewSchedulePayloadSchema.parse(JSON.parse(event.payload));
+          if (conflictedSourceIds.has(schedule.sourceEventId)) {
+            conflictIds.push(event.id);
+            continue;
           }
-        | undefined;
-      if (!existing) continue;
-      const serverPrint = fingerprint({
-        learnerId: existing.learner_id,
-        itemId: existing.item_id,
-        assignmentId: existing.assignment_id,
-        sequence: existing.sequence,
-        occurredAt: existing.occurred_at,
-        kind: existing.kind,
-        payload: existing.payload,
-      });
-      const clientPrint = fingerprint(event);
-      if (serverPrint === clientPrint) continue; // harmless retry
-      insertConflict.run(event.id, user.id, serverPrint, clientPrint, new Date().toISOString());
-      conflictIds.push(event.id);
+        }
+        const result = insert.run(
+          event.id,
+          user.id,
+          event.itemId,
+          event.assignmentId ?? null,
+          event.sequence,
+          event.occurredAt,
+          event.kind,
+          event.payload,
+          new Date().toISOString(),
+        );
+        if (Number(result.changes) > 0) {
+          accepted += 1;
+          continue;
+        }
+        const existing = selectExisting.get(event.id) as
+          | {
+              learner_id: string;
+              item_id: string;
+              assignment_id: string | null;
+              sequence: number;
+              occurred_at: string;
+              kind: string;
+              payload: string;
+            }
+          | undefined;
+        if (!existing) continue;
+        const serverPrint = fingerprint({
+          learnerId: existing.learner_id,
+          itemId: existing.item_id,
+          assignmentId: existing.assignment_id,
+          sequence: existing.sequence,
+          occurredAt: existing.occurred_at,
+          kind: existing.kind,
+          payload: existing.payload,
+        });
+        const clientPrint = fingerprint(event);
+        if (serverPrint === clientPrint) continue; // harmless retry
+        insertConflict.run(event.id, user.id, serverPrint, clientPrint, new Date().toISOString());
+        conflictIds.push(event.id);
+        if (event.kind === 'ANSWER' || event.kind === 'ASSIGNMENT_ANSWER') {
+          conflictedSourceIds.add(event.id);
+        }
+      }
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
     }
     return { accepted, conflictIds, received: parsed.data.events.length };
   });

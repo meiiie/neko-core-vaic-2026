@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
 import { greetingVi, todayVi } from '../../app/vietnamese-time';
 import { diagnoseHero, kcName, STATUS_LABELS } from '../../app/adapters/hero-tutor';
+import { reviewRecommendation } from '../../app/adapters/review-selection';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
 import type { DiagnosisStatus } from '../../domain';
@@ -32,26 +33,44 @@ export function StudentDashboardPage() {
 
   const now = new Date();
   const result = diagnoseHero(learnerContext, localRecords);
+  const review = reviewRecommendation(learnerContext, result, localRecords, now.toISOString());
+  const localAnswers = localRecords.filter(
+    (record) => record.kind === 'ANSWER' || record.kind === 'ASSIGNMENT_ANSWER',
+  );
   const evidenceCount = result.evidenceEventIds.length;
   const currentRoot = result.rootKcId ? kcName(result.rootKcId) : 'Đang thu thập thêm bằng chứng';
-  const started = localRecords.length > 0;
+  const started = localAnswers.length > 0;
   const continueDestination =
     result.status === 'DIAGNOSED'
       ? '/student/practice'
       : result.status === 'FAST_PATH'
-        ? '/student/check-in?mode=review'
+        ? result.nextItemId
+          ? '/student/practice'
+          : review
+            ? '/student/check-in?mode=review'
+            : '/student/path'
         : '/student/check-in';
   const continueTitle =
     result.status === 'DIAGNOSED'
       ? `Tiếp tục lộ trình: ${currentRoot}`
       : result.status === 'FAST_PATH'
-        ? 'Ôn thông minh để duy trì kiến thức'
+        ? result.nextItemId
+          ? 'Thử thách vận dụng tiếp theo'
+          : review
+            ? `Ôn thông minh: ${kcName(review.kcId)}`
+            : 'Đã hoàn thành mục tiêu hiện tại'
         : 'Kiểm tra nền tảng: Tỉ lệ thức';
   const continueAction =
     result.status === 'DIAGNOSED'
       ? 'Tiếp tục luyện tập'
       : result.status === 'FAST_PATH'
-        ? 'Bắt đầu lượt ôn'
+        ? result.nextItemId
+          ? 'Nhận bài thử thách'
+          : review
+            ? review.isDue
+              ? 'Bắt đầu lượt ôn'
+              : 'Xem lịch ôn'
+            : 'Xem kết quả'
         : started
           ? 'Tiếp tục làm bài'
           : 'Bắt đầu làm bài';
@@ -112,7 +131,7 @@ export function StudentDashboardPage() {
             </div>
             <div>
               <dt>Câu mới trên thiết bị</dt>
-              <dd>{localRecords.length}</dd>
+              <dd>{localAnswers.length}</dd>
             </div>
             <div>
               <dt>Giả thuyết đang phân biệt</dt>

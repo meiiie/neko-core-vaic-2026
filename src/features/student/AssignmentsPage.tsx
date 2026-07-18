@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   buildConfirmedAssignmentRecord,
+  buildConfirmedReviewScheduleRecord,
   type ConfirmedAssignmentEvent,
+  type ConfirmedReviewScheduleEvent,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
-import { recordConfirmedAnswer } from '../../services/sync';
+import { recordConfirmedAnswerWithReview } from '../../services/sync';
 
 interface ApiAssignment {
   id: string;
@@ -36,6 +38,7 @@ interface GradeResult {
   note: string | null;
   hints: string[];
   event: ConfirmedAssignmentEvent;
+  reviewEvent: ConfirmedReviewScheduleEvent;
 }
 
 /** Student view: assignments handed out by the teacher, fetched live. */
@@ -182,8 +185,13 @@ export function AssignmentTakePage() {
           result.event,
           activeLocalRecords.length,
         );
-        if (!record) throw new Error('EVENT_ACCOUNT_MISMATCH');
-        await recordConfirmedAnswer(record);
+        const reviewRecord = buildConfirmedReviewScheduleRecord(
+          activeLearnerContext,
+          result.reviewEvent,
+          activeLocalRecords.length + 1,
+        );
+        if (!record || !reviewRecord) throw new Error('EVENT_ACCOUNT_MISMATCH');
+        await recordConfirmedAnswerWithReview(record, reviewRecord);
       } catch {
         // The server already accepted the answer. Keep its feedback visible,
         // but never pretend the local diagnosis evidence was saved.

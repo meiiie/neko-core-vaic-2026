@@ -27,7 +27,7 @@ vi.mock('../../app/adapters/student-context', () => ({
   }),
 }));
 
-vi.mock('../../services/sync', () => ({ recordAnswer: vi.fn() }));
+vi.mock('../../services/sync', () => ({ recordAnswerWithReview: vi.fn() }));
 
 describe('adaptive student check-in', () => {
   it('lets a diagnosed learner start a bounded reassessment round', () => {

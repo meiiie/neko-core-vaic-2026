@@ -33,7 +33,12 @@ export function PathPage() {
   }
 
   const result = diagnoseHero(learnerContext, localRecords);
-  const review = reviewRecommendation(learnerContext, result, localRecords);
+  const review = reviewRecommendation(
+    learnerContext,
+    result,
+    localRecords,
+    new Date().toISOString(),
+  );
   const supported = result.status === 'DIAGNOSED' || result.status === 'FAST_PATH';
 
   return (
@@ -142,9 +147,19 @@ export function PathPage() {
             <p className="eyebrow">Kế hoạch duy trì tiếp theo</p>
             <h2>Ôn thông minh: {kcName(review.kcId)}</h2>
             <p>{REVIEW_REASON_LABELS[review.reason]}.</p>
+            {review.dueAt ? (
+              <p>
+                {review.isDue ? 'Đã đến hạn ôn' : 'Lịch ôn tiếp theo'}:{' '}
+                <time dateTime={review.dueAt}>
+                  {new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(
+                    new Date(review.dueAt),
+                  )}
+                </time>
+              </p>
+            ) : null}
           </div>
           <Link className="button-primary" to="/student/check-in?mode=review">
-            Bắt đầu lượt ôn 3 câu
+            {review.isDue ? 'Bắt đầu lượt ôn 3 câu' : 'Ôn sớm 3 câu'}
           </Link>
         </section>
       ) : null}
