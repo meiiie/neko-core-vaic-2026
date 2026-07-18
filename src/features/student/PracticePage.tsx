@@ -106,6 +106,9 @@ export function PracticePage() {
     savingRef.current = true;
     setSaveError(false);
     const correct = selectedChoiceId === target.correctChoiceId;
+    const misconceptionId = answered?.choices.find(
+      (choice) => choice.id === selectedChoiceId,
+    )?.misconceptionTag;
     try {
       const record = buildLocalAnswerRecord(
         learnerId,
@@ -113,6 +116,9 @@ export function PracticePage() {
         selectedChoiceId,
         correct,
         localRecords.length,
+        misconceptionId
+          ? { misconceptionId, methodValidity: 'INVALID' }
+          : { methodValidity: 'UNKNOWN' },
       );
       await appendEvent(record);
       void queueEventForSync(record);

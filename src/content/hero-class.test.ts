@@ -34,6 +34,16 @@ describe('synthetic 40-learner classroom', () => {
         thresholdCount: 3,
       },
     ]);
+    expect(dashboard.attentionPlan).toMatchObject({
+      policyVersion: 'teacher-budget-v1',
+      budgetMinutes: 15,
+      usedMinutes: 12,
+      remainingMinutes: 3,
+    });
+    expect(dashboard.attentionPlan.selected.map((item) => item.groupId)).toEqual([
+      'root:K02',
+      'quick-check',
+    ]);
   });
 
   it('keeps simulation labels out of learner event payloads', () => {

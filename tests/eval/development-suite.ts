@@ -3,7 +3,7 @@ import type { DiagnosisStatus } from '../../src/domain';
 import type { FrozenEvaluationCase } from './report';
 import { simulateResponses, type SimulationProfile } from './simulator';
 
-interface DisclosedProfile {
+export interface DisclosedProfile {
   readonly id: string;
   readonly masteredKcIds: readonly string[];
   readonly slip: number;

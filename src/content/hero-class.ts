@@ -1,10 +1,12 @@
 import {
+  allocateTeacherAttention,
   detectClassWideGaps,
   diagnose,
   groupForTeacher,
   type ClassWideGap,
   type DiagnosisResult,
   type LearnerEvent,
+  type TeacherAttentionPlan,
   type TeacherGroup,
 } from '../domain';
 import { eventsFor, HERO_DEMO_CONFIG, HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './hero-demo';
@@ -24,7 +26,16 @@ export interface HeroClassDashboard {
   readonly diagnoses: readonly DiagnosisResult[];
   readonly groups: readonly TeacherGroup[];
   readonly classWideGaps: readonly ClassWideGap[];
+  readonly attentionPlan: TeacherAttentionPlan;
 }
+
+export const HERO_TEACHER_BUDGET_MINUTES = 15;
+
+export const HERO_ACTION_MINUTES: Readonly<Record<string, number>> = {
+  RETEACH_K02: 10,
+  RETEACH_K07: 8,
+  RUN_QUICK_CHECK: 2,
+};
 
 const PROFILE_COUNTS: readonly {
   readonly profileId: HeroSimulationProfileId;
@@ -79,5 +90,10 @@ export function buildHeroClassDashboard(
     diagnoses,
     groups,
     classWideGaps: detectClassWideGaps(groups, learners.length),
+    attentionPlan: allocateTeacherAttention(
+      groups,
+      HERO_TEACHER_BUDGET_MINUTES,
+      HERO_ACTION_MINUTES,
+    ),
   };
 }

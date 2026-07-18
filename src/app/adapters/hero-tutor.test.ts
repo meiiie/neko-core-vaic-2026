@@ -33,7 +33,25 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     expect(record.sequence).toBe(8);
 
     const [event] = toDomainEvents([record]);
-    expect(event).toMatchObject({ learnerId: 'chi', itemId: 'K02-DIAGNOSTIC', correct: true });
+    expect(event).toMatchObject({
+      learnerId: 'chi',
+      itemId: 'K02-DIAGNOSTIC',
+      correct: true,
+      methodValidity: 'UNKNOWN',
+    });
+  });
+
+  it('persists structured misconception evidence from an authored distractor', () => {
+    const record = buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'b', false, 0, {
+      misconceptionId: 'ADDITIVE_EQUIVALENCE',
+      methodValidity: 'INVALID',
+    });
+
+    expect(toDomainEvents([record])[0]).toMatchObject({
+      correct: false,
+      methodValidity: 'INVALID',
+      misconceptionId: 'ADDITIVE_EQUIVALENCE',
+    });
   });
 
   it('skips malformed local payloads instead of guessing', () => {

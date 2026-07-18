@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  allocateTeacherAttention,
   canonicalizeEvents,
   computeMastery,
   detectClassWideGaps,
   diagnose,
   groupForTeacher,
+  inferMisconceptionHypotheses,
   planPracticePath,
   topologicalOrder,
   type CurriculumGraph,
@@ -51,6 +53,9 @@ describe('graph and event integrity', () => {
     expect(() => canonicalizeEvents([event, { ...event, correct: !event.correct }])).toThrow(
       'Conflicting duplicate event id',
     );
+    expect(() => canonicalizeEvents([event, { ...event, methodValidity: 'INVALID' }])).toThrow(
+      'Conflicting duplicate event id',
+    );
   });
 
   it('counts distinct items rather than repeated attempts as direct evidence', () => {
@@ -89,6 +94,43 @@ describe('graph and event integrity', () => {
       'Rejected item cannot run',
     );
   });
+
+  it('does not treat a correct answer reached by an invalid method as mastery', () => {
+    const base = HERO_EVENTS.an[0]!;
+    const valid = {
+      ...base,
+      id: 'valid-method',
+      learnerId: 'method-valid',
+      itemId: 'K02-CHECK-1',
+      correct: true,
+      methodValidity: 'VALID' as const,
+    };
+    const hiddenMisconception = {
+      ...valid,
+      id: 'invalid-method',
+      learnerId: 'method-invalid',
+      methodValidity: 'INVALID' as const,
+      misconceptionId: 'ADDITIVE_EQUIVALENCE',
+    };
+
+    const validState = computeMastery(HERO_GRAPH, HERO_ITEMS, [valid]).get('K02')!;
+    const invalidState = computeMastery(HERO_GRAPH, HERO_ITEMS, [hiddenMisconception]).get('K02')!;
+
+    expect(validState.probability).toBeGreaterThan(0.5);
+    expect(invalidState.probability).toBeLessThan(0.5);
+  });
+
+  it('only marks a misconception pattern supported after two distinct items', () => {
+    const events = HERO_EVENTS.an.filter((event) => event.misconceptionId);
+    const hypotheses = inferMisconceptionHypotheses(HERO_GRAPH, HERO_ITEMS, events, 2);
+
+    expect(hypotheses[0]).toMatchObject({
+      misconceptionId: 'ADDITIVE_EQUIVALENCE',
+      kcId: 'K02',
+      verificationStatus: 'SUPPORTED_BY_MULTIPLE_ITEMS',
+      independentItemCount: 2,
+    });
+  });
 });
 
 describe('hero diagnosis contract', () => {
@@ -98,11 +140,17 @@ describe('hero diagnosis contract', () => {
 
     expect(an).toMatchObject({
       status: 'DIAGNOSED',
+      disposition: 'AUTO_REMEDIATE',
       rootKcId: 'K02',
       pathKcIds: ['K02', 'K08', 'K09', 'K10'],
     });
+    expect(an.misconceptionHypotheses[0]).toMatchObject({
+      misconceptionId: 'ADDITIVE_EQUIVALENCE',
+      verificationStatus: 'SUPPORTED_BY_MULTIPLE_ITEMS',
+    });
     expect(binh).toMatchObject({
       status: 'DIAGNOSED',
+      disposition: 'AUTO_REMEDIATE',
       rootKcId: 'K07',
       pathKcIds: ['K07', 'K08', 'K09', 'K10'],
     });
@@ -112,6 +160,7 @@ describe('hero diagnosis contract', () => {
     const chi = heroDiagnosis('chi');
 
     expect(chi.status).toBe('NEEDS_MORE_EVIDENCE');
+    expect(chi.disposition).toBe('ASK_VERIFY');
     expect(chi.competingKcIds).toEqual(expect.arrayContaining(['K02', 'K07']));
     expect(['K02-DIAGNOSTIC', 'K07-DIAGNOSTIC']).toContain(chi.nextItemId);
   });
@@ -141,6 +190,7 @@ describe('hero diagnosis contract', () => {
   it('gives Minh a fast path rather than remediation', () => {
     expect(heroDiagnosis('minh')).toMatchObject({
       status: 'FAST_PATH',
+      disposition: 'ADVANCE',
       nextItemId: 'K10-TRANSFER',
       pathKcIds: [],
     });
@@ -198,8 +248,14 @@ describe('hero diagnosis contract', () => {
     });
 
     expect(result.status).toBe('NEEDS_MORE_EVIDENCE');
+    expect(result.disposition).toBe('TEACHER_REVIEW');
     expect(result.nextItemId).toBeUndefined();
     expect(result.reasonCodes).toContain('DIAGNOSTIC_BUDGET_EXHAUSTED');
+    expect(groupForTeacher(HERO_GRAPH, [result])[0]).toMatchObject({
+      id: 'teacher-review',
+      status: 'TEACHER_REVIEW',
+      suggestedActionId: 'REVIEW_DIAGNOSIS',
+    });
   });
 });
 
@@ -248,5 +304,36 @@ describe('paths and teacher decisions', () => {
       'Duplicate diagnosis',
     );
     expect(() => detectClassWideGaps(groups, 3)).toThrow('smaller than represented learners');
+  });
+
+  it('allocates a finite teacher-time budget by transparent action value', () => {
+    const groups = groupForTeacher(HERO_GRAPH, [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        ...heroDiagnosis('an'),
+        learnerId: `an-${index + 1}`,
+      })),
+      ...Array.from({ length: 10 }, (_, index) => ({
+        ...heroDiagnosis('binh'),
+        learnerId: `binh-${index + 1}`,
+      })),
+      ...Array.from({ length: 8 }, (_, index) => ({
+        ...heroDiagnosis('chi'),
+        learnerId: `chi-${index + 1}`,
+      })),
+    ]);
+    const plan = allocateTeacherAttention(groups, 15, {
+      RETEACH_K02: 10,
+      RETEACH_K07: 8,
+      RUN_QUICK_CHECK: 2,
+    });
+
+    expect(plan).toMatchObject({
+      policyVersion: 'teacher-budget-v1',
+      budgetMinutes: 15,
+      usedMinutes: 12,
+      remainingMinutes: 3,
+    });
+    expect(plan.selected.map((item) => item.groupId)).toEqual(['root:K02', 'quick-check']);
+    expect(plan.deferred.map((item) => item.groupId)).toEqual(['root:K07']);
   });
 });

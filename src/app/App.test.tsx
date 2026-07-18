@@ -94,7 +94,8 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(screen.queryByRole('link', { name: /Bài kiểm tra/ })).toBeNull();
     expect(screen.getByText('Đã đánh giá')).toBeTruthy();
     expect(screen.getByText('Cần đánh giá thêm')).toBeTruthy();
-    expect(screen.getByText('Việc cần làm hôm nay')).toBeTruthy();
+    expect(screen.getByText('Phân bổ thời gian giáo viên')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Kế hoạch trong 15 phút' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Giải thích chỉ số Đã đánh giá' })).toBeTruthy();
     expect(screen.queryByText('Đủ bằng chứng')).toBeNull();
   });

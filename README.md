@@ -32,11 +32,14 @@ statement.
 
 The local-first PWA now opens through a one-click role entry and provides separate student and
 teacher workspaces with persistent sidebar navigation. The student can complete an adaptive
-check-in and inspect the resulting path; the teacher can inspect the class-wide gap and ranked
-intervention groups. These surfaces use the deterministic domain runtime and local IndexedDB, not
-hard-coded screen outcomes. The account and class records are sample evaluation data, not real
-authentication or learner PII. Named curriculum review and six independently owned held-out labels
-remain explicit next gates; no real-learning or whole-curriculum result is claimed.
+check-in and inspect the resulting path. Answer correctness, method validity and authored
+misconception evidence are kept separate; repeated evidence must come from two different items
+before the interface names a pattern. The teacher receives a transparent intervention plan that
+fits a finite 15-minute attention budget, including an explicit verification queue. These surfaces
+use the deterministic domain runtime and local IndexedDB, not hard-coded screen outcomes. The
+account and class records are sample evaluation data, not learner PII. Named curriculum review and
+independently owned held-out labels remain explicit next gates; no real-learning or
+whole-curriculum result is claimed.
 
 ## Non-negotiables
 

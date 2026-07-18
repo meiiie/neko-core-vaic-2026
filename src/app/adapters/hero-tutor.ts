@@ -5,15 +5,18 @@ import {
   HERO_GRAPH,
   HERO_ITEMS,
   HERO_QUESTIONS,
+  heroMisconceptionName,
   type HeroQuestion,
   type HeroSimulationProfileId,
 } from '../../content';
 import {
   diagnose,
+  type DiagnosisDisposition,
   type DiagnosisReasonCode,
   type DiagnosisResult,
   type DiagnosisStatus,
   type LearnerEvent,
+  type MethodValidity,
 } from '../../domain';
 import type { LearnerEventRecord } from '../../storage/db';
 
@@ -35,6 +38,8 @@ export function kcName(kcId: string): string {
   return HERO_GRAPH.nodes.find((node) => node.id === kcId)?.name ?? kcId;
 }
 
+export const misconceptionName = heroMisconceptionName;
+
 export function questionForItem(itemId: string): HeroQuestion | undefined {
   return HERO_QUESTIONS.find((question) => question.itemId === itemId);
 }
@@ -43,6 +48,13 @@ export function questionForItem(itemId: string): HeroQuestion | undefined {
 interface HeroAnswerPayload {
   choiceId: string;
   correct: boolean;
+  methodValidity: MethodValidity;
+  misconceptionId?: string;
+}
+
+export interface LocalAnswerEvidence {
+  readonly methodValidity?: MethodValidity;
+  readonly misconceptionId?: string;
 }
 
 function parsePayload(payload: string): HeroAnswerPayload | null {
@@ -56,7 +68,21 @@ function parsePayload(payload: string): HeroAnswerPayload | null {
       'choiceId' in parsed &&
       typeof parsed.choiceId === 'string'
     ) {
-      return { choiceId: parsed.choiceId, correct: parsed.correct };
+      const methodValidity =
+        'methodValidity' in parsed &&
+        ['VALID', 'INVALID', 'UNKNOWN'].includes(String(parsed.methodValidity))
+          ? (parsed.methodValidity as MethodValidity)
+          : 'UNKNOWN';
+      const misconceptionId =
+        'misconceptionId' in parsed && typeof parsed.misconceptionId === 'string'
+          ? parsed.misconceptionId
+          : undefined;
+      return {
+        choiceId: parsed.choiceId,
+        correct: parsed.correct,
+        methodValidity,
+        ...(misconceptionId ? { misconceptionId } : {}),
+      };
     }
     return null;
   } catch {
@@ -75,7 +101,13 @@ export function buildLocalAnswerRecord(
   choiceId: string,
   correct: boolean,
   existingLocalCount: number,
+  evidence: LocalAnswerEvidence = {},
 ): LearnerEventRecord {
+  const authoredMisconceptionId = questionForItem(itemId)?.choices.find(
+    (choice) => choice.id === choiceId,
+  )?.misconceptionId;
+  const misconceptionId = evidence.misconceptionId ?? authoredMisconceptionId;
+  const methodValidity = evidence.methodValidity ?? (misconceptionId ? 'INVALID' : 'UNKNOWN');
   return {
     id: `${learnerId}-local-${crypto.randomUUID()}`,
     learnerId,
@@ -83,7 +115,12 @@ export function buildLocalAnswerRecord(
     sequence: seededMaxSequence(learnerId) + existingLocalCount + 1,
     occurredAt: new Date().toISOString(),
     kind: 'ANSWER',
-    payload: JSON.stringify({ choiceId, correct } satisfies HeroAnswerPayload),
+    payload: JSON.stringify({
+      choiceId,
+      correct,
+      methodValidity,
+      ...(misconceptionId ? { misconceptionId } : {}),
+    } satisfies HeroAnswerPayload),
   };
 }
 
@@ -100,6 +137,8 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
       sequence: record.sequence,
       occurredAt: record.occurredAt,
       correct: payload.correct,
+      methodValidity: payload.methodValidity,
+      ...(payload.misconceptionId ? { misconceptionId: payload.misconceptionId } : {}),
     });
   }
   return events;
@@ -132,6 +171,14 @@ export const STATUS_LABELS: Record<DiagnosisStatus, string> = {
   FAST_PATH: 'Sẵn sàng tiến nhanh',
 };
 
+export const DISPOSITION_LABELS: Record<DiagnosisDisposition, string> = {
+  AUTO_REMEDIATE: 'Mở lộ trình bù đắp tự động',
+  ASK_VERIFY: 'Hỏi thêm một câu để xác minh',
+  TEACHER_REVIEW: 'Chuyển giáo viên xem xét',
+  ADVANCE: 'Cho học sinh tiến tới bài chuyển giao',
+  OUT_OF_SCOPE: 'Dừng và báo ngoài phạm vi',
+};
+
 export const REASON_LABELS: Record<DiagnosisReasonCode, string> = {
   ROOT_GAP_SUPPORTED: 'Khoảng trống gốc có đủ bằng chứng trực tiếp',
   COMPETING_ROOTS: 'Còn nhiều giả thuyết gốc cạnh tranh',
@@ -150,12 +197,14 @@ export function actionLabel(actionId: string): string {
   }
   if (actionId === 'OFFER_TRANSFER_CHALLENGE') return 'Giao bài thử thách chuyển giao';
   if (actionId === 'RUN_QUICK_CHECK') return 'Kiểm tra nhanh 2 phút để thu thêm bằng chứng';
+  if (actionId === 'REVIEW_DIAGNOSIS') return 'Giáo viên xem lại bằng chứng chẩn đoán';
   return actionId;
 }
 
 export const GROUP_STATUS_LABELS: Record<string, string> = {
   ACTIONABLE_ROOT: 'Nhóm theo gốc cần can thiệp',
   QUICK_CHECK: 'Cần kiểm tra nhanh',
+  TEACHER_REVIEW: 'Cần giáo viên xem xét',
   READY_TO_ADVANCE: 'Sẵn sàng tiến tiếp',
 };
 

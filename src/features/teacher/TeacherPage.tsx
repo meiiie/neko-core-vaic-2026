@@ -155,40 +155,39 @@ export function TeacherPage() {
 
       <section className="today-panel" aria-labelledby="today-heading">
         <header>
-          <p className="eyebrow">Việc cần làm hôm nay</p>
-          <h2 id="today-heading">Hai việc giúp cô bắt đầu nhanh</h2>
+          <p className="eyebrow">Phân bổ thời gian giáo viên</p>
+          <h2 id="today-heading">Kế hoạch trong {dashboard.attentionPlan.budgetMinutes} phút</h2>
         </header>
         <div className="today-action-list">
-          {topGroup ? (
-            <Link to={`/teacher/class?group=${topGroup.id}`}>
-              <span className="today-action-index" aria-hidden="true">
-                01
-              </span>
-              <span>
-                <strong>
-                  Ôn lại {topGroup.rootKcId ? kcName(topGroup.rootKcId) : 'nội dung ưu tiên'}
-                </strong>
-                <small>
-                  Chuẩn bị hoạt động ngắn cho {topGroup.totalLearnerCount} học sinh cần hỗ trợ
-                  trước.
-                </small>
-              </span>
-              <span aria-hidden="true">→</span>
-            </Link>
-          ) : null}
-          {needsMoreQuestions > 0 ? (
-            <Link to="/teacher/class?status=QUICK_CHECK">
-              <span className="today-action-index" aria-hidden="true">
-                02
-              </span>
-              <span>
-                <strong>Thu thêm dữ liệu cho {needsMoreQuestions} học sinh</strong>
-                <small>Cho các em làm thêm một câu hỏi ngắn trước khi xếp nhóm.</small>
-              </span>
-              <span aria-hidden="true">→</span>
-            </Link>
-          ) : null}
+          {dashboard.attentionPlan.selected.map((allocation, index) => {
+            const group = groups.find((candidate) => candidate.id === allocation.groupId);
+            const destination =
+              group?.status === 'QUICK_CHECK'
+                ? '/teacher/class?status=QUICK_CHECK'
+                : `/teacher/class?group=${encodeURIComponent(allocation.groupId)}`;
+            return (
+              <Link key={allocation.groupId} to={destination}>
+                <span className="today-action-index" aria-hidden="true">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <span>
+                  <strong>{teacherActionLabel(allocation.actionId)}</strong>
+                  <small>
+                    {allocation.minutes} phút • {allocation.attentionValue} điểm hành động
+                    {group ? ` • ${group.totalLearnerCount} học sinh` : ''}
+                  </small>
+                </span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            );
+          })}
         </div>
+        <p className="data-footnote">
+          Đã phân bổ {dashboard.attentionPlan.usedMinutes}/{dashboard.attentionPlan.budgetMinutes}{' '}
+          phút; còn {dashboard.attentionPlan.remainingMinutes} phút. Điểm hành động là quy tắc minh
+          bạch từ số học sinh, mức chặn kiến thức và nhu cầu xác minh — không phải dự báo learning
+          gain.
+        </p>
       </section>
 
       <section className="summary-panel">
