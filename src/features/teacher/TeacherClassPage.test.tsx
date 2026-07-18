@@ -2,9 +2,9 @@ import 'fake-indexeddb/auto';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { db } from '../../storage/db';
-import { TeacherClassPage } from './TeacherClassPage';
+import { TeacherGroupDetailPage } from './TeacherGroupDetailPage';
 
 describe('teacher diagnosis override', () => {
   afterEach(async () => {
@@ -14,24 +14,24 @@ describe('teacher diagnosis override', () => {
   it('persists a reasoned local decision and updates the derived groups', async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter>
-        <TeacherClassPage />
+      <MemoryRouter initialEntries={['/teacher/class/root%3AK02']}>
+        <Routes>
+          <Route path="/teacher/class/:groupId" element={<TeacherGroupDetailPage />} />
+        </Routes>
       </MemoryRouter>,
     );
 
-    const details = (await screen.findAllByText('Xem chi tiết'))[0];
-    await user.click(details);
-    const heading = screen.getAllByRole('heading', { name: 'Điều chỉnh chẩn đoán' })[0];
+    const heading = await screen.findByRole('heading', { name: 'Sửa kết quả của học sinh' });
     const form = heading.closest('form');
     expect(form).toBeTruthy();
     const controls = within(form!);
 
-    await user.selectOptions(controls.getByLabelText('Quyết định chuyên môn'), 'ROOT:K07');
+    await user.selectOptions(controls.getByLabelText('Kết quả sau khi xem lại'), 'ROOT:K07');
     await user.type(
-      controls.getByLabelText('Lý do điều chỉnh'),
+      controls.getByLabelText('Lý do thay đổi'),
       'Đã trao đổi trực tiếp và xem cách làm của em.',
     );
-    await user.click(controls.getByRole('button', { name: 'Lưu điều chỉnh' }));
+    await user.click(controls.getByRole('button', { name: 'Lưu thay đổi' }));
 
     await waitFor(async () => expect(await db.overrides.count()).toBe(1));
     expect(await db.overrides.toArray()).toEqual([
@@ -41,6 +41,6 @@ describe('teacher diagnosis override', () => {
         rootKcId: 'K07',
       }),
     ]);
-    expect(await screen.findByText('Đã lưu trên thiết bị này và cập nhật lại nhóm.')).toBeTruthy();
+    expect(await screen.findByText('Đã lưu thay đổi và cập nhật lại danh sách nhóm.')).toBeTruthy();
   });
 });

@@ -116,6 +116,34 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(screen.queryByText('Đủ bằng chứng')).toBeNull();
   });
 
+  it('opens a support group on a dedicated detail page', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/teacher/class']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Nhóm học sinh cần hỗ trợ' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Bài: Phân số bằng nhau' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Học sinh trong nhóm (12)' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Giao bài cho nhóm' })).toBeNull();
+
+    await user.click(screen.getByRole('link', { name: 'Xem chi tiết nhóm Phân số bằng nhau' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bài: Phân số bằng nhau' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Quay lại danh sách nhóm' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Học sinh trong nhóm (12)' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Câu nhiều học sinh trả lời sai' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Giao bài cho nhóm' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tải danh sách' })).toBeTruthy();
+  });
+
   it('redirects protected routes to login when the server has no session', async () => {
     installApiStub(null);
     render(
@@ -250,7 +278,9 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
 
     await user.click(menu);
     await user.click(await screen.findByRole('link', { name: /Nhóm cần hỗ trợ/ }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Nhóm cần hỗ trợ' })).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Nhóm học sinh cần hỗ trợ' }),
+    ).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.id).toBe('main-content'));
     expect(sidebar?.hasAttribute('inert')).toBe(true);
   });

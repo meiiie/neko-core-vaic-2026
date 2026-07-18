@@ -52,6 +52,7 @@ export function TeacherPage() {
     groups.find((group) => group.status === 'QUICK_CHECK')?.totalLearnerCount ?? 0;
   const supportGroups = groups.filter((group) => group.priorityScore > 0);
   const now = new Date();
+  const groupPath = (groupId: string) => `/teacher/class/${encodeURIComponent(groupId)}`;
 
   return (
     <div className="page-stack teacher-page">
@@ -134,7 +135,10 @@ export function TeacherPage() {
             ) : null}
           </div>
 
-          <Link className="button-primary" to={`/teacher/class?group=${topGroup?.id ?? ''}`}>
+          <Link
+            className="button-primary"
+            to={topGroup ? groupPath(topGroup.id) : '/teacher/class'}
+          >
             Xem nhóm cần hỗ trợ
           </Link>
         </section>
@@ -148,10 +152,7 @@ export function TeacherPage() {
         <div className="today-action-list">
           {dashboard.attentionPlan.selected.map((allocation, index) => {
             const group = groups.find((candidate) => candidate.id === allocation.groupId);
-            const destination =
-              group?.status === 'QUICK_CHECK'
-                ? '/teacher/class?status=QUICK_CHECK'
-                : `/teacher/class?group=${encodeURIComponent(allocation.groupId)}`;
+            const destination = group ? groupPath(group.id) : '/teacher/class';
             return (
               <Link key={allocation.groupId} to={destination}>
                 <span className="today-action-index" aria-hidden="true">
@@ -189,7 +190,7 @@ export function TeacherPage() {
         </header>
         <div className="group-preview-list">
           {groups.slice(0, 3).map((group) => (
-            <Link key={group.id} to={`/teacher/class?group=${encodeURIComponent(group.id)}`}>
+            <Link key={group.id} to={groupPath(group.id)}>
               <span>
                 <strong>
                   {group.rootKcId ? kcName(group.rootKcId) : TEACHER_GROUP_LABELS[group.status]}
