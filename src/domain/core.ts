@@ -14,7 +14,7 @@ import {
   type TeacherAttentionPlan,
   type TeacherDiagnosisOverride,
   type TeacherGroup,
-} from './model';
+} from './model.ts';
 
 export const ALGORITHM_VERSION = 'root-frontier-v2-dve';
 

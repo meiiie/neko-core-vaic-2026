@@ -232,7 +232,7 @@ export function AppLayout() {
         </nav>
 
         <div className="sidebar-foot">
-          <ConnectionStatus />
+          <ConnectionStatus serverAuthoritative={isTeacher} />
         </div>
 
         <div className="sidebar-account">

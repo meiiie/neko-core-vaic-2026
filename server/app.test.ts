@@ -52,6 +52,141 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('returns a truthful empty teacher dashboard before students answer', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      dataSource: 'SERVER',
+      classId: 'class-7a',
+      rosterCount: 40,
+      evaluatedLearnerCount: 0,
+      answerEventCount: 0,
+      groups: [],
+    });
+    await app.close();
+  });
+
+  it('builds teacher evidence only from answers stored by the backend', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const assigned = await app.inject({
+      method: 'POST',
+      url: '/api/assignments',
+      cookies: teacher,
+      payload: {
+        title: 'Kiểm tra căn bản về phân số',
+        questionIds: [
+          'bank-K01-CHECK-1',
+          'bank-K01-CHECK-2',
+          'bank-K02-CHECK-1',
+          'bank-K02-CHECK-2',
+        ],
+        dueAt: null,
+        allowRetake: false,
+        shuffleAnswers: false,
+      },
+    });
+    expect(assigned.statusCode).toBe(201);
+    const assignmentId = (assigned.json() as { id: string }).id;
+    const student = await loginCookie(app, STUDENT_EMAIL);
+
+    for (const [questionId, choiceId] of [
+      ['bank-K01-CHECK-1', 'a'],
+      ['bank-K01-CHECK-2', 'a'],
+      ['bank-K02-CHECK-1', 'b'],
+      ['bank-K02-CHECK-2', 'b'],
+    ] as const) {
+      const answer = await app.inject({
+        method: 'POST',
+        url: `/api/assignments/${assignmentId}/answers`,
+        cookies: student,
+        payload: { questionId, choiceId },
+      });
+      expect(answer.statusCode).toBe(200);
+    }
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+    expect(response.statusCode).toBe(200);
+    const dashboard = response.json() as {
+      evaluatedLearnerCount: number;
+      answerEventCount: number;
+      groups: {
+        rootKcId?: string;
+        learners: { id: string; displayLabel: string }[];
+        wrongQuestions: {
+          prompt: string;
+          answers: {
+            learnerName: string;
+            selectedChoiceLabel: string;
+            correctChoiceLabel: string;
+          }[];
+        }[];
+      }[];
+    };
+    expect(dashboard.evaluatedLearnerCount).toBe(1);
+    expect(dashboard.answerEventCount).toBe(4);
+    const group = dashboard.groups.find((candidate) => candidate.rootKcId === 'K02');
+    expect(group?.learners).toContainEqual(
+      expect.objectContaining({
+        id: 'user-student-an',
+        displayLabel: 'Trần Ngọc An',
+      }),
+    );
+    expect(group?.wrongQuestions).toHaveLength(2);
+    expect(group?.wrongQuestions[0]?.answers[0]).toMatchObject({
+      learnerName: 'Trần Ngọc An',
+      selectedChoiceLabel: expect.any(String),
+      correctChoiceLabel: expect.any(String),
+    });
+    await app.close();
+  });
+
+  it('persists teacher adjustments on the server with an audit reason', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+
+    const saved = await app.inject({
+      method: 'POST',
+      url: '/api/teacher/overrides',
+      cookies: teacher,
+      payload: {
+        learnerId: 'user-student-an',
+        targetKcId: 'K10',
+        decision: 'SET_ROOT',
+        rootKcId: 'K07',
+        reason: 'Đã xem bài làm và trao đổi trực tiếp với học sinh.',
+      },
+    });
+    expect(saved.statusCode).toBe(201);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+    expect(response.statusCode).toBe(200);
+    expect((response.json() as { overrides: unknown[] }).overrides).toContainEqual(
+      expect.objectContaining({
+        learnerId: 'user-student-an',
+        rootKcId: 'K07',
+        reason: 'Đã xem bài làm và trao đổi trực tiếp với học sinh.',
+      }),
+    );
+    await app.close();
+  });
+
   it('lets a teacher author a question and assign it; student sees and answers it', async () => {
     const app = await makeApp();
     const teacher = await loginCookie(app, TEACHER_EMAIL);
@@ -200,6 +335,22 @@ describe('NekoPath API', () => {
     const secondBody = second.json() as { accepted: number; conflictIds: string[] };
     expect(secondBody.accepted).toBe(0);
     expect(secondBody.conflictIds).toEqual([]);
+    const teacherDashboardForbidden = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: student,
+    });
+    expect(teacherDashboardForbidden.statusCode).toBe(403);
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const dashboard = await app.inject({
+      method: 'GET',
+      url: '/api/teacher/dashboard',
+      cookies: teacher,
+    });
+    expect(dashboard.json()).toMatchObject({
+      evaluatedLearnerCount: 1,
+      answerEventCount: 1,
+    });
     await app.close();
   });
 

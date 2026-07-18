@@ -1,2 +1,2 @@
-export * from './model';
-export * from './core';
+export * from './model.ts';
+export * from './core.ts';

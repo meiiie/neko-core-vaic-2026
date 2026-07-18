@@ -2,9 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 /**
  * SQLite persistence via Node 24's built-in driver — no native dependency.
- * The browser stays the runtime of record for diagnosis (local-first, per the
- * organizer's offline constraint); this database owns identity, authored
- * questions, assignments and the synced event log.
+ * SQLite is the server authority for identity, authored questions,
+ * assignments, answer evidence and teacher adjustments. The client may cache
+ * data for resilience, but it must not invent teacher-facing evidence.
  */
 
 export function openDb(path: string): DatabaseSync {
@@ -83,6 +83,19 @@ export function openDb(path: string): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_events_learner ON events(learner_id, sequence);
     CREATE INDEX IF NOT EXISTS idx_events_assignment ON events(assignment_id);
+    CREATE TABLE IF NOT EXISTS teacher_overrides (
+      id TEXT PRIMARY KEY,
+      teacher_id TEXT NOT NULL REFERENCES users(id),
+      class_id TEXT NOT NULL REFERENCES classes(id),
+      learner_id TEXT NOT NULL REFERENCES users(id),
+      target_kc_id TEXT NOT NULL,
+      decision TEXT NOT NULL CHECK (decision IN ('SET_ROOT','NEEDS_MORE_EVIDENCE')),
+      root_kc_id TEXT,
+      reason TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_teacher_overrides_lookup
+      ON teacher_overrides(class_id, learner_id, target_kc_id, updated_at DESC);
     CREATE TABLE IF NOT EXISTS sync_conflicts (
       event_id TEXT NOT NULL,
       learner_id TEXT NOT NULL,

@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
+import { HERO_GRAPH } from '../src/content/hero-demo.ts';
 import {
   createSession,
   credentialsByEmail,
@@ -11,6 +12,7 @@ import {
   verifyPassword,
 } from './auth.ts';
 import { CLASS_7A_ID } from './seed.ts';
+import { buildTeacherDashboard } from './teacher-dashboard.ts';
 
 /**
  * NekoPath API — one Fastify unit (master plan §9). The server owns identity,
@@ -62,6 +64,23 @@ const eventSchema = z.object({
   kind: z.string().min(1),
   payload: z.string(),
 });
+
+const teacherOverrideSchema = z
+  .object({
+    learnerId: z.string().min(1),
+    targetKcId: z.string().min(1),
+    decision: z.enum(['SET_ROOT', 'NEEDS_MORE_EVIDENCE']),
+    rootKcId: z.string().min(1).optional(),
+    reason: z.string().trim().min(8).max(240),
+  })
+  .superRefine((value, context) => {
+    if (value.decision === 'SET_ROOT' && !value.rootKcId) {
+      context.addIssue({ code: 'custom', path: ['rootKcId'], message: 'ROOT_REQUIRED' });
+    }
+    if (value.decision === 'NEEDS_MORE_EVIDENCE' && value.rootKcId) {
+      context.addIssue({ code: 'custom', path: ['rootKcId'], message: 'ROOT_NOT_ALLOWED' });
+    }
+  });
 
 interface QuestionRow {
   id: string;
@@ -131,13 +150,14 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
   }
 
   const isProduction = process.env.NODE_ENV === 'production';
+  const useSecureCookies = isProduction && process.env.COOKIE_SECURE !== 'false';
 
   function startSession(reply: FastifyReply, userId: string) {
     const sessionId = createSession(db, userId);
     void reply.setCookie(SESSION_COOKIE, sessionId, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: isProduction,
+      secure: useSecureCookies,
       path: '/',
       maxAge: 60 * 60 * 12,
     });
@@ -197,6 +217,50 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
       )
       .all(CLASS_7A_ID);
     return { classId: CLASS_7A_ID, students: rows };
+  });
+
+  app.get('/api/teacher/dashboard', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    return buildTeacherDashboard(db, CLASS_7A_ID, user.id);
+  });
+
+  app.post('/api/teacher/overrides', (request, reply) => {
+    const user = requireTeacher(request, reply);
+    if (!user) return;
+    const parsed = teacherOverrideSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'INVALID_BODY', detail: parsed.error.issues });
+    }
+    const body = parsed.data;
+    const knownKcIds = new Set(HERO_GRAPH.nodes.map((node) => node.id));
+    if (!knownKcIds.has(body.targetKcId) || (body.rootKcId && !knownKcIds.has(body.rootKcId))) {
+      return reply.code(400).send({ error: 'UNKNOWN_KC' });
+    }
+    const enrolled = db
+      .prepare('SELECT 1 FROM enrollments WHERE class_id = ? AND user_id = ?')
+      .get(CLASS_7A_ID, body.learnerId);
+    if (!enrolled) return reply.code(404).send({ error: 'LEARNER_NOT_FOUND' });
+
+    const id = `override-${randomUUID()}`;
+    const updatedAt = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO teacher_overrides
+       (id, teacher_id, class_id, learner_id, target_kc_id, decision, root_kc_id, reason,
+        updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id,
+      user.id,
+      CLASS_7A_ID,
+      body.learnerId,
+      body.targetKcId,
+      body.decision,
+      body.rootKcId ?? null,
+      body.reason,
+      updatedAt,
+    );
+    return reply.code(201).send({ id, updatedAt });
   });
 
   app.get('/api/questions', (request, reply) => {

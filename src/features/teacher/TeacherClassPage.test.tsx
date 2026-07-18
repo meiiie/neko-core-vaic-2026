@@ -1,17 +1,16 @@
-import 'fake-indexeddb/auto';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { db } from '../../storage/db';
+import { installApiStub } from '../../test/api-stub';
 import { TeacherGroupDetailPage } from './TeacherGroupDetailPage';
 
 describe('teacher diagnosis override', () => {
-  afterEach(async () => {
-    await db.delete();
+  beforeEach(() => {
+    installApiStub('co.ha@nekopath.edu.vn');
   });
 
-  it('persists a reasoned local decision and updates the derived groups', async () => {
+  it('persists a reasoned decision through the teacher backend API', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={['/teacher/class/root%3AK02']}>
@@ -21,26 +20,31 @@ describe('teacher diagnosis override', () => {
       </MemoryRouter>,
     );
 
-    const heading = await screen.findByRole('heading', { name: 'Sửa kết quả của học sinh' });
+    await user.click(await screen.findByText('Điều chỉnh gợi ý của hệ thống'));
+    const heading = await screen.findByRole('heading', {
+      name: 'Điều chỉnh gợi ý cho một học sinh',
+    });
     const form = heading.closest('form');
     expect(form).toBeTruthy();
     const controls = within(form!);
 
-    await user.selectOptions(controls.getByLabelText('Kết quả sau khi xem lại'), 'ROOT:K07');
+    await user.selectOptions(
+      controls.getByLabelText('Gợi ý đúng theo đánh giá của cô'),
+      'ROOT:K07',
+    );
     await user.type(
-      controls.getByLabelText('Lý do thay đổi'),
+      controls.getByLabelText('Lý do điều chỉnh'),
       'Đã trao đổi trực tiếp và xem cách làm của em.',
     );
-    await user.click(controls.getByRole('button', { name: 'Lưu thay đổi' }));
+    await user.click(controls.getByRole('button', { name: 'Lưu điều chỉnh' }));
 
-    await waitFor(async () => expect(await db.overrides.count()).toBe(1));
-    expect(await db.overrides.toArray()).toEqual([
+    expect(await screen.findByText('Đã lưu điều chỉnh trên máy chủ.')).toBeTruthy();
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/teacher/overrides',
       expect.objectContaining({
-        learnerId: 'hs-01',
-        decision: 'SET_ROOT',
-        rootKcId: 'K07',
+        method: 'POST',
+        body: expect.stringContaining('"learnerId":"user-student-an"'),
       }),
-    ]);
-    expect(await screen.findByText('Đã lưu thay đổi và cập nhật lại danh sách nhóm.')).toBeTruthy();
+    );
   });
 });

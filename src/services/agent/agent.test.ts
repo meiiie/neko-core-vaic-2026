@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installApiStub } from '../../test/api-stub';
 import { runAgent, type AgentProvider, type AgentToolCall, type AgentTraceEvent } from './loop';
 import { OpenAiCompatAgentProvider, RuleBasedProvider } from './providers';
 import { AGENT_TOOLS, toolByName } from './tools';
@@ -9,12 +10,20 @@ function collect(): { events: AgentTraceEvent[]; onTrace: (e: AgentTraceEvent) =
   return { events, onTrace: (e) => events.push(e) };
 }
 
+beforeEach(() => {
+  installApiStub('co.ha@nekopath.edu.vn');
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('agent tools (deterministic facts)', () => {
   it('class overview exposes groups, priority and the K02 class-wide gap', async () => {
     const result = await toolByName('tong_quan_lop')!.run({});
     expect(result.ok).toBe(true);
     const data = result.data as { siSo: number; loHongToanLop: { kienThuc: string }[] };
-    expect(data.siSo).toBe(40);
+    expect(data.siSo).toBe(2);
     expect(data.loHongToanLop.map((gap) => gap.kienThuc)).toContain('Phân số bằng nhau');
   });
 

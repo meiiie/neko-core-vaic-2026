@@ -3,7 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installApiStub } from '../test/api-stub';
+import { installApiStub, TEACHER_DASHBOARD_FIXTURE } from '../test/api-stub';
 import { App } from './App';
 
 function installMobileViewport() {
@@ -108,7 +108,7 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(await screen.findByRole('link', { name: /Ngân hàng câu hỏi/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Giao bài/ })).toBeTruthy();
     expect(screen.queryByRole('link', { name: /Bài kiểm tra/ })).toBeNull();
-    expect(screen.getByText('Đã đánh giá')).toBeTruthy();
+    expect(await screen.findByText('Đã đánh giá')).toBeTruthy();
     expect(screen.getByText('Cần đánh giá thêm')).toBeTruthy();
     expect(screen.getByText('Phân bổ thời gian giáo viên')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Kế hoạch trong 15 phút' })).toBeTruthy();
@@ -129,19 +129,54 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
       await screen.findByRole('heading', { level: 1, name: 'Nhóm học sinh cần hỗ trợ' }),
     ).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: 'Bài: Phân số bằng nhau' })).toBeTruthy();
-    expect(screen.queryByRole('heading', { name: 'Học sinh trong nhóm (12)' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Giao bài cho nhóm' })).toBeNull();
+    expect(screen.queryByText('Trần Ngọc An')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Giao bài ôn cho nhóm' })).toBeNull();
 
-    await user.click(screen.getByRole('link', { name: 'Xem chi tiết nhóm Phân số bằng nhau' }));
+    await user.click(
+      screen.getByRole('link', { name: 'Xem chi tiết và hỗ trợ nhóm Phân số bằng nhau' }),
+    );
 
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Bài: Phân số bằng nhau' }),
     ).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Quay lại danh sách nhóm' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Học sinh trong nhóm (12)' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Câu nhiều học sinh trả lời sai' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Giao bài cho nhóm' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Kiểm tra câu trả lời sai' })).toBeTruthy();
+    expect(screen.getByText('Xem danh sách 2 học sinh trong nhóm')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Giao bài ôn cho nhóm' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Tải danh sách' })).toBeTruthy();
+
+    await user.click(screen.getByText('Xem câu trả lời'));
+    expect(screen.getByRole('columnheader', { name: 'Đã chọn' })).toBeTruthy();
+    expect(screen.getByRole('cell', { name: '4/5' })).toBeTruthy();
+    expect(screen.getAllByRole('cell', { name: '4/6' }).length).toBeGreaterThan(0);
+  });
+
+  it('does not replace an empty backend event log with synthetic groups', async () => {
+    installApiStub('co.ha@nekopath.edu.vn', {
+      ...TEACHER_DASHBOARD_FIXTURE,
+      latestAnswerAt: null,
+      evaluatedLearnerCount: 0,
+      answerEventCount: 0,
+      groups: [],
+      classWideGaps: [],
+      attentionPlan: {
+        ...TEACHER_DASHBOARD_FIXTURE.attentionPlan,
+        usedMinutes: 0,
+        remainingMinutes: 15,
+        selected: [],
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={['/teacher/class']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Chưa thể tạo nhóm cần hỗ trợ' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Giao bài kiểm tra nhanh' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Bài: Phân số bằng nhau' })).toBeNull();
   });
 
   it('redirects protected routes to login when the server has no session', async () => {
