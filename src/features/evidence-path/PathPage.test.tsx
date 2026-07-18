@@ -1,8 +1,20 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { StudentDiagnosisContext } from '../../app/adapters/hero-tutor';
+import type { LearnerEventRecord } from '../../storage/db';
 import { storedHeroRecords } from '../../test/hero-evidence';
 import { PathPage } from './PathPage';
+
+const { pathState } = vi.hoisted(() => ({
+  pathState: {
+    context: {
+      learnerId: 'user-student-minh',
+      simulationProfileId: 'minh',
+    } as StudentDiagnosisContext,
+    records: [] as LearnerEventRecord[],
+  },
+}));
 
 vi.mock('../../app/session', () => ({
   useSession: () => ({
@@ -17,12 +29,23 @@ vi.mock('../../app/session', () => ({
 }));
 
 vi.mock('../../app/adapters/student-context', () => ({
-  studentContextForAccount: () => ({
-    learnerId: 'user-student-minh',
-    simulationProfileId: 'minh',
-  }),
+  studentContextForAccount: () => pathState.context,
   useStudentEvents: () => ({
-    records: [
+    records: pathState.records,
+    migrationError: false,
+    retryMigration: vi.fn(),
+  }),
+}));
+
+vi.mock('../../services/lessons', () => ({ useLessonKcIds: () => new Set<string>() }));
+
+describe('continuous student path', () => {
+  beforeEach(() => {
+    pathState.context = {
+      learnerId: 'user-student-minh',
+      simulationProfileId: 'minh',
+    };
+    pathState.records = [
       ...storedHeroRecords('minh'),
       {
         id: 'answer-transfer',
@@ -43,15 +66,9 @@ vi.mock('../../app/adapters/student-context', () => ({
         payload:
           '{"version":"review-schedule-v1","kcId":"K10","sourceEventId":"answer-transfer","dueAt":"2020-01-04T08:00:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
       },
-    ],
-    migrationError: false,
-    retryMigration: vi.fn(),
-  }),
-}));
+    ];
+  });
 
-vi.mock('../../services/lessons', () => ({ useLessonKcIds: () => new Set<string>() }));
-
-describe('continuous student path', () => {
   it('offers evidence-based maintenance after the current remediation path is complete', () => {
     render(
       <MemoryRouter>
@@ -68,5 +85,39 @@ describe('continuous student path', () => {
     expect(screen.getByRole('link', { name: 'Bắt đầu lượt ôn 3 câu' }).getAttribute('href')).toBe(
       '/student/check-in?mode=review',
     );
+  });
+
+  it('explains that a wrong answer is retained while the safe path waits for more evidence', () => {
+    pathState.context = { learnerId: 'user-student-minh' };
+    pathState.records = [
+      {
+        id: 'evt-assignment-wrong',
+        learnerId: 'user-student-minh',
+        itemId: 'bank-K10-CHECK-1',
+        sequence: 1,
+        occurredAt: '2026-07-18T09:00:00.000Z',
+        kind: 'ASSIGNMENT_ANSWER',
+        payload: '{"choiceId":"b","correct":false,"methodValidity":"UNKNOWN"}',
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PathPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', {
+        name: 'Câu trả lời đã được ghi nhận, nhưng chưa đủ để tìm nguyên nhân gốc',
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText(/1 câu trả lời đã được lưu trong hồ sơ/)).toBeTruthy();
+    expect(screen.getByText(/Dữ liệu học tập không bị mất/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Trả lời câu xác minh để mở lộ trình' })
+        .getAttribute('href'),
+    ).toBe('/student/check-in');
   });
 });
