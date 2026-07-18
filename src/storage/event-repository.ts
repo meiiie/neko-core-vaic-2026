@@ -54,6 +54,23 @@ export async function listEventsByLearner(
   );
 }
 
+/**
+ * Move records written by older builds under a simulation-profile key to the
+ * student's stable account key. Event IDs and outbox references stay intact.
+ */
+export async function migrateLearnerEvents(
+  legacyLearnerId: string,
+  learnerId: string,
+  database: NekoPathDb = db,
+): Promise<number> {
+  if (!legacyLearnerId || legacyLearnerId === learnerId) return 0;
+  return database.transaction('rw', database.events, async () => {
+    const rows = await database.events.where('learnerId').equals(legacyLearnerId).toArray();
+    await Promise.all(rows.map((row) => database.events.update(row.id, { learnerId })));
+    return rows.length;
+  });
+}
+
 export async function countEvents(database: NekoPathDb = db): Promise<number> {
   return database.events.count();
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installApiStub } from '../test/api-stub';
-import { SessionProvider, useSession } from './session';
+import { DEVICE_PROFILES_KEY, SessionProvider, useSession } from './session';
 
 function Probe() {
   const { account, deviceProfiles, ready, resumeOffline, signIn, signOut } = useSession();
@@ -13,6 +13,8 @@ function Probe() {
       <output data-testid="ready">{String(ready)}</output>
       <output data-testid="who">{account ? `${account.role}:${account.shortName}` : 'none'}</output>
       <output data-testid="device-profiles">{deviceProfiles.length}</output>
+      <output data-testid="learner-id">{account?.learnerId ?? 'none'}</output>
+      <output data-testid="simulation-profile">{account?.simulationProfileId ?? 'none'}</output>
       <output data-testid="sign-in-error">{signInError}</output>
       <output data-testid="offline-eligible">{offlineEligible}</output>
       <button
@@ -34,6 +36,9 @@ function Probe() {
         }
       >
         in-bad
+      </button>
+      <button type="button" onClick={() => void signIn('hs01@nekopath.edu.vn', 'Nekopath@2026')}>
+        in-extra
       </button>
       <button type="button" onClick={() => signOut()}>
         out
@@ -108,6 +113,8 @@ describe('API-backed session', () => {
 
     screen.getByRole('button', { name: 'in-good' }).click();
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));
+    expect(screen.getByTestId('learner-id').textContent).toBe('user-student-an');
+    expect(screen.getByTestId('simulation-profile').textContent).toBe('an');
     expect(window.localStorage.getItem('nekopath.session-cache.v1')).toContain('an');
     expect(screen.getByTestId('device-profiles').textContent).toBe('1');
     expect(window.localStorage.getItem('nekopath.device-profiles.v1')).toContain(
@@ -140,6 +147,47 @@ describe('API-backed session', () => {
     expect(window.localStorage.getItem('nekopath.session-cache.v1')).toBeNull();
   });
 
+  it('migrates a legacy confirmed profile to the stable account learner key', async () => {
+    window.localStorage.setItem(
+      DEVICE_PROFILES_KEY,
+      JSON.stringify([{ ...CACHED_AN, email: 'an@nekopath.edu.vn' }]),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('network down');
+      }),
+    );
+    render(
+      <SessionProvider>
+        <Probe />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
+
+    screen.getByRole('button', { name: 'resume-an' }).click();
+
+    await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));
+    expect(screen.getByTestId('learner-id').textContent).toBe('user-student-an');
+    expect(screen.getByTestId('simulation-profile').textContent).toBe('an');
+  });
+
+  it('gives a non-hero student an isolated learner key without borrowing a demo profile', async () => {
+    installApiStub(null);
+    render(
+      <SessionProvider>
+        <Probe />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
+
+    screen.getByRole('button', { name: 'in-extra' }).click();
+
+    await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:Hân'));
+    expect(screen.getByTestId('learner-id').textContent).toBe('user-student-7a-01');
+    expect(screen.getByTestId('simulation-profile').textContent).toBe('none');
+  });
+
   it('falls back to the cached identity when the network is unreachable', async () => {
     window.localStorage.setItem('nekopath.session-cache.v1', JSON.stringify(CACHED_AN));
     vi.stubGlobal(
@@ -155,6 +203,8 @@ describe('API-backed session', () => {
     );
     await waitFor(() => expect(screen.getByTestId('ready').textContent).toBe('true'));
     expect(screen.getByTestId('who').textContent).toBe('STUDENT:An');
+    expect(screen.getByTestId('learner-id').textContent).toBe('user-student-an');
+    expect(screen.getByTestId('simulation-profile').textContent).toBe('an');
   });
 
   it('stops restoring after three seconds and falls back to cached identity', async () => {

@@ -85,12 +85,10 @@ export async function flushOutbox(
     }
     const verified = await verifiedSyncUser();
     if ('skipped' in verified) return verified;
-    const learnerId = verified.user.learnerProfile;
-    if (verified.user.role !== 'STUDENT' || !learnerId) {
-      return { skipped: 'NO_LEARNER_PROFILE' };
-    }
+    if (verified.user.role !== 'STUDENT') return { skipped: 'NOT_A_STUDENT' };
+    const learnerId = verified.user.id;
     const matchingEvents = events.filter((event) => event.learnerId === learnerId);
-    if (matchingEvents.length === 0) return { skipped: 'NO_DUE_EVENTS_FOR_PROFILE' };
+    if (matchingEvents.length === 0) return { skipped: 'NO_DUE_EVENTS_FOR_ACCOUNT' };
     const matchingIds = new Set(matchingEvents.map((event) => event.id));
     const matchingDue = due.filter((row) => matchingIds.has(row.eventId));
     try {

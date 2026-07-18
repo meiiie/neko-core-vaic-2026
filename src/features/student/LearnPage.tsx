@@ -1,7 +1,6 @@
 import { ArrowLeftIcon } from '@phosphor-icons/react/ArrowLeft';
 import { CheckCircleIcon } from '@phosphor-icons/react/CheckCircle';
 import { InfoIcon } from '@phosphor-icons/react/Info';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
@@ -11,24 +10,34 @@ import {
   kcName,
   questionForItem,
 } from '../../app/adapters/hero-tutor';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { recordAnswer } from '../../services/sync';
-import { listEventsByLearner } from '../../storage/event-repository';
 
 const QUESTION_BUDGET = 3;
 
 export function LearnPage() {
   const { account } = useSession();
-  const learnerId = account?.learnerId ?? 'chi';
+  const learnerContext = studentContextForAccount(account);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const savingRef = useRef(false);
-  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
 
-  if (localRecords === undefined) {
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
+
+  if (localRecords === undefined || !learnerContext) {
     return <div className="page-loading" aria-label="Đang tải bài kiểm tra" />;
   }
 
-  const result = diagnoseHero(learnerId, localRecords);
+  const activeLearnerContext = learnerContext;
+  const result = diagnoseHero(activeLearnerContext, localRecords);
   const probeQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
   const questionNumber = Math.min(localRecords.length + 1, QUESTION_BUDGET);
 
@@ -39,7 +48,7 @@ export function LearnPage() {
     setSaveState('saving');
     try {
       const record = buildLocalAnswerRecord(
-        learnerId,
+        activeLearnerContext,
         probeQuestion.itemId,
         selectedChoiceId,
         selectedChoiceId === probeQuestion.correctChoiceId,

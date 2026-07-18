@@ -10,7 +10,11 @@ function makeDb(): NekoPathDb {
   return new NekoPathDb(`nekopath-sync-${crypto.randomUUID()}`);
 }
 
-function makeEvent(id: string, sequence: number, learnerId = 'an'): LearnerEventRecord {
+function makeEvent(
+  id: string,
+  sequence: number,
+  learnerId = 'user-student-an',
+): LearnerEventRecord {
   return {
     id,
     learnerId,
@@ -115,7 +119,7 @@ describe('outbox sync bridge', () => {
 
   it("blocks a stale server session before posting another profile's events", async () => {
     const database = makeDb();
-    await appendEvent(makeEvent('evt-chi', 1, 'chi'), database);
+    await appendEvent(makeEvent('evt-chi', 1, 'user-student-chi'), database);
     await queueOutbox('evt-chi', database);
     bindBrowserProfile('user-student-chi');
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(AN_SESSION), { status: 200 }));
@@ -130,7 +134,7 @@ describe('outbox sync bridge', () => {
   it('syncs only events owned by the verified learner on a shared device', async () => {
     const database = makeDb();
     await appendEvent(makeEvent('evt-an', 1), database);
-    await appendEvent(makeEvent('evt-chi', 1, 'chi'), database);
+    await appendEvent(makeEvent('evt-chi', 1, 'user-student-chi'), database);
     await queueOutbox('evt-an', database);
     await queueOutbox('evt-chi', database);
     const posted: { events: { id: string }[] }[] = [];
@@ -146,6 +150,34 @@ describe('outbox sync bridge', () => {
     expect(posted[0].events.map((event) => event.id)).toEqual(['evt-an']);
     expect((await database.outbox.get('evt-an'))?.status).toBe('SENT');
     expect((await database.outbox.get('evt-chi'))?.status).toBe('PENDING');
+    await database.delete();
+  });
+
+  it('syncs an account without a simulation profile by its stable user ID', async () => {
+    const database = makeDb();
+    const learnerId = 'user-student-7a-01';
+    await appendEvent(makeEvent('evt-nonhero', 1, learnerId), database);
+    await queueOutbox('evt-nonhero', database);
+    bindBrowserProfile(learnerId);
+    const posted: { events: { learnerId: string }[] }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/api/auth/me')) {
+          return new Response(
+            JSON.stringify({
+              user: { id: learnerId, role: 'STUDENT', learnerProfile: null },
+            }),
+            { status: 200 },
+          );
+        }
+        posted.push(JSON.parse(String(init?.body)) as { events: { learnerId: string }[] });
+        return new Response(JSON.stringify({ accepted: 1, received: 1 }), { status: 200 });
+      }),
+    );
+
+    expect(await flushOutbox(database)).toEqual({ pushed: 1 });
+    expect(posted[0].events).toEqual([expect.objectContaining({ learnerId })]);
     await database.delete();
   });
 

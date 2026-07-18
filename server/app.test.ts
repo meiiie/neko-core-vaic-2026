@@ -180,7 +180,7 @@ describe('NekoPath API', () => {
 
     const event = {
       id: 'evt-local-1',
-      learnerId: 'an',
+      learnerId: 'user-student-an',
       itemId: 'K02-CHECK-1',
       sequence: 1,
       occurredAt: new Date().toISOString(),
@@ -211,7 +211,7 @@ describe('NekoPath API', () => {
     const student = await loginCookie(app, STUDENT_EMAIL);
     const original = {
       id: 'evt-clash-1',
-      learnerId: 'an',
+      learnerId: 'user-student-an',
       itemId: 'K02-CHECK-1',
       sequence: 1,
       occurredAt: '2026-07-18T03:00:00.000Z',
@@ -247,7 +247,42 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
-  it('rejects stale profile bindings and cross-profile event batches', async () => {
+  it('quarantines an event ID collision across learner accounts', async () => {
+    const app = await makeApp();
+    const an = await loginCookie(app, STUDENT_EMAIL);
+    const han = await loginCookie(app, 'hs01@nekopath.edu.vn');
+    const occurredAt = '2026-07-18T03:00:00.000Z';
+    const shared = {
+      id: 'evt-cross-account-clash',
+      itemId: 'K02-CHECK-1',
+      sequence: 1,
+      occurredAt,
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    };
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: an,
+      payload: { events: [{ ...shared, learnerId: 'user-student-an' }] },
+    });
+    expect((first.json() as { accepted: number }).accepted).toBe(1);
+
+    const collision = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: han,
+      payload: { events: [{ ...shared, learnerId: 'user-student-7a-01' }] },
+    });
+    expect(collision.json()).toMatchObject({
+      accepted: 0,
+      conflictIds: ['evt-cross-account-clash'],
+    });
+    await app.close();
+  });
+
+  it('rejects stale browser bindings and cross-account event batches', async () => {
     const app = await makeApp();
     const student = await loginCookie(app, STUDENT_EMAIL);
     const staleBinding = { ...student, nekopath_profile: 'user-student-chi' };
@@ -262,7 +297,7 @@ describe('NekoPath API', () => {
 
     const crossProfileEvent = {
       id: 'evt-cross-profile',
-      learnerId: 'chi',
+      learnerId: 'user-student-chi',
       itemId: 'K02-CHECK-1',
       sequence: 1,
       occurredAt: new Date().toISOString(),
@@ -276,7 +311,7 @@ describe('NekoPath API', () => {
       payload: { events: [crossProfileEvent] },
     });
     expect(rejected.statusCode).toBe(403);
-    expect(rejected.json()).toMatchObject({ error: 'EVENT_PROFILE_MISMATCH' });
+    expect(rejected.json()).toMatchObject({ error: 'EVENT_ACCOUNT_MISMATCH' });
     await app.close();
   });
 });

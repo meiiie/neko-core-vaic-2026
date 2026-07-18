@@ -1,4 +1,3 @@
-import { useLiveQuery } from 'dexie-react-hooks';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -7,12 +6,13 @@ import {
   kcName,
   questionForItem,
 } from '../../app/adapters/hero-tutor';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { useSession } from '../../app/session';
+import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
 import { recordAnswer } from '../../services/sync';
 import type { LearnerEventRecord } from '../../storage/db';
-import { listEventsByLearner } from '../../storage/event-repository';
 
 type Phase = 'answering' | 'feedback';
 
@@ -42,7 +42,8 @@ function nextQuestion(
 
 export function PracticePage() {
   const { account } = useSession();
-  const learnerId = account?.learnerId ?? 'chi';
+  const learnerContext = studentContextForAccount(account);
+  const learnerId = learnerContext?.learnerId ?? '';
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('answering');
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
@@ -55,9 +56,16 @@ export function PracticePage() {
   } | null>(null);
   const savingRef = useRef(false);
 
-  const localRecords = useLiveQuery(() => listEventsByLearner(learnerId), [learnerId]);
+  const {
+    records: localRecords,
+    migrationError,
+    retryMigration,
+  } = useStudentEvents(learnerContext);
 
-  const result = localRecords === undefined ? null : diagnoseHero(learnerId, localRecords);
+  const result =
+    localRecords === undefined || !learnerContext
+      ? null
+      : diagnoseHero(learnerContext, localRecords);
   const rootKcId = result?.status === 'DIAGNOSED' ? result.rootKcId : undefined;
   const explainKey = rootKcId ? `${learnerId}-${rootKcId}` : null;
   const explain = explainState && explainState.key === explainKey ? explainState.reply : null;
@@ -85,9 +93,14 @@ export function PracticePage() {
     };
   }, [explainKey, rootKcId]);
 
-  if (localRecords === undefined || result === null) {
+  if (migrationError) {
+    return <StudentDataFailure onRetry={retryMigration} />;
+  }
+
+  if (localRecords === undefined || !learnerContext || result === null) {
     return <div className="page-loading" aria-label="Đang tải bài luyện tập" />;
   }
+  const activeLearnerContext = learnerContext;
 
   // During feedback the answered question stays frozen on screen; the live
   // re-diagnosed "next" question only takes over after Tiếp tục/Thử lại.
@@ -112,7 +125,7 @@ export function PracticePage() {
         ?.misconceptionId;
     try {
       const record = buildLocalAnswerRecord(
-        learnerId,
+        activeLearnerContext,
         target.itemId,
         selectedChoiceId,
         correct,

@@ -550,10 +550,9 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
     if (
       user.role !== 'STUDENT' ||
-      !user.learnerProfile ||
-      parsed.data.events.some((event) => event.learnerId !== user.learnerProfile)
+      parsed.data.events.some((event) => event.learnerId !== user.id)
     ) {
-      return reply.code(403).send({ error: 'EVENT_PROFILE_MISMATCH' });
+      return reply.code(403).send({ error: 'EVENT_ACCOUNT_MISMATCH' });
     }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events
@@ -561,7 +560,8 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const selectExisting = db.prepare(
-      'SELECT item_id, sequence, occurred_at, kind, payload FROM events WHERE id = ?',
+      `SELECT learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload
+       FROM events WHERE id = ?`,
     );
     const insertConflict = db.prepare(
       `INSERT OR IGNORE INTO sync_conflicts
@@ -569,14 +569,26 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
        VALUES (?, ?, ?, ?, ?)`,
     );
     const fingerprint = (row: {
+      learnerId: string;
       itemId: string;
+      assignmentId?: string | null;
       sequence: number;
       occurredAt: string;
       kind: string;
       payload: string;
     }) =>
       createHash('sha256')
-        .update(JSON.stringify([row.itemId, row.sequence, row.occurredAt, row.kind, row.payload]))
+        .update(
+          JSON.stringify([
+            row.learnerId,
+            row.itemId,
+            row.assignmentId ?? null,
+            row.sequence,
+            row.occurredAt,
+            row.kind,
+            row.payload,
+          ]),
+        )
         .digest('hex');
     let accepted = 0;
     const conflictIds: string[] = [];
@@ -597,11 +609,21 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
         continue;
       }
       const existing = selectExisting.get(event.id) as
-        | { item_id: string; sequence: number; occurred_at: string; kind: string; payload: string }
+        | {
+            learner_id: string;
+            item_id: string;
+            assignment_id: string | null;
+            sequence: number;
+            occurred_at: string;
+            kind: string;
+            payload: string;
+          }
         | undefined;
       if (!existing) continue;
       const serverPrint = fingerprint({
+        learnerId: existing.learner_id,
         itemId: existing.item_id,
+        assignmentId: existing.assignment_id,
         sequence: existing.sequence,
         occurredAt: existing.occurred_at,
         kind: existing.kind,
