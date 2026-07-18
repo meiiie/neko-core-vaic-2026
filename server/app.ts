@@ -550,10 +550,9 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!parsed.success) return reply.code(400).send({ error: 'INVALID_BODY' });
     if (
       user.role !== 'STUDENT' ||
-      !user.learnerProfile ||
-      parsed.data.events.some((event) => event.learnerId !== user.learnerProfile)
+      parsed.data.events.some((event) => event.learnerId !== user.id)
     ) {
-      return reply.code(403).send({ error: 'EVENT_PROFILE_MISMATCH' });
+      return reply.code(403).send({ error: 'EVENT_ACCOUNT_MISMATCH' });
     }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events

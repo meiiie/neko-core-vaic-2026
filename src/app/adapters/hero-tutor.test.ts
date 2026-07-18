@@ -6,6 +6,7 @@ import {
   diagnoseHero,
   isHeroLearnerId,
   toDomainEvents,
+  toHeroClassObservedEvents,
 } from './hero-tutor';
 
 describe('hero-tutor adapter (UI integration over domain runtime)', () => {
@@ -66,6 +67,28 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     });
     expect(result.evidenceEventIds).toEqual([]);
     expect(record).toMatchObject({ learnerId: 'user-student-7a-01', sequence: 1 });
+  });
+
+  it('maps account-owned demo events only at the synthetic teacher boundary', () => {
+    const heroRecord = buildLocalAnswerRecord(
+      { learnerId: 'user-student-an', simulationProfileId: 'an' },
+      'K02-DIAGNOSTIC',
+      'a',
+      true,
+      0,
+    );
+    const nonHeroRecord = buildLocalAnswerRecord(
+      { learnerId: 'user-student-7a-01' },
+      'K02-DIAGNOSTIC',
+      'a',
+      true,
+      0,
+    );
+
+    expect(toHeroClassObservedEvents([heroRecord, nonHeroRecord])).toEqual([
+      expect.objectContaining({ id: heroRecord.id, learnerId: 'an' }),
+    ]);
+    expect(toDomainEvents([heroRecord])[0].learnerId).toBe('user-student-an');
   });
 
   it('persists structured misconception evidence from an authored distractor', () => {

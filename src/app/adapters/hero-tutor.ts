@@ -175,6 +175,27 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
   return events;
 }
 
+const HERO_ACCOUNT_PROFILE: Readonly<Record<string, HeroSimulationProfileId>> = {
+  'user-student-an': 'an',
+  'user-student-binh': 'binh',
+  'user-student-chi': 'chi',
+  'user-student-minh': 'minh',
+};
+
+/**
+ * Adapt account-owned browser events to the four synthetic class profiles.
+ * This mapping belongs only to the demo presentation boundary; domain and
+ * persistence code continue to use the stable account ID.
+ */
+export function toHeroClassObservedEvents(records: readonly LearnerEventRecord[]): LearnerEvent[] {
+  return toDomainEvents(records).flatMap((event) => {
+    const profileId = isHeroLearnerId(event.learnerId)
+      ? event.learnerId
+      : HERO_ACCOUNT_PROFILE[event.learnerId];
+    return profileId ? [{ ...event, learnerId: profileId }] : [];
+  });
+}
+
 /**
  * Diagnose a hero learner from the seeded demo evidence plus any answers the
  * user recorded locally in this browser. Pure domain call — no persistence.
