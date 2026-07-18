@@ -5,7 +5,7 @@ import {
   type TeacherDashboardDto,
 } from './teacher-api';
 
-export function useTeacherDashboard() {
+export function useTeacherDashboard(classId?: string | null) {
   const [dashboard, setDashboard] = useState<TeacherDashboardDto>(EMPTY_TEACHER_DASHBOARD);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,7 +13,8 @@ export function useTeacherDashboard() {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const next = await fetchTeacherDashboard();
+      if (classId === null) return null;
+      const next = await fetchTeacherDashboard(classId);
       setDashboard(next);
       return next;
     } catch {
@@ -22,11 +23,14 @@ export function useTeacherDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [classId]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchTeacherDashboard(controller.signal)
+    if (classId === null) {
+      return () => controller.abort();
+    }
+    void fetchTeacherDashboard(classId, controller.signal)
       .then((next) => setDashboard(next))
       .catch((fetchError: unknown) => {
         if (!(fetchError instanceof DOMException && fetchError.name === 'AbortError')) {
@@ -37,12 +41,13 @@ export function useTeacherDashboard() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, []);
+  }, [classId]);
 
   return {
-    dashboard,
-    overrides: dashboard.overrides,
-    loading,
+    dashboard: classId === null ? EMPTY_TEACHER_DASHBOARD : dashboard,
+    overrides: classId === null ? EMPTY_TEACHER_DASHBOARD.overrides : dashboard.overrides,
+    loading:
+      classId === null ? false : loading || Boolean(classId && dashboard.classId !== classId),
     error,
     refresh,
   };
