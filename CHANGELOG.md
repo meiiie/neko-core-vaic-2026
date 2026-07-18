@@ -5,6 +5,37 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.9.0] — 2026-07-18
+
+The multimedia and deep-agent release.
+
+### Added
+
+- **Teacher-uploaded learning resources**: PDF summaries and compressed micro-videos
+  (≤ 60 MB, MIME allowlist) attached per skill, stored on the persistent volume,
+  streamed with HTTP Range support, and **pinnable offline per device** — download is
+  always explicit with the size shown. Students see attachments on the lesson page
+  with teacher attribution.
+- **Neko agent harness v2** (teacher-side): persistent token-budget agent sessions,
+  server-side OpenAI Responses relay and managed ChatGPT accounts (teacher-only,
+  secrets never leave the server), selectable streamed models with stall recovery,
+  WebMCP assignment tools, and Gemma 3 running offline in a WebLLM worker.
+- **Adaptive continuation**: learning continues past mastery with persisted,
+  policy-validated spaced-review schedules.
+- **Teacher question-bank import** from file and a restored class dashboard with
+  per-student drill-down.
+- Student evidence histories persisted in SQLite server-side (no client-seeded
+  walkthrough data).
+
+### Fixed
+
+- **Production crash-loop root-caused and closed**: the runtime image now ships all
+  of `src/` (a hand-maintained COPY allowlist broke when a new server cross-import
+  landed), and recovery deploys are no longer blocked by the pre-deploy snapshot
+  when the container is already down.
+- Local database schema advanced to v4 (lesson/resource mirrors + scoped agent
+  sessions) with safe upgrade paths for devices on any prior version.
+
 ## [0.8.0] — 2026-07-18
 
 Baseline release for the per-feature deepening phase.
@@ -173,6 +204,7 @@ Baseline release for the per-feature deepening phase.
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.9.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.0...v0.6.1
