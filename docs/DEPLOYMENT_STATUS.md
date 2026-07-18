@@ -64,6 +64,26 @@ Trước khi deploy, gate local đã đạt lint, typecheck, 69 tests, 23 determ
 
 The no-index policy is intentional: this public judging demo contains synthetic classroom data and is not presented as a real school service or public curriculum resource.
 
+## Keyless CD and access hardening (2026-07-18 ICT)
+
+- PR [#13](https://github.com/meiiie/neko-core-vaic-2026/pull/13) replaced the missing JSON-key
+  secret with GitHub OIDC → Google Workload Identity Federation. The provider is restricted to the
+  immutable repository/owner IDs, `main`, `workflow_dispatch` and the exact deploy workflow path.
+- Production deploy runs
+  [29638155768](https://github.com/meiiie/neko-core-vaic-2026/actions/runs/29638155768) and
+  [29638420458](https://github.com/meiiie/neko-core-vaic-2026/actions/runs/29638420458) passed OIDC
+  authentication, IAP/OS Login, the Docker release gate and canonical smoke checks. The deployed
+  artifact was verified to contain its source commit.
+- The deploy service account has no user-managed keys. OS Login is enabled only on
+  `nekopath-production`; an allow rule admits IAP's `35.235.240.0/20` range at priority 900, then a
+  VM-tag-scoped deny rule blocks all other port-22 traffic at priority 1000. Direct SSH timed out,
+  while IAP SSH and canonical HTTPS remained healthy.
+- Every future deploy creates a no-downtime SQLite Online Backup snapshot first. The snapshot is
+  integrity-checked, compressed, root-only and named with UTC time plus source commit. A live
+  production-path smoke generated an 18,266-byte archive without stopping the app. An isolated
+  restore then recovered a 131,072-byte database, passed `quick_check` and opened all nine tables;
+  its temporary container, volume and files were removed afterward.
+
 ## Recovery
 
 Nếu VM/origin không thể khôi phục kịp thời, giữ nguyên canonical hostname nhưng thực hiện theo thứ tự:

@@ -45,6 +45,7 @@ sudo -u Admin git -C /opt/nekopath checkout main
 sudo -u Admin git -C /opt/nekopath pull --ff-only origin main
 export GITHUB_SHA=$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD)
 cd /opt/nekopath
+bash ops/backup.sh "$GITHUB_SHA"
 sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml build app
 sudo docker compose -f ops/compose.yml up -d
 sudo docker compose -f ops/compose.yml ps
@@ -54,18 +55,24 @@ The Docker build is the release gate: it runs typecheck, tests and the PWA produ
 
 ## Back up SQLite
 
-This short procedure stops only the application container so the SQLite file is copied consistently. Caddy may return a temporary 502 during the stop window.
+`backup.sh` streams a small Node program into the running app container and uses SQLite's Online
+Backup API. The source stays online, the resulting snapshot is checked with `PRAGMA quick_check`,
+then copied to the host and compressed. The deploy workflow runs this automatically before every
+image build.
 
 ```bash
-stamp=$(date -u +%Y%m%dT%H%M%SZ)
-sudo install -d -m 0700 /var/backups/nekopath
 cd /opt/nekopath
-sudo docker compose -f ops/compose.yml stop app
-sudo tar -C /var/lib/docker/volumes/ops_nekopath-data/_data \
-  -czf "/var/backups/nekopath/data-${stamp}.tgz" .
-sudo docker compose -f ops/compose.yml start app
-sudo docker compose -f ops/compose.yml ps
+export GITHUB_SHA=$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD)
+bash ops/backup.sh "$GITHUB_SHA"
 ```
+
+Expected output: `/var/backups/nekopath/data-<UTC>-<commit>.sqlite.gz`. The directory and files are
+root-only. Keep all event-window snapshots; the database is small enough that automatic pruning is
+unnecessary and would add deletion risk.
+
+Implementation basis: Node 24's [`sqlite.backup`](https://nodejs.org/docs/latest-v24.x/api/sqlite.html)
+wraps SQLite's [Online Backup API](https://www.sqlite.org/backup.html), which produces a consistent
+snapshot while the source remains in use.
 
 ## Roll back code
 
@@ -83,13 +90,22 @@ sudo docker compose -f ops/compose.yml ps
 ## Restore SQLite
 
 ```bash
+backup=/var/backups/nekopath/<backup>.sqlite.gz
+sudo test -s "$backup"
 cd /opt/nekopath
 sudo docker compose -f ops/compose.yml stop app
-sudo rm -rf /var/lib/docker/volumes/ops_nekopath-data/_data/*
-sudo tar -C /var/lib/docker/volumes/ops_nekopath-data/_data \
-  -xzf /var/backups/nekopath/<backup>.tgz
+sudo gzip -dc "$backup" | sudo docker compose -f ops/compose.yml run --rm --no-deps -T app \
+  sh -c 'cat > /app/server/data/.restore.sqlite'
+sudo docker compose -f ops/compose.yml run --rm --no-deps -T app \
+  node --input-type=module -e 'import { DatabaseSync } from "node:sqlite"; const db = new DatabaseSync("/app/server/data/.restore.sqlite", { readOnly: true }); const row = db.prepare("PRAGMA quick_check").get(); db.close(); if (Object.values(row ?? {})[0] !== "ok") process.exit(1)'
+sudo docker compose -f ops/compose.yml run --rm --no-deps -T app \
+  sh -c 'rm -f /app/server/data/nekopath.db-wal /app/server/data/nekopath.db-shm; mv /app/server/data/.restore.sqlite /app/server/data/nekopath.db'
 sudo docker compose -f ops/compose.yml start app
+sudo docker compose -f ops/compose.yml ps
 ```
+
+The archive is first restored and checked under a temporary name. Only a valid database is renamed
+over the stopped production database, and the rename stays on the same volume.
 
 Record the backup timestamp and release commit in the AI collaboration log.
 
