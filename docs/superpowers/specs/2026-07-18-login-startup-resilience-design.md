@@ -1,7 +1,7 @@
 # NekoPath login startup resilience design
 
-**Date:** 2026-07-18  
-**Status:** Approved design, pending written-spec review  
+**Date:** 2026-07-18
+**Status:** Approved
 **Base:** `origin/main@233abdc` (`v0.4.0`)
 
 ## 1. Problem
