@@ -585,23 +585,65 @@ button:disabled,
   }
 }
 
+/* Sidebar foot: one quiet answer to "is my work safe?" plus the honest
+   environment note. Replaces the former three-badge status bar. */
+
+.sidebar-foot {
+  display: grid;
+  gap: var(--s-1);
+  padding: var(--s-4) var(--s-5);
+  border-top: 1px solid var(--rule);
+}
+
+.sidebar-status {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.sidebar-status::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--evidence);
+}
+
+.sidebar-status[data-tone='review'] {
+  color: var(--review);
+}
+
+.sidebar-status[data-tone='review']::before {
+  background: var(--review);
+}
+
+.sidebar-status--action {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
 .product-workspace {
   min-height: 100dvh;
   margin-left: var(--sidebar-width);
 }
 
-.workspace-status {
-  display: flex;
-  min-height: var(--shell-chrome-height);
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--s-2);
-  padding: 0 clamp(1rem, 4vw, 3rem);
-  border-bottom: 1px solid var(--rule);
-  background: rgb(255 255 255 / 92%);
-}
-
-.environment-label,
 .status-label {
   display: inline-flex;
   min-height: 1.75rem;
@@ -757,40 +799,72 @@ button:disabled,
 
 /* Student overview */
 
+.page-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
 .continue-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--s-5);
-  padding: var(--s-5);
-  border: 1px solid #b2ccff;
+  padding: var(--s-5) var(--s-6);
+  border: 1px solid var(--rule);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
 
-.continue-marker {
+.hero-icon {
   display: grid;
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 3rem;
+  height: 3rem;
   place-items: center;
-  border-radius: var(--radius-md);
-  background: var(--primary);
-  color: white;
-  font-weight: 800;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
-.continue-copy h2,
-.continue-copy p {
+.hero-icon svg {
+  margin-left: 2px; /* optically centre the triangle */
+}
+
+.hero-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
   margin-bottom: var(--s-1);
 }
 
-.continue-copy > p:not(.eyebrow) {
-  color: var(--muted);
+.hero-label {
+  color: var(--primary);
   font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25rem;
 }
 
-.compact-progress,
+.hero-meta {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.continue-copy h2 {
+  margin-bottom: var(--s-1);
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+
+.continue-copy > p:not(.hero-label-row) {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
 .progress-track {
   height: 0.5rem;
   overflow: hidden;
@@ -798,12 +872,6 @@ button:disabled,
   background: #eaecf0;
 }
 
-.compact-progress {
-  max-width: 28rem;
-  margin-top: var(--s-3);
-}
-
-.compact-progress span,
 .progress-track span {
   display: block;
   height: 100%;
@@ -818,49 +886,28 @@ button:disabled,
   gap: var(--s-5);
 }
 
-.learning-focus {
-  margin-bottom: var(--s-3);
-  padding: var(--s-5);
-  border-radius: var(--radius-sm);
-  background: var(--surface-subtle);
+.panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin-bottom: var(--s-4);
 }
 
-.learning-focus > span,
-.learning-focus > strong {
-  display: block;
-}
-
-.learning-focus > span {
-  margin-bottom: var(--s-1);
-  color: var(--muted);
-  font-size: 0.8125rem;
-}
-
-.learning-focus > strong {
-  margin-bottom: var(--s-2);
-  font-size: 1.125rem;
-}
-
-.learning-focus p {
+.panel-top h2 {
   margin-bottom: 0;
-  color: var(--muted-strong);
 }
 
-.metric-number {
-  display: block;
-  margin: var(--s-5) 0 0;
-  color: var(--primary);
-  font-size: 3rem;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
+.focus-line {
+  margin-bottom: var(--s-2);
+  font-size: 1.0625rem;
+  line-height: 1.625rem;
 }
 
 .mini-facts {
   display: grid;
   gap: var(--s-3);
-  margin: var(--s-5) 0 0;
-  padding-top: var(--s-5);
-  border-top: 1px solid var(--rule);
+  margin: var(--s-4) 0 0;
 }
 
 .mini-facts div,
@@ -1831,11 +1878,6 @@ details li {
     margin-left: 0;
   }
 
-  .workspace-status {
-    min-height: 3.25rem;
-    padding: 0 var(--s-4);
-  }
-
   .product-workspace > main {
     padding: var(--s-6) var(--s-4) var(--s-10);
   }
@@ -2752,22 +2794,30 @@ details li {
 
 /* ---------- Neko dock (right-hand agent panel) ---------- */
 
-.neko-toggle {
-  margin-left: 0.5rem;
-  padding: 0.375rem 0.875rem;
-  border: 1px solid var(--rule-strong, #d0d5dd);
+/* Fixed launcher (assistant convention: bottom-right, hidden while the dock
+   is open). The mark alone is not the label — the text names it. */
+
+.neko-launcher {
+  position: fixed;
+  right: var(--s-6);
+  bottom: var(--s-6);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 0 var(--s-4);
+  border: 1px solid var(--rule-strong);
   border-radius: 999px;
-  background: var(--surface, #fff);
-  color: var(--ink, #101828);
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   font-weight: 700;
   font-size: 0.875rem;
+  box-shadow: var(--shadow-md);
 }
 
-.neko-toggle[aria-pressed='true'] {
-  border-color: #0c1220;
-  background: #0c1220;
-  color: #6ee7b7;
+.neko-launcher:hover {
+  background: var(--surface-subtle);
 }
 
 .neko-dock {

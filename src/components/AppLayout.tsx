@@ -2,8 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession, type Role } from '../app/session';
 import { registerSyncTriggers } from '../services/sync';
-import { OnlineStatusBadge } from './OnlineStatusBadge';
-import { SyncBadge } from './SyncBadge';
+import { ConnectionStatus } from './ConnectionStatus';
 import { BrandMark } from './BrandMark';
 
 const NekoDock = lazy(async () => {
@@ -232,6 +231,11 @@ export function AppLayout() {
           </NavLink>
         </nav>
 
+        <div className="sidebar-foot">
+          <ConnectionStatus />
+          <p className="sidebar-note">Môi trường trình diễn · dữ liệu mẫu</p>
+        </div>
+
         <div className="sidebar-account">
           <span className="account-avatar" aria-hidden="true">
             {account.initials}
@@ -266,25 +270,23 @@ export function AppLayout() {
         data-neko-open={(isTeacher && nekoOpen) || undefined}
         inert={isMobile && mobileOpen ? true : undefined}
       >
-        <header className="workspace-status">
-          <span className="environment-label">Dữ liệu mẫu</span>
-          <SyncBadge />
-          <OnlineStatusBadge />
-          {isTeacher ? (
-            <button
-              type="button"
-              className="neko-toggle"
-              aria-pressed={nekoOpen}
-              onClick={toggleNeko}
-            >
-              ✦ Neko
-            </button>
-          ) : null}
-        </header>
         <main ref={mainRef} id="main-content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>
+
+      {isTeacher && !nekoOpen ? (
+        <button
+          type="button"
+          className="neko-launcher"
+          aria-label="Mở trợ lý Neko"
+          inert={isMobile && mobileOpen ? true : undefined}
+          onClick={toggleNeko}
+        >
+          <BrandMark size={20} />
+          <span>Neko</span>
+        </button>
+      ) : null}
 
       {isTeacher && nekoLoaded ? (
         <Suspense fallback={null}>
