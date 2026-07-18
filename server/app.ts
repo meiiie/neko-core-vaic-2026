@@ -472,6 +472,7 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
   app.post('/api/assignments/:id/answers', (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return;
+    if (user.role !== 'STUDENT') return reply.code(403).send({ error: 'FORBIDDEN' });
     const { id } = request.params as { id: string };
     const body = z
       .object({ questionId: z.string().min(1), choiceId: z.string().min(1) })
@@ -512,10 +513,14 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     if (!picked) return reply.code(400).send({ error: 'INVALID_CHOICE' });
     const misconceptionId = !correct ? picked?.misconceptionTag : undefined;
     const sequence = (
-      db.prepare('SELECT COUNT(*) AS n FROM events WHERE learner_id = ?').get(user.id) as {
-        n: number;
+      db
+        .prepare(
+          'SELECT COALESCE(MAX(sequence), 0) AS maxSequence FROM events WHERE learner_id = ?',
+        )
+        .get(user.id) as {
+        maxSequence: number;
       }
-    ).n;
+    ).maxSequence;
     const eventId = `evt-${randomUUID()}`;
     const occurredAt = new Date().toISOString();
     const payload = JSON.stringify({

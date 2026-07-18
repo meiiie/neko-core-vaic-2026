@@ -219,6 +219,24 @@ describe('NekoPath API', () => {
   it('returns structured misconception evidence for an assigned authored bank item', async () => {
     const app = await makeApp();
     const student = await loginCookie(app, STUDENT_EMAIL);
+    await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: {
+        events: [
+          {
+            id: 'evt-offline-before-assignment',
+            learnerId: 'user-student-an',
+            itemId: 'K02-DIAGNOSTIC',
+            sequence: 12,
+            occurredAt: '2026-07-18T08:00:00.000Z',
+            kind: 'ANSWER',
+            payload: '{"choiceId":"a","correct":true}',
+          },
+        ],
+      },
+    });
     const response = await app.inject({
       method: 'POST',
       url: '/api/assignments/assignment-seed-k02/answers',
@@ -232,6 +250,7 @@ describe('NekoPath API', () => {
       learnerId: 'user-student-an',
       itemId: 'bank-K02-CHECK-1',
       kind: 'ASSIGNMENT_ANSWER',
+      sequence: 13,
     });
     expect(JSON.parse(result.event.payload)).toMatchObject({
       choiceId: 'b',
@@ -239,6 +258,21 @@ describe('NekoPath API', () => {
       methodValidity: 'INVALID',
       misconceptionId: 'ADDITIVE_EQUIVALENCE',
     });
+    await app.close();
+  });
+
+  it('does not let a teacher submit a student assignment answer', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/assignments/assignment-seed-k02/answers',
+      cookies: teacher,
+      payload: { questionId: 'bank-K02-CHECK-1', choiceId: 'a' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: 'FORBIDDEN' });
     await app.close();
   });
 

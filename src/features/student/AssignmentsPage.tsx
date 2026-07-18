@@ -168,7 +168,6 @@ export function AssignmentTakePage() {
       });
       if (!response.ok) throw new Error(String(response.status));
       const result = (await response.json()) as GradeResult;
-      setGrade(result);
       try {
         const record = buildConfirmedAssignmentRecord(
           activeLearnerContext,
@@ -182,6 +181,7 @@ export function AssignmentTakePage() {
         // but never pretend the local diagnosis evidence was saved.
         setEvidenceSaveError(true);
       }
+      setGrade(result);
     } catch {
       setGrade(null);
       setError(true);
