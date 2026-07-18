@@ -81,7 +81,9 @@ export function StudentDashboardPage() {
         <h1>
           {greetingVi(now.getHours())}, {account?.shortName}
         </h1>
-        <p className="page-meta">{todayVi(now)} · Toán 7 · Lớp 7A</p>
+        <p className="page-meta">
+          {todayVi(now)} · Toán 7 · {account?.className ?? 'Chưa gán lớp'}
+        </p>
       </header>
 
       <section className="continue-card" aria-labelledby="continue-title">

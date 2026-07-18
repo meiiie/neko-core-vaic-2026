@@ -1,7 +1,6 @@
 import {
   buildHeroClassDashboard,
   HERO_DEMO_CONFIG,
-  HERO_EVENTS,
   HERO_GRAPH,
   HERO_ITEMS,
   HERO_QUESTIONS,
@@ -31,6 +30,8 @@ import type { LearnerEventRecord } from '../../storage/db';
 
 export const HERO_TARGET_KC_ID = 'K10';
 
+const HERO_LEARNER_IDS = new Set<HeroSimulationProfileId>(['an', 'binh', 'chi', 'minh']);
+
 export interface StudentDiagnosisContext {
   readonly learnerId: string;
   readonly simulationProfileId?: HeroSimulationProfileId;
@@ -45,7 +46,7 @@ function normalizeStudentContext(reference: StudentDiagnosisReference): StudentD
 }
 
 export function isHeroLearnerId(value: string | undefined): value is HeroSimulationProfileId {
-  return value !== undefined && Object.hasOwn(HERO_EVENTS, value);
+  return value !== undefined && HERO_LEARNER_IDS.has(value as HeroSimulationProfileId);
 }
 
 export function kcName(kcId: string): string {
@@ -130,21 +131,6 @@ function parsePayload(payload: string): HeroAnswerPayload | null {
   }
 }
 
-function seededEvents(context: StudentDiagnosisContext): LearnerEvent[] {
-  const profileId = context.simulationProfileId;
-  if (!profileId) return [];
-  if (context.learnerId === profileId) return [...HERO_EVENTS[profileId]];
-  return HERO_EVENTS[profileId].map((event) => ({
-    ...event,
-    id: `${context.learnerId}-seed-${profileId}-${event.sequence}`,
-    learnerId: context.learnerId,
-  }));
-}
-
-function seededMaxSequence(context: StudentDiagnosisContext): number {
-  return seededEvents(context).reduce((max, event) => Math.max(max, event.sequence), 0);
-}
-
 export interface ConfirmedAssignmentEvent {
   readonly id: string;
   readonly learnerId: string;
@@ -169,14 +155,14 @@ export interface ConfirmedReviewScheduleEvent {
 export function buildConfirmedAssignmentRecord(
   context: StudentDiagnosisContext,
   event: ConfirmedAssignmentEvent,
-  existingLocalCount: number,
+  _existingLocalCount: number,
 ): LearnerEventRecord | null {
   if (event.learnerId !== context.learnerId || event.kind !== 'ASSIGNMENT_ANSWER') return null;
   return {
     id: event.id,
     learnerId: context.learnerId,
     itemId: event.itemId,
-    sequence: seededMaxSequence(context) + existingLocalCount + 1,
+    sequence: event.sequence,
     occurredAt: event.occurredAt,
     kind: event.kind,
     payload: event.payload,
@@ -187,14 +173,14 @@ export function buildConfirmedAssignmentRecord(
 export function buildConfirmedReviewScheduleRecord(
   context: StudentDiagnosisContext,
   event: ConfirmedReviewScheduleEvent,
-  existingLocalCount: number,
+  _existingLocalCount: number,
 ): LearnerEventRecord | null {
   if (event.learnerId !== context.learnerId || event.kind !== 'REVIEW_SCHEDULED') return null;
   return {
     id: event.id,
     learnerId: context.learnerId,
     itemId: event.itemId,
-    sequence: seededMaxSequence(context) + existingLocalCount + 1,
+    sequence: event.sequence,
     occurredAt: event.occurredAt,
     kind: event.kind,
     payload: event.payload,
@@ -202,8 +188,8 @@ export function buildConfirmedReviewScheduleRecord(
 }
 
 /**
- * Give a complete server history deterministic local ordering after the
- * synthetic seed evidence. Any cross-account row rejects the whole batch.
+ * Give a complete server history deterministic local ordering. Any
+ * cross-account row rejects the whole batch.
  */
 export function buildHydratedEventRecords(
   context: StudentDiagnosisContext,
@@ -216,8 +202,7 @@ export function buildHydratedEventRecords(
       left.sequence - right.sequence ||
       left.id.localeCompare(right.id),
   );
-  const seedSequence = seededMaxSequence(context);
-  return ordered.map((event, index) => ({ ...event, sequence: seedSequence + index + 1 }));
+  return ordered;
 }
 
 /** Build the Dexie record for a locally answered hero question. */
@@ -238,7 +223,7 @@ export function buildLocalAnswerRecord(
     id: `${context.learnerId}-local-${crypto.randomUUID()}`,
     learnerId: context.learnerId,
     itemId,
-    sequence: seededMaxSequence(context) + existingLocalCount + 1,
+    sequence: existingLocalCount + 1,
     occurredAt: new Date().toISOString(),
     kind: 'ANSWER',
     payload: JSON.stringify({
@@ -299,8 +284,8 @@ export function toHeroClassObservedEvents(records: readonly LearnerEventRecord[]
 }
 
 /**
- * Diagnose a hero learner from the seeded demo evidence plus any answers the
- * user recorded locally in this browser. Pure domain call — no persistence.
+ * Diagnose exclusively from account-owned records already persisted in the
+ * local-first store. Pure domain call — no hidden fixture evidence.
  */
 export function diagnoseHero(
   reference: StudentDiagnosisReference,
@@ -326,7 +311,7 @@ export function studentDomainEvents(
   const localEvents = toDomainEvents(localRecords).filter(
     (event) => event.learnerId === context.learnerId,
   );
-  return [...seededEvents(context), ...localEvents].sort(
+  return localEvents.sort(
     (left, right) =>
       left.sequence - right.sequence ||
       left.occurredAt.localeCompare(right.occurredAt) ||

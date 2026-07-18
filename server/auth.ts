@@ -34,6 +34,7 @@ export interface SessionUser {
   initials: string;
   shortName: string;
   subtitle: string;
+  className: string | null;
   learnerProfile: string | null;
 }
 
@@ -69,7 +70,11 @@ export function userForSession(db: DatabaseSync, sessionId: string): SessionUser
   const row = db
     .prepare(
       `SELECT u.id, u.username, u.email, u.role, u.name, u.initials, u.short_name, u.subtitle,
-              u.learner_profile, s.expires_at
+              u.learner_profile,
+              (SELECT c.name
+               FROM enrollments e JOIN classes c ON c.id = e.class_id
+               WHERE e.user_id = u.id ORDER BY c.name LIMIT 1) AS class_name,
+              s.expires_at
        FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
     )
     .get(sessionId) as
@@ -82,6 +87,7 @@ export function userForSession(db: DatabaseSync, sessionId: string): SessionUser
         initials: string;
         short_name: string;
         subtitle: string;
+        class_name: string | null;
         learner_profile: string | null;
         expires_at: string;
       }
@@ -100,6 +106,7 @@ export function userForSession(db: DatabaseSync, sessionId: string): SessionUser
     initials: row.initials,
     shortName: row.short_name,
     subtitle: row.subtitle,
+    className: row.class_name,
     learnerProfile: row.learner_profile,
   };
 }

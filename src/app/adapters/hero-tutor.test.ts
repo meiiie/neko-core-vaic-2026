@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { HERO_EVENTS, type HeroSimulationProfileId } from '../../content';
+import type { LearnerEventRecord } from '../../storage/db';
 import { learnerEventSchema } from '../../storage/event-repository';
 import {
   buildHeroClassDashboard,
@@ -16,28 +18,52 @@ import {
 const CHI_CONTEXT = { learnerId: 'user-student-chi', simulationProfileId: 'chi' } as const;
 const MINH_CONTEXT = { learnerId: 'user-student-minh', simulationProfileId: 'minh' } as const;
 
+function storedHeroRecords(profileId: HeroSimulationProfileId): LearnerEventRecord[] {
+  const learnerId = `user-student-${profileId}`;
+  return HERO_EVENTS[profileId].map((event) => ({
+    id: event.id,
+    learnerId,
+    itemId: event.itemId,
+    sequence: event.sequence,
+    occurredAt: event.occurredAt,
+    kind: 'SEEDED_EVIDENCE',
+    payload: JSON.stringify({
+      choiceId: 'seeded-history',
+      correct: event.correct,
+      methodValidity: event.methodValidity ?? 'UNKNOWN',
+      ...(event.misconceptionId ? { misconceptionId: event.misconceptionId } : {}),
+    }),
+  }));
+}
+
 describe('hero-tutor adapter (UI integration over domain runtime)', () => {
   it('reproduces the four hero outcomes through the adapter', () => {
-    const an = diagnoseHero('an');
+    const an = diagnoseHero(
+      { learnerId: 'user-student-an', simulationProfileId: 'an' },
+      storedHeroRecords('an'),
+    );
     expect(an.status).toBe('DIAGNOSED');
     expect(an.rootKcId).toBe('K02');
 
-    const binh = diagnoseHero('binh');
+    const binh = diagnoseHero(
+      { learnerId: 'user-student-binh', simulationProfileId: 'binh' },
+      storedHeroRecords('binh'),
+    );
     expect(binh.status).toBe('DIAGNOSED');
     expect(binh.rootKcId).toBe('K07');
 
-    const chi = diagnoseHero('chi');
+    const chi = diagnoseHero(CHI_CONTEXT, storedHeroRecords('chi'));
     expect(chi.status).toBe('NEEDS_MORE_EVIDENCE');
     expect(chi.rootKcId).toBeUndefined();
 
-    const minh = diagnoseHero('minh');
+    const minh = diagnoseHero(MINH_CONTEXT, storedHeroRecords('minh'));
     expect(minh.status).toBe('FAST_PATH');
   });
 
   it('builds schema-valid local answer records with continuing sequence numbers', () => {
-    const record = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, 0);
+    const record = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, 7);
     expect(() => learnerEventSchema.parse(record)).not.toThrow();
-    // Chi has 7 seeded events (sequence 1..7); the first local answer continues after them.
+    // Seven hydrated rows exist in IndexedDB, so the next local event is sequence 8.
     expect(record.sequence).toBe(8);
 
     const [event] = toDomainEvents([record]);
@@ -51,15 +77,15 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
 
   it('rekeys hero evidence to the account ID while preserving the simulated outcome', () => {
     const context = { learnerId: 'user-student-an', simulationProfileId: 'an' } as const;
-    const result = diagnoseHero(context);
-    const record = buildLocalAnswerRecord(context, 'K02-DIAGNOSTIC', 'a', true, 0);
+    const result = diagnoseHero(context, storedHeroRecords('an'));
+    const record = buildLocalAnswerRecord(context, 'K02-DIAGNOSTIC', 'a', true, 7);
 
     expect(result).toMatchObject({
       learnerId: 'user-student-an',
       status: 'DIAGNOSED',
       rootKcId: 'K02',
     });
-    expect(result.evidenceEventIds.every((id) => id.startsWith('user-student-an-'))).toBe(true);
+    expect(result.evidenceEventIds).toEqual(['an-event-3', 'an-event-4']);
     expect(record).toMatchObject({ learnerId: 'user-student-an', sequence: 8 });
   });
 
@@ -142,7 +168,7 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     expect(record).toMatchObject({
       learnerId: context.learnerId,
       itemId: 'bank-K02-CHECK-1',
-      sequence: 8,
+      sequence: 1,
     });
     expect(toDomainEvents(record ? [record] : [])).toEqual([
       expect.objectContaining({
@@ -170,15 +196,21 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     ).toBeNull();
   });
 
-  it('orders a complete hydrated history after seeded evidence', () => {
+  it('keeps canonical sequence while ordering a complete hydrated history', () => {
     const context = { learnerId: 'user-student-an', simulationProfileId: 'an' } as const;
     const later = buildLocalAnswerRecord(context, 'K02-DIAGNOSTIC', 'a', true, 0);
-    const earlier = { ...later, id: 'evt-earlier', occurredAt: '2026-07-18T08:00:00.000Z' };
+    const earlier = {
+      ...later,
+      id: 'evt-earlier',
+      sequence: 1,
+      occurredAt: '2026-07-18T08:00:00.000Z',
+    };
+    later.sequence = 2;
     const hydrated = buildHydratedEventRecords(context, [later, earlier]);
 
     expect(hydrated?.map(({ id, sequence }) => ({ id, sequence }))).toEqual([
-      { id: 'evt-earlier', sequence: 8 },
-      { id: later.id, sequence: 9 },
+      { id: 'evt-earlier', sequence: 1 },
+      { id: later.id, sequence: 2 },
     ]);
     expect(
       buildHydratedEventRecords(context, [{ ...earlier, learnerId: 'user-student-chi' }]),
@@ -230,11 +262,12 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
   });
 
   it('feeds local answers into a fresh deterministic diagnosis', () => {
-    const first = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, 0);
-    const withLocal = diagnoseHero(CHI_CONTEXT, [first]);
-    const withoutLocal = diagnoseHero(CHI_CONTEXT);
+    const existing = storedHeroRecords('chi');
+    const first = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, existing.length);
+    const withLocal = diagnoseHero(CHI_CONTEXT, [...existing, first]);
+    const withoutLocal = diagnoseHero(CHI_CONTEXT, existing);
     // Same call twice is deterministic; adding evidence must be reflected.
-    expect(diagnoseHero(CHI_CONTEXT, [first])).toEqual(withLocal);
+    expect(diagnoseHero(CHI_CONTEXT, [...existing, first])).toEqual(withLocal);
     expect(withLocal.evidenceEventIds).not.toEqual(withoutLocal.evidenceEventIds);
   });
 

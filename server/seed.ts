@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { HERO_EVENTS } from '../src/content/hero-events.ts';
 import { PRACTICE_QUESTIONS } from '../src/content/hero-practice.ts';
 import { LESSON_SUMMARIES } from '../src/content/lessons.v1.ts';
 import { hashPassword } from './auth.ts';
@@ -73,7 +74,11 @@ export function seed(db: DatabaseSync): void {
      ON CONFLICT(id) DO UPDATE SET
        email = excluded.email,
        password_hash = excluded.password_hash,
-       name = excluded.name`,
+       name = excluded.name,
+       initials = excluded.initials,
+       short_name = excluded.short_name,
+       subtitle = excluded.subtitle,
+       learner_profile = excluded.learner_profile`,
   );
   const enroll = db.prepare('INSERT OR IGNORE INTO enrollments (class_id, user_id) VALUES (?, ?)');
   const passwordHash = hashPassword(DEMO_PASSWORD);
@@ -141,6 +146,33 @@ export function seed(db: DatabaseSync): void {
         null,
       );
       enroll.run(CLASS_7A_ID, id);
+    }
+  }
+
+  // Walkthrough history is real persisted seed data. Student diagnosis reads
+  // it only after the account-scoped /api/events feed hydrates IndexedDB.
+  const insertEvent = db.prepare(
+    `INSERT OR IGNORE INTO events
+     (id, learner_id, item_id, assignment_id, sequence, occurred_at, kind, payload, received_at)
+     VALUES (?, ?, ?, NULL, ?, ?, 'SEEDED_EVIDENCE', ?, ?)`,
+  );
+  for (const [profileId, events] of Object.entries(HERO_EVENTS)) {
+    const learnerId = `user-student-${profileId}`;
+    for (const event of events) {
+      insertEvent.run(
+        event.id,
+        learnerId,
+        event.itemId,
+        event.sequence,
+        event.occurredAt,
+        JSON.stringify({
+          choiceId: 'seeded-history',
+          correct: event.correct,
+          methodValidity: event.methodValidity ?? 'UNKNOWN',
+          ...(event.misconceptionId ? { misconceptionId: event.misconceptionId } : {}),
+        }),
+        now,
+      );
     }
   }
 

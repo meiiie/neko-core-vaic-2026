@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import { storedHeroRecords } from '../../test/hero-evidence';
 import { LearnPage } from './LearnPage';
 
 vi.mock('../../app/session', () => ({
@@ -21,7 +22,7 @@ vi.mock('../../app/adapters/student-context', () => ({
     simulationProfileId: 'an',
   }),
   useStudentEvents: () => ({
-    records: [],
+    records: storedHeroRecords('an'),
     migrationError: false,
     retryMigration: vi.fn(),
   }),

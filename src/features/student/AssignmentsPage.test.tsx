@@ -148,14 +148,14 @@ describe('assigned-answer evidence loop', () => {
         id: 'evt-assignment-1',
         learnerId: 'user-student-an',
         itemId: 'bank-K02-CHECK-1',
-        sequence: 8,
+        sequence: 1,
         kind: 'ASSIGNMENT_ANSWER',
       }),
       expect.objectContaining({
         id: 'review-evt-assignment-1',
         learnerId: 'user-student-an',
         itemId: 'bank-K02-CHECK-1',
-        sequence: 9,
+        sequence: 2,
         kind: 'REVIEW_SCHEDULED',
       }),
     );

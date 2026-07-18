@@ -96,7 +96,8 @@ function classRows(db: DatabaseSync, classId: string) {
     .prepare(
       `SELECT ev.learner_id, ev.item_id, ev.assignment_id, ev.sequence, ev.occurred_at, ev.payload
        FROM events ev JOIN enrollments e ON e.user_id = ev.learner_id
-       WHERE e.class_id = ? ORDER BY ev.sequence, ev.occurred_at`,
+       WHERE e.class_id = ? AND ev.kind <> 'SEEDED_EVIDENCE'
+       ORDER BY ev.sequence, ev.occurred_at`,
     )
     .all(classId) as unknown as EventRow[];
   return { learners, questions, assignments, events };

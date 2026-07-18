@@ -1,10 +1,32 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { buildStudentDetail } from './class-progress.ts';
+import { buildClassStudentList, buildStudentDetail } from './class-progress.ts';
 import { openDb } from './db.ts';
 import { CLASS_7A_ID, seed } from './seed.ts';
 
 describe('class progress', () => {
+  it('does not count seeded walkthrough evidence as student activity', () => {
+    const db = openDb(':memory:');
+    seed(db);
+
+    const detail = buildStudentDetail(db, CLASS_7A_ID, 'user-student-an');
+    expect(detail?.lessonProgress.find((lesson) => lesson.kcId === 'K02')).toMatchObject({
+      assignedCount: 2,
+      answeredCount: 0,
+      correctCount: 0,
+      progressPercent: 0,
+      correctRate: null,
+      status: 'NOT_STARTED',
+    });
+    expect(
+      buildClassStudentList(db, CLASS_7A_ID).find((learner) => learner.id === 'user-student-an'),
+    ).toMatchObject({
+      progressPercent: 0,
+      needsSupportCount: 0,
+      latestActivityAt: null,
+    });
+  });
+
   it('suggests review only from persisted low-correctness evidence', () => {
     const db = openDb(':memory:');
     seed(db);

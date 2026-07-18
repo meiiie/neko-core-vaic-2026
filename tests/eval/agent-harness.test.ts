@@ -1,8 +1,12 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RuleBasedProvider } from '../../src/services/agent/providers';
 import { AgentSessionController } from '../../src/services/agent/session-controller';
 import { AGENT_TOOLS } from '../../src/services/agent/tools';
+import { installApiStub } from '../../src/test/api-stub';
+
+beforeEach(() => installApiStub('co.ha@nekopath.edu.vn'));
+afterEach(() => vi.unstubAllGlobals());
 
 describe('frozen teacher agent harness eval', () => {
   it('keeps An diagnosis grounded and retrievable after repeated token compaction', async () => {

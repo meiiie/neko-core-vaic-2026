@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { HERO_EVENTS } from '../src/content/hero-events.ts';
 import type { CodexManagerPort } from './ai/codex-routes.ts';
 import { buildApp, type AppOptions } from './app.ts';
 import { openDb } from './db.ts';
@@ -1070,15 +1071,22 @@ describe('NekoPath API', () => {
 
     const response = await app.inject({ method: 'GET', url: '/api/events?offset=0', cookies: an });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      events: [expect.objectContaining({ id: 'evt-an-history', learnerId: 'user-student-an' })],
-      nextOffset: null,
-    });
-    expect(
-      (response.json() as { events: { id: string }[] }).events.some(
-        (event) => event.id === 'evt-chi-history',
-      ),
-    ).toBe(false);
+    const responseBody = response.json() as {
+      events: { id: string; learnerId: string; kind: string }[];
+      nextOffset: number | null;
+    };
+    expect(responseBody.nextOffset).toBeNull();
+    expect(responseBody.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'evt-an-history', learnerId: 'user-student-an' }),
+        expect.objectContaining({
+          id: HERO_EVENTS.an[0].id,
+          learnerId: 'user-student-an',
+          kind: 'SEEDED_EVIDENCE',
+        }),
+      ]),
+    );
+    expect(responseBody.events.some((event) => event.id === 'evt-chi-history')).toBe(false);
 
     const forbidden = await app.inject({ method: 'GET', url: '/api/events', cookies: teacher });
     expect(forbidden.statusCode).toBe(403);

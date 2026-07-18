@@ -6,6 +6,7 @@ import {
   kcIdForItem,
   kcName,
   questionForItem,
+  toDomainEvents,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { nextPracticeQuestion } from '../../app/adapters/practice-selection';
@@ -23,6 +24,7 @@ type Phase = 'answering' | 'feedback';
 interface FeedbackState {
   readonly correct: boolean;
   readonly choiceId: string;
+  readonly eventId: string;
   /** The question that was answered — frozen so live re-diagnosis cannot swap
    * the visible question while its feedback is still on screen. */
   readonly question: PracticeQuestion | null;
@@ -35,8 +37,6 @@ export function PracticePage() {
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('answering');
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
-  const [wrongAttempts, setWrongAttempts] = useState(0);
-  const [hintLevel, setHintLevel] = useState(0);
   const [saveError, setSaveError] = useState(false);
   const [explainState, setExplainState] = useState<{
     key: string;
@@ -133,12 +133,8 @@ export function PracticePage() {
       if (!kcId) throw new Error('UNKNOWN_REVIEW_KC');
       const reviewRecord = buildReviewScheduleRecord(record, kcId, localRecords);
       await recordAnswerWithReview(record, reviewRecord);
-      setFeedback({ correct, choiceId: selectedChoiceId, question: answered });
+      setFeedback({ correct, choiceId: selectedChoiceId, eventId: record.id, question: answered });
       setPhase('feedback');
-      if (!correct) {
-        setWrongAttempts((count) => count + 1);
-        setHintLevel((level) => Math.min(level + 1, 3));
-      }
     } catch {
       setSaveError(true);
     } finally {
@@ -150,11 +146,6 @@ export function PracticePage() {
     setPhase('answering');
     setFeedback(null);
     setSelectedChoiceId(null);
-    // A correct answer moves on: reset the ladder for the next question.
-    if (feedback?.correct) {
-      setWrongAttempts(0);
-      setHintLevel(0);
-    }
   }
 
   // ---------- Completion / no-practice states ----------
@@ -289,6 +280,16 @@ export function PracticePage() {
 
   const remainingPath = result.pathKcIds;
   const selectedChoice = question.choices.find((choice) => choice.id === feedback?.choiceId);
+  const questionEvents = toDomainEvents(localRecords).filter(
+    (event) => event.itemId === question.itemId,
+  );
+  const feedbackPendingInLiveQuery =
+    feedback !== null && !questionEvents.some((event) => event.id === feedback.eventId);
+  const attemptCount = questionEvents.length + (feedbackPendingInLiveQuery ? 1 : 0);
+  const incorrectAttemptCount =
+    questionEvents.filter((event) => !event.correct).length +
+    (feedbackPendingInLiveQuery && feedback && !feedback.correct ? 1 : 0);
+  const hintLevel = Math.min(Math.max(incorrectAttemptCount, 1), 3);
 
   return (
     <div className="assessment-page">
@@ -398,8 +399,8 @@ export function PracticePage() {
                 <>
                   {selectedChoice?.noteVi ? <p>{selectedChoice.noteVi}</p> : null}
                   <div className="hint-ladder">
-                    <p className="eyebrow">Gợi ý {Math.min(hintLevel, 3)}/3</p>
-                    <p>{question.hints[Math.min(hintLevel, 3) - 1]}</p>
+                    <p className="eyebrow">Gợi ý {hintLevel}/3</p>
+                    <p>{question.hints[hintLevel - 1]}</p>
                   </div>
                 </>
               )}
@@ -429,7 +430,7 @@ export function PracticePage() {
           <dl>
             <div>
               <dt>Số lần thử câu này</dt>
-              <dd>{wrongAttempts + (feedback?.correct ? 1 : 0)} lần</dd>
+              <dd>{attemptCount} lần</dd>
             </div>
           </dl>
           <details>

@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import type { TeacherDashboardDto } from '../features/teacher/teacher-api';
+import { HERO_EVENTS } from '../content/hero-events.ts';
 import { LESSON_SUMMARIES } from '../content/lessons.v1';
 
 /**
@@ -16,6 +17,7 @@ export interface StubUser {
   initials: string;
   shortName: string;
   subtitle: string;
+  className: string | null;
   learnerProfile: string | null;
 }
 
@@ -152,6 +154,7 @@ const USERS: Record<string, StubUser> = {
     initials: 'NA',
     shortName: 'An',
     subtitle: 'Học sinh • Lớp 7A',
+    className: 'Lớp 7A',
     learnerProfile: 'an',
   },
   'chi@nekopath.edu.vn': {
@@ -162,6 +165,7 @@ const USERS: Record<string, StubUser> = {
     initials: 'MC',
     shortName: 'Chi',
     subtitle: 'Học sinh • Lớp 7A',
+    className: 'Lớp 7A',
     learnerProfile: 'chi',
   },
   'hs01@nekopath.edu.vn': {
@@ -172,6 +176,7 @@ const USERS: Record<string, StubUser> = {
     initials: 'GH',
     shortName: 'Hân',
     subtitle: 'Học sinh • Lớp 7A',
+    className: 'Lớp 7A',
     learnerProfile: null,
   },
   'co.ha@nekopath.edu.vn': {
@@ -182,6 +187,7 @@ const USERS: Record<string, StubUser> = {
     initials: 'TH',
     shortName: 'Cô Hà',
     subtitle: 'Giáo viên Toán • Lớp 7A',
+    className: 'Lớp 7A',
     learnerProfile: null,
   },
 };
@@ -233,6 +239,33 @@ export function installApiStub(
       if (url.endsWith('/api/auth/logout')) {
         state.email = null;
         return json({ ok: true });
+      }
+      if (url.includes('/api/events')) {
+        const user = state.email ? USERS[state.email] : undefined;
+        if (!user || user.role !== 'STUDENT') return json({ error: 'FORBIDDEN' }, 403);
+        if (init?.method === 'POST') {
+          const body = JSON.parse(String(init.body ?? '{}')) as { events?: unknown[] };
+          return json({ accepted: body.events?.length ?? 0, conflictIds: [] });
+        }
+        const profile = user.learnerProfile;
+        const events =
+          profile && Object.hasOwn(HERO_EVENTS, profile)
+            ? HERO_EVENTS[profile as keyof typeof HERO_EVENTS].map((event) => ({
+                id: event.id,
+                learnerId: user.id,
+                itemId: event.itemId,
+                sequence: event.sequence,
+                occurredAt: event.occurredAt,
+                kind: 'SEEDED_EVIDENCE',
+                payload: JSON.stringify({
+                  choiceId: 'seeded-history',
+                  correct: event.correct,
+                  methodValidity: event.methodValidity ?? 'UNKNOWN',
+                  ...(event.misconceptionId ? { misconceptionId: event.misconceptionId } : {}),
+                }),
+              }))
+            : [];
+        return json({ events, nextOffset: null });
       }
       if (url.endsWith('/api/teacher/classes')) {
         return json({
