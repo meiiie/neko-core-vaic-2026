@@ -430,7 +430,7 @@ function selectProbe(
   return items
     .filter(
       (item) =>
-        item.role === 'DIAGNOSTIC' &&
+        (item.role === 'DIAGNOSTIC' || item.role === 'CHECK') &&
         (item.reviewState === 'ACCEPTED' ||
           (config.allowUnreviewedContent && item.reviewState === 'UNREVIEWED')) &&
         item.kcIds.length === 1 &&

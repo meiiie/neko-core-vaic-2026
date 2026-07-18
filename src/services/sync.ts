@@ -1,8 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type LearnerEventRecord, type NekoPathDb } from '../storage/db';
-import { appendEvent, learnerEventSchema, type AppendResult } from '../storage/event-repository';
+import { reviewScheduleEventId } from '../domain';
+import { learnerEventSchema, type AppendResult } from '../storage/event-repository';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { refreshLessons } from './lessons';
+import { reviewSchedulePayloadSchema } from '../storage/review-schedule-repository';
 import { readBoundProfileId, SIGNED_OUT_PROFILE } from './profile-binding';
 import {
   duePendingOutbox,
@@ -140,40 +142,70 @@ export async function recordAnswer(
   record: LearnerEventRecord,
   database: NekoPathDb = db,
 ): Promise<AppendResult> {
-  const parsed = learnerEventSchema.parse(record);
+  return recordLocalEventBundle([record], database);
+}
+
+async function recordLocalEventBundle(
+  records: readonly LearnerEventRecord[],
+  database: NekoPathDb,
+): Promise<AppendResult> {
+  const parsedRecords = records.map((record) => learnerEventSchema.parse(record));
+  if (parsedRecords.length === 0) throw new Error('At least one local event is required');
   const now = new Date().toISOString();
   const result = await database.transaction(
     'rw',
     [database.events, database.outbox, database.meta],
     async (): Promise<AppendResult> => {
-      try {
-        await database.events.add(parsed);
-      } catch (error) {
-        if (error instanceof Error && error.name === 'ConstraintError') {
-          return 'DUPLICATE_IGNORED';
+      let appended = false;
+      for (const parsed of parsedRecords) {
+        try {
+          await database.events.add(parsed);
+          appended = true;
+        } catch (error) {
+          if (!(error instanceof Error && error.name === 'ConstraintError')) throw error;
         }
-        throw error;
+        try {
+          await database.outbox.add({
+            eventId: parsed.id,
+            status: 'PENDING',
+            createdAt: now,
+            nextRetryAt: now,
+          });
+        } catch (error) {
+          if (!(error instanceof Error && error.name === 'ConstraintError')) throw error;
+        }
       }
       await database.meta.put({
         key: 'lastLocalWriteAt',
-        value: parsed.occurredAt,
+        value: parsedRecords.at(-1)?.occurredAt ?? now,
         updatedAt: now,
       });
-      try {
-        await database.outbox.add({
-          eventId: parsed.id,
-          status: 'PENDING',
-          createdAt: now,
-          nextRetryAt: now,
-        });
-      } catch (error) {
-        if (!(error instanceof Error && error.name === 'ConstraintError')) throw error;
-      }
-      return 'APPENDED';
+      return appended ? 'APPENDED' : 'DUPLICATE_IGNORED';
     },
   );
   void flushOutbox(database);
   return result;
+}
+
+/** Atomically persist an answer and its versioned review schedule for offline sync. */
+export async function recordAnswerWithReview(
+  answer: LearnerEventRecord,
+  review: LearnerEventRecord,
+  database: NekoPathDb = db,
+): Promise<AppendResult> {
+  if (
+    answer.learnerId !== review.learnerId ||
+    answer.itemId !== review.itemId ||
+    answer.occurredAt !== review.occurredAt ||
+    review.id !== reviewScheduleEventId(answer.id) ||
+    review.kind !== 'REVIEW_SCHEDULED' ||
+    review.sequence !== answer.sequence + 1
+  ) {
+    throw new Error('INVALID_REVIEW_EVENT_LINK');
+  }
+  const payload = reviewSchedulePayloadSchema.parse(JSON.parse(review.payload));
+  if (payload.sourceEventId !== answer.id) throw new Error('INVALID_REVIEW_EVENT_SOURCE');
+  return recordLocalEventBundle([answer, review], database);
 }
 
 /**
@@ -185,12 +217,49 @@ export async function recordConfirmedAnswer(
   record: LearnerEventRecord,
   database: NekoPathDb = db,
 ): Promise<AppendResult> {
-  const result = await appendEvent(record, database);
-  if (result === 'APPENDED') {
+  return recordConfirmedEventBundle([record], database);
+}
+
+async function recordConfirmedEventBundle(
+  records: readonly LearnerEventRecord[],
+  database: NekoPathDb,
+): Promise<AppendResult> {
+  const parsedRecords = records.map((record) => learnerEventSchema.parse(record));
+  let appended = false;
+  await database.transaction('rw', [database.events, database.meta], async () => {
+    for (const record of parsedRecords) {
+      try {
+        await database.events.add(record);
+        appended = true;
+      } catch (error) {
+        if (!(error instanceof Error && error.name === 'ConstraintError')) throw error;
+      }
+    }
     const now = new Date().toISOString();
     await database.meta.put({ key: 'lastSyncedAt', value: now, updatedAt: now });
+  });
+  return appended ? 'APPENDED' : 'DUPLICATE_IGNORED';
+}
+
+/** Mirror a server-committed answer and schedule without queueing either back to the server. */
+export async function recordConfirmedAnswerWithReview(
+  answer: LearnerEventRecord,
+  review: LearnerEventRecord,
+  database: NekoPathDb = db,
+): Promise<AppendResult> {
+  const payload = reviewSchedulePayloadSchema.parse(JSON.parse(review.payload));
+  if (
+    answer.learnerId !== review.learnerId ||
+    answer.itemId !== review.itemId ||
+    answer.occurredAt !== review.occurredAt ||
+    review.id !== reviewScheduleEventId(answer.id) ||
+    review.kind !== 'REVIEW_SCHEDULED' ||
+    review.sequence !== answer.sequence + 1 ||
+    payload.sourceEventId !== answer.id
+  ) {
+    throw new Error('INVALID_CONFIRMED_REVIEW_EVENT');
   }
-  return result;
+  return recordConfirmedEventBundle([answer, review], database);
 }
 
 let triggersRegistered = false;

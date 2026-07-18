@@ -146,9 +146,16 @@ describe('adaptive tutoring end-to-end contract', () => {
       const history = await app.inject({ method: 'GET', url: '/api/events', cookies });
       expect(history.statusCode).toBe(200);
       const serverEvents = (history.json() as { events: LearnerEventRecord[] }).events;
-      expect(serverEvents.every((event) => event.kind === 'ASSIGNMENT_ANSWER')).toBe(true);
+      const answerEvents = serverEvents.filter((event) => event.kind === 'ASSIGNMENT_ANSWER');
+      const reviewEvents = serverEvents.filter((event) => event.kind === 'REVIEW_SCHEDULED');
+      expect(reviewEvents).toHaveLength(answerEvents.length);
       expect(
-        serverEvents.filter(
+        reviewEvents.every((event) =>
+          answerEvents.some((answer) => event.id === `review-${answer.id}`),
+        ),
+      ).toBe(true);
+      expect(
+        answerEvents.filter(
           (event) =>
             event.itemId.startsWith('bank-K10-CHECK-') &&
             (JSON.parse(event.payload) as { correct: boolean }).correct === false,

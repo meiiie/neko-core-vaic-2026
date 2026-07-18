@@ -11,6 +11,7 @@ export function nextPracticeQuestion(
   if (questions.length === 0) return undefined;
   const attempts = new Map<string, number>();
   for (const record of records) {
+    if (record.kind === 'REVIEW_SCHEDULED') continue;
     const itemId = canonicalHeroItemId(record.itemId);
     if (!itemId) continue;
     attempts.set(itemId, (attempts.get(itemId) ?? 0) + 1);

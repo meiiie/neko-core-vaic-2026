@@ -3,17 +3,20 @@ import { Link } from 'react-router-dom';
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
+  kcIdForItem,
   kcName,
   questionForItem,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { nextPracticeQuestion } from '../../app/adapters/practice-selection';
+import { reviewRecommendation } from '../../app/adapters/review-selection';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { type PracticeQuestion } from '../../content';
 import { useLesson } from '../../services/lessons';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
-import { recordAnswer } from '../../services/sync';
+import { recordAnswerWithReview } from '../../services/sync';
+import { buildReviewScheduleRecord } from '../../storage/review-schedule-repository';
 
 type Phase = 'answering' | 'feedback';
 
@@ -96,6 +99,12 @@ export function PracticePage() {
     result.status === 'FAST_PATH' && result.nextItemId
       ? questionForItem(result.nextItemId)
       : undefined;
+  const nextReview = reviewRecommendation(
+    learnerContext,
+    result,
+    localRecords,
+    new Date().toISOString(),
+  );
 
   async function submitAnswer(
     target: { itemId: string; correctChoiceId: string },
@@ -120,7 +129,10 @@ export function PracticePage() {
           ? { misconceptionId, methodValidity: 'INVALID' }
           : { methodValidity: 'UNKNOWN' },
       );
-      await recordAnswer(record);
+      const kcId = kcIdForItem(record.itemId);
+      if (!kcId) throw new Error('UNKNOWN_REVIEW_KC');
+      const reviewRecord = buildReviewScheduleRecord(record, kcId, localRecords);
+      await recordAnswerWithReview(record, reviewRecord);
       setFeedback({ correct, choiceId: selectedChoiceId, question: answered });
       setPhase('feedback');
       if (!correct) {
@@ -245,8 +257,13 @@ export function PracticePage() {
               </button>
             </section>
           ) : null}
+          {nextReview && (!transferQuestion || phase === 'feedback') ? (
+            <Link className="button-primary" to="/student/check-in?mode=review">
+              Bắt đầu lượt ôn thông minh tiếp theo
+            </Link>
+          ) : null}
           <Link className="button-secondary" to="/student/path">
-            Xem lại lộ trình
+            Xem kế hoạch học tiếp theo
           </Link>
         </section>
       </div>

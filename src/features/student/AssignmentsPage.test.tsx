@@ -39,8 +39,8 @@ describe('student assignments', () => {
   });
 });
 
-const { recordConfirmedAnswer } = vi.hoisted(() => ({
-  recordConfirmedAnswer: vi.fn(async () => 'APPENDED' as const),
+const { recordConfirmedAnswerWithReview } = vi.hoisted(() => ({
+  recordConfirmedAnswerWithReview: vi.fn(async () => 'APPENDED' as const),
 }));
 
 vi.mock('../../app/session', () => ({
@@ -66,11 +66,11 @@ vi.mock('../../app/adapters/student-context', () => ({
   }),
 }));
 
-vi.mock('../../services/sync', () => ({ recordConfirmedAnswer }));
+vi.mock('../../services/sync', () => ({ recordConfirmedAnswerWithReview }));
 
 describe('assigned-answer evidence loop', () => {
   beforeEach(() => {
-    recordConfirmedAnswer.mockClear();
+    recordConfirmedAnswerWithReview.mockClear();
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -93,6 +93,16 @@ describe('assigned-answer evidence loop', () => {
                 kind: 'ASSIGNMENT_ANSWER',
                 payload:
                   '{"choiceId":"b","correct":false,"methodValidity":"INVALID","misconceptionId":"ADDITIVE_EQUIVALENCE"}',
+              },
+              reviewEvent: {
+                id: 'review-evt-assignment-1',
+                learnerId: 'user-student-an',
+                itemId: 'bank-K02-CHECK-1',
+                sequence: 2,
+                occurredAt: '2026-07-18T09:00:00.000Z',
+                kind: 'REVIEW_SCHEDULED',
+                payload:
+                  '{"version":"review-schedule-v1","kcId":"K02","sourceEventId":"evt-assignment-1","dueAt":"2026-07-19T09:00:00.000Z","intervalDays":1,"reason":"REMEDIATE_SOON"}',
               },
             }),
             { status: 200, headers: { 'content-type': 'application/json' } },
@@ -132,14 +142,21 @@ describe('assigned-answer evidence loop', () => {
     fireEvent.click(await screen.findByRole('radio', { name: /4\/5/ }));
     fireEvent.click(screen.getByRole('button', { name: /Nộp câu trả lời/ }));
 
-    await waitFor(() => expect(recordConfirmedAnswer).toHaveBeenCalledTimes(1));
-    expect(recordConfirmedAnswer).toHaveBeenCalledWith(
+    await waitFor(() => expect(recordConfirmedAnswerWithReview).toHaveBeenCalledTimes(1));
+    expect(recordConfirmedAnswerWithReview).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'evt-assignment-1',
         learnerId: 'user-student-an',
         itemId: 'bank-K02-CHECK-1',
         sequence: 8,
         kind: 'ASSIGNMENT_ANSWER',
+      }),
+      expect.objectContaining({
+        id: 'review-evt-assignment-1',
+        learnerId: 'user-student-an',
+        itemId: 'bank-K02-CHECK-1',
+        sequence: 9,
+        kind: 'REVIEW_SCHEDULED',
       }),
     );
     expect(await screen.findByRole('heading', { name: 'Chưa đúng' })).toBeTruthy();

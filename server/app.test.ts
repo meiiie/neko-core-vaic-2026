@@ -628,6 +628,27 @@ describe('NekoPath API', () => {
       correct: false,
       methodValidity: 'UNKNOWN',
     });
+    expect(verdict.reviewEvent).toMatchObject({
+      id: `review-${verdict.event.id}`,
+      learnerId: 'user-student-an',
+      itemId: questionId,
+      sequence: verdict.event.sequence + 1,
+      kind: 'REVIEW_SCHEDULED',
+    });
+    expect(JSON.parse(verdict.reviewEvent.payload)).toMatchObject({
+      version: 'review-schedule-v1',
+      kcId: 'K08',
+      sourceEventId: verdict.event.id,
+      intervalDays: 1,
+      reason: 'REMEDIATE_SOON',
+    });
+    const history = await app.inject({ method: 'GET', url: '/api/events', cookies: student });
+    expect((history.json() as { events: { id: string }[] }).events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: verdict.event.id }),
+        expect.objectContaining({ id: verdict.reviewEvent.id }),
+      ]),
+    );
 
     // The teacher's assignment list now shows one submitted learner.
     const progress = await app.inject({ method: 'GET', url: '/api/assignments', cookies: teacher });
@@ -879,6 +900,13 @@ describe('NekoPath API', () => {
       kind: 'ASSIGNMENT_ANSWER',
       sequence: 13,
     });
+    expect(result.reviewEvent).toMatchObject({
+      id: `review-${result.event.id}`,
+      learnerId: 'user-student-an',
+      itemId: 'bank-K02-CHECK-1',
+      kind: 'REVIEW_SCHEDULED',
+      sequence: 14,
+    });
     expect(JSON.parse(result.event.payload)).toMatchObject({
       choiceId: 'b',
       correct: false,
@@ -1066,6 +1094,115 @@ describe('NekoPath API', () => {
     expect(rejected.json()).toMatchObject({ error: 'EVENT_ACCOUNT_MISMATCH' });
     await app.close();
   });
+
+  it('stores a valid offline answer and review together and rejects a fabricated schedule', async () => {
+    const app = await makeApp();
+    const student = await loginCookie(app, STUDENT_EMAIL);
+    const occurredAt = '2026-07-18T08:00:00.000Z';
+    const answer = {
+      id: 'evt-offline-reviewed',
+      learnerId: 'user-student-an',
+      itemId: 'K02-CHECK-1',
+      sequence: 20,
+      occurredAt,
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    };
+    const review = {
+      id: 'review-evt-offline-reviewed',
+      learnerId: 'user-student-an',
+      itemId: 'K02-CHECK-1',
+      sequence: 21,
+      occurredAt,
+      kind: 'REVIEW_SCHEDULED',
+      payload:
+        '{"version":"review-schedule-v1","kcId":"K02","sourceEventId":"evt-offline-reviewed","dueAt":"2026-07-21T08:00:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
+    };
+
+    const accepted = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: { events: [review, answer] },
+    });
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toMatchObject({ accepted: 2, received: 2 });
+
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: {
+        events: [
+          { ...answer, id: 'evt-fabricated', sequence: 30 },
+          {
+            ...review,
+            id: 'review-evt-fabricated',
+            sequence: 31,
+            payload:
+              '{"version":"review-schedule-v1","kcId":"K02","sourceEventId":"evt-fabricated","dueAt":"2099-07-21T08:00:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
+          },
+        ],
+      },
+    });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json()).toMatchObject({ error: 'INVALID_REVIEW_LINK' });
+
+    const wrongKc = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: {
+        events: [
+          { ...answer, id: 'evt-wrong-kc', sequence: 40 },
+          {
+            ...review,
+            id: 'review-evt-wrong-kc',
+            sequence: 41,
+            payload:
+              '{"version":"review-schedule-v1","kcId":"K07","sourceEventId":"evt-wrong-kc","dueAt":"2026-07-21T08:00:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
+          },
+        ],
+      },
+    });
+    expect(wrongKc.statusCode).toBe(400);
+    expect(wrongKc.json()).toMatchObject({ error: 'INVALID_REVIEW_LINK' });
+
+    const jumpedInterval = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: {
+        events: [
+          {
+            ...answer,
+            id: 'evt-jumped-interval',
+            itemId: 'K07-CHECK-1',
+            sequence: 50,
+          },
+          {
+            ...review,
+            id: 'review-evt-jumped-interval',
+            itemId: 'K07-CHECK-1',
+            sequence: 51,
+            payload:
+              '{"version":"review-schedule-v1","kcId":"K07","sourceEventId":"evt-jumped-interval","dueAt":"2026-07-25T08:00:00.000Z","intervalDays":7,"reason":"SPACED_REVIEW"}',
+          },
+        ],
+      },
+    });
+    expect(jumpedInterval.statusCode).toBe(400);
+    expect(jumpedInterval.json()).toMatchObject({ error: 'INVALID_REVIEW_LINK' });
+
+    const history = await app.inject({ method: 'GET', url: '/api/events', cookies: student });
+    const ids = (history.json() as { events: { id: string }[] }).events.map((event) => event.id);
+    expect(ids).toContain(answer.id);
+    expect(ids).toContain(review.id);
+    expect(ids).not.toContain('evt-fabricated');
+    expect(ids).not.toContain('evt-wrong-kc');
+    expect(ids).not.toContain('evt-jumped-interval');
+    await app.close();
+  });
 });
 
 interface GradeShape {
@@ -1073,6 +1210,15 @@ interface GradeShape {
   note: string;
   hints: string[];
   event: {
+    id: string;
+    learnerId: string;
+    itemId: string;
+    sequence: number;
+    occurredAt: string;
+    kind: string;
+    payload: string;
+  };
+  reviewEvent: {
     id: string;
     learnerId: string;
     itemId: string;

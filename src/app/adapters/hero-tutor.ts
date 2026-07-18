@@ -5,6 +5,7 @@ import {
   HERO_GRAPH,
   HERO_ITEMS,
   HERO_QUESTIONS,
+  PRACTICE_QUESTIONS,
   heroMisconceptionName,
   type HeroQuestion,
   type HeroSimulationProfileId,
@@ -54,7 +55,21 @@ export function kcName(kcId: string): string {
 export const misconceptionName = heroMisconceptionName;
 
 export function questionForItem(itemId: string): HeroQuestion | undefined {
-  return HERO_QUESTIONS.find((question) => question.itemId === itemId);
+  const diagnosticQuestion = HERO_QUESTIONS.find((question) => question.itemId === itemId);
+  if (diagnosticQuestion) return diagnosticQuestion;
+  const practiceQuestion = PRACTICE_QUESTIONS.find((question) => question.itemId === itemId);
+  if (!practiceQuestion) return undefined;
+  return {
+    itemId: practiceQuestion.itemId,
+    promptVi: practiceQuestion.promptVi,
+    choices: practiceQuestion.choices.map((choice) => ({
+      id: choice.id,
+      label: choice.label,
+      ...(choice.misconceptionTag ? { misconceptionId: choice.misconceptionTag } : {}),
+    })),
+    correctChoiceId: practiceQuestion.correctChoiceId,
+    hypothesisLabel: practiceQuestion.hypothesisLabel,
+  };
 }
 
 /** Resolve a persisted direct or teacher-bank ID to a known diagnosis item. */
@@ -62,6 +77,11 @@ export function canonicalHeroItemId(itemId: string): string | undefined {
   return HERO_ITEMS.find(
     (candidate) => candidate.id === itemId || `bank-${candidate.id}` === itemId,
   )?.id;
+}
+
+export function kcIdForItem(itemId: string): string | undefined {
+  const canonicalItemId = canonicalHeroItemId(itemId);
+  return HERO_ITEMS.find((item) => item.id === canonicalItemId)?.kcIds[0];
 }
 
 /** Payload stored in the local Dexie event record for a hero answer. */
@@ -135,6 +155,16 @@ export interface ConfirmedAssignmentEvent {
   readonly payload: string;
 }
 
+export interface ConfirmedReviewScheduleEvent {
+  readonly id: string;
+  readonly learnerId: string;
+  readonly itemId: string;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly kind: 'REVIEW_SCHEDULED';
+  readonly payload: string;
+}
+
 /** Re-sequence a server-confirmed answer after the local seeded walkthrough. */
 export function buildConfirmedAssignmentRecord(
   context: StudentDiagnosisContext,
@@ -142,6 +172,24 @@ export function buildConfirmedAssignmentRecord(
   existingLocalCount: number,
 ): LearnerEventRecord | null {
   if (event.learnerId !== context.learnerId || event.kind !== 'ASSIGNMENT_ANSWER') return null;
+  return {
+    id: event.id,
+    learnerId: context.learnerId,
+    itemId: event.itemId,
+    sequence: seededMaxSequence(context) + existingLocalCount + 1,
+    occurredAt: event.occurredAt,
+    kind: event.kind,
+    payload: event.payload,
+  };
+}
+
+/** Re-sequence a server-confirmed review schedule immediately after its answer. */
+export function buildConfirmedReviewScheduleRecord(
+  context: StudentDiagnosisContext,
+  event: ConfirmedReviewScheduleEvent,
+  existingLocalCount: number,
+): LearnerEventRecord | null {
+  if (event.learnerId !== context.learnerId || event.kind !== 'REVIEW_SCHEDULED') return null;
   return {
     id: event.id,
     learnerId: context.learnerId,
@@ -259,17 +307,31 @@ export function diagnoseHero(
   localRecords: readonly LearnerEventRecord[] = [],
 ): DiagnosisResult {
   const context = normalizeStudentContext(reference);
-  const localEvents = toDomainEvents(localRecords).filter(
-    (event) => event.learnerId === context.learnerId,
-  );
   return diagnose({
     learnerId: context.learnerId,
     targetKcId: HERO_TARGET_KC_ID,
     graph: HERO_GRAPH,
     items: HERO_ITEMS,
-    events: [...seededEvents(context), ...localEvents],
+    events: studentDomainEvents(context, localRecords),
     config: HERO_DEMO_CONFIG,
   });
+}
+
+/** Complete account-owned evidence used by diagnosis, in deterministic order. */
+export function studentDomainEvents(
+  reference: StudentDiagnosisReference,
+  localRecords: readonly LearnerEventRecord[],
+): LearnerEvent[] {
+  const context = normalizeStudentContext(reference);
+  const localEvents = toDomainEvents(localRecords).filter(
+    (event) => event.learnerId === context.learnerId,
+  );
+  return [...seededEvents(context), ...localEvents].sort(
+    (left, right) =>
+      left.sequence - right.sequence ||
+      left.occurredAt.localeCompare(right.occurredAt) ||
+      left.id.localeCompare(right.id),
+  );
 }
 
 export { buildHeroClassDashboard };
