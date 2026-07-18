@@ -2,22 +2,17 @@ import { Link } from 'react-router-dom';
 import { BrandMark } from '../../components/BrandMark';
 
 /**
- * Public introduction shown at "/" before sign-in. Same calm-notebook idiom
- * as the product; every claim here mirrors what the implementation actually
- * demonstrates (claim discipline per BRAND_SYSTEM.md and DEMO_SCRIPT.md).
- * Signed-in sessions never see this page — the root route redirects them
- * into their workspace so the installed PWA still opens straight to work.
+ * Public introduction shown at "/" before sign-in, styled as an industrial
+ * studio page: warm-black ground, monospace uppercase display type, vermilion
+ * accent, giant numbered sections and a scrolling capability ticker. Claims
+ * mirror what the implementation demonstrates. Signed-in sessions never see
+ * this page — the root route redirects them into their workspace.
+ *
+ * Deliberate exception to the product's reduced-motion rule: the landing's
+ * ambience animates regardless of prefers-reduced-motion (product owner's
+ * call); the workspace behind sign-in keeps full reduced-motion discipline.
  */
 
-/**
- * Ambient backdrop: a living classroom desk in the product's own idiom —
- * knowledge clusters that float as whole constellations (edges stay attached
- * to their nodes), a sine/cosine graph with a ball running the curve, school
- * tools (pencil, ruler, protractor) drifting like they were left on the desk,
- * and classroom-math glyphs. Tools keep their placement in an outer static
- * group because CSS transform animations replace the SVG transform attribute.
- * Purely decorative; every animation stops under prefers-reduced-motion.
- */
 function LandingBackdrop() {
   return (
     <div className="landing-backdrop" aria-hidden="true">
@@ -154,6 +149,16 @@ function LandingBackdrop() {
   );
 }
 
+const TICKER_ITEMS = [
+  'Chẩn đoán gốc rễ',
+  'Hỏi thêm khi thiếu bằng chứng',
+  'Lộ trình cá nhân theo bằng chứng',
+  'Hoạt động ngoại tuyến',
+  'Giáo viên ra quyết định',
+  'Toán 7 · GDPT 2018',
+  'PWA cài được trên thiết bị',
+];
+
 const HOW_IT_WORKS = [
   {
     title: 'Tìm đúng lỗ hổng gốc',
@@ -191,12 +196,106 @@ const TEACHER_CAPABILITIES = [
   'Giao bài với hạn nộp và chính sách làm lại, theo dõi tiến độ',
 ];
 
+const OFFLINE_CARDS = [
+  {
+    title: 'Hoạt động khi mất mạng',
+    body:
+      'Sau lần tải đầu, chẩn đoán, lộ trình, bài đọc và luyện tập chạy từ bộ nhớ thiết bị. ' +
+      'Sự kiện học xếp hàng chờ và tự đồng bộ khi có mạng, chống ghi trùng.',
+  },
+  {
+    title: 'Dữ liệu được tôn trọng',
+    body:
+      'Phiên làm việc dùng cookie an toàn thay vì token trong bộ nhớ trình duyệt; thiết bị ' +
+      'chỉ giữ hồ sơ đã rút gọn, không bao giờ lưu mật khẩu ngoại tuyến.',
+  },
+  {
+    title: 'Trợ lý chỉ thuật lại',
+    body:
+      'Trợ lý Neko diễn giải kết quả mà lõi chẩn đoán đã tính xong — không bao giờ tự ' +
+      'quyết định đáp án, mức thành thạo hay lộ trình học của học sinh.',
+  },
+];
+
 const HONEST_NOTES = [
   'Sản phẩm được xây trong 48 giờ cho VAIC 2026; danh sách lớp và sự kiện học là dữ liệu mẫu, không phải hồ sơ học sinh thật.',
   'Lát cắt Toán 7 được soạn theo định hướng GDPT 2018 nhưng còn chờ giáo viên toán được nêu tên duyệt chính thức.',
   'Đăng nhập bằng cách chọn tên trong danh sách lớp là cơ chế trình diễn, không phải ranh giới định danh bảo mật cho trường học thật.',
   'Chưa có khẳng định nào về hiệu quả học tập đã kiểm chứng — đánh giá hiện tại chạy trên bộ dữ liệu tổng hợp được công khai.',
 ];
+
+function EvidenceDemoCard() {
+  return (
+    <figure className="landing-hero-card">
+      <span className="landing-card-seal" aria-hidden="true">
+        <BrandMark size={34} />
+      </span>
+      <figcaption className="landing-demo-tag">
+        Minh họa cách NekoPath lập luận từ bằng chứng
+      </figcaption>
+      <dl className="landing-demo-signals">
+        <div>
+          <dt>Câu trả lời</dt>
+          <dd>So sánh 3/4 và 5/6 — chọn sai</dd>
+        </div>
+        <div>
+          <dt>Cách làm</dt>
+          <dd>Trình bày hợp lệ, sai ở bước quy đồng</dd>
+        </div>
+        <div>
+          <dt>Dấu hiệu lặp lại</dt>
+          <dd>Cộng thẳng hai mẫu số · thấy ở 2 bài độc lập</dd>
+        </div>
+      </dl>
+      <div className="landing-demo-verdict">
+        <p className="landing-demo-label">Chẩn đoán</p>
+        <p className="landing-demo-headline">Gốc rễ: Quy đồng mẫu số</p>
+        <div className="landing-demo-path" aria-label="Lộ trình đề xuất">
+          <span className="landing-demo-step">Quy đồng mẫu số</span>
+          <span className="landing-demo-arrow" aria-hidden="true">
+            →
+          </span>
+          <span className="landing-demo-step">So sánh phân số</span>
+          <span className="landing-demo-arrow" aria-hidden="true">
+            →
+          </span>
+          <span className="landing-demo-step">Tỉ lệ thức</span>
+        </div>
+      </div>
+      <p className="landing-demo-abstain">
+        Khi chưa đủ bằng chứng, hệ thống trả lời <strong>«Cần thêm bằng chứng»</strong> và hỏi thêm
+        một câu phân biệt thay vì gán nhãn vội.
+      </p>
+    </figure>
+  );
+}
+
+/**
+ * Eased scroll to an in-page section. Hand-rolled with requestAnimationFrame
+ * because Chromium ignores `scroll-behavior: smooth` when the OS requests
+ * reduced motion, and the landing deliberately keeps its motion (see the
+ * page comment above). Duration scales with distance so far sections glide
+ * rather than jump.
+ */
+function scrollToSection(event: React.MouseEvent<HTMLAnchorElement>, id: string) {
+  const target = document.getElementById(id);
+  if (!target) return;
+  event.preventDefault();
+  const headerOffset = 72;
+  const startY = window.scrollY;
+  const endY = target.getBoundingClientRect().top + startY - headerOffset;
+  const distance = endY - startY;
+  const duration = Math.min(1400, Math.max(600, Math.abs(distance) * 0.45));
+  const startTime = performance.now();
+  const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+  const frame = (now: number) => {
+    const t = Math.min(1, (now - startTime) / duration);
+    window.scrollTo({ top: startY + distance * easeInOutCubic(t), behavior: 'instant' });
+    if (t < 1) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  window.history.replaceState(null, '', `#${id}`);
+}
 
 export function LandingPage() {
   return (
@@ -205,10 +304,21 @@ export function LandingPage() {
       <header className="landing-header">
         <div className="landing-header-inner">
           <span className="brand-lockup">
-            <BrandMark size={36} />
+            <BrandMark size={32} />
             NekoPath
           </span>
-          <Link className="button-primary" to="/login">
+          <nav className="landing-nav" aria-label="Điều hướng trang giới thiệu">
+            <a href="#how-it-works" onClick={(e) => scrollToSection(e, 'how-it-works')}>
+              Cách hoạt động
+            </a>
+            <a href="#workspaces" onClick={(e) => scrollToSection(e, 'workspaces')}>
+              Không gian
+            </a>
+            <a href="#honesty" onClick={(e) => scrollToSection(e, 'honesty')}>
+              Cam kết
+            </a>
+          </nav>
+          <Link className="landing-btn landing-btn-solid" to="/login">
             Đăng nhập
           </Link>
         </div>
@@ -217,80 +327,57 @@ export function LandingPage() {
       <main>
         <section className="landing-hero">
           <div className="landing-hero-copy">
-            <p className="eyebrow">VAIC 2026 · Bảng Giáo dục &amp; Đào tạo · Đội Neko Core</p>
+            <p className="landing-badge">VAIC 2026 · Giáo dục &amp; Đào tạo · Neko Core</p>
             <h1>
-              Trợ giảng <em>thích ứng</em> cho lớp học đa trình độ
+              Trợ giảng thích ứng
+              <br />
+              <em>cho lớp học đa trình độ</em>
             </h1>
             <p className="landing-lead">
-              NekoPath lần theo lỗi sai hiện tại của học sinh về đúng lỗ hổng kiến thức gốc sớm nhất
-              có thể can thiệp, chủ động hỏi thêm khi chưa đủ bằng chứng, và trao cho giáo viên một
-              kế hoạch can thiệp xếp ưu tiên vừa với quỹ thời gian trên lớp.
+              NekoPath lần theo lỗi sai của học sinh về đúng lỗ hổng kiến thức gốc, hỏi thêm khi
+              chưa đủ bằng chứng, và trao cho giáo viên một kế hoạch can thiệp vừa với 15 phút trên
+              lớp.
             </p>
             <div className="landing-cta">
-              <Link className="button-primary" to="/login">
+              <Link className="landing-btn landing-btn-solid" to="/login">
                 Đăng nhập để bắt đầu
               </Link>
-              <a className="button-secondary" href="#how-it-works">
-                Xem cách hoạt động
+              <a
+                className="landing-btn landing-btn-ghost"
+                href="#how-it-works"
+                onClick={(e) => scrollToSection(e, 'how-it-works')}
+              >
+                Xem cách hoạt động <span aria-hidden="true">→</span>
               </a>
             </div>
-            <p className="landing-hero-note">
-              Ứng dụng cài được trên thiết bị · Chẩn đoán, lộ trình và luyện tập tiếp tục khi mất
-              mạng
+            <p className="landing-scroll-hint" aria-hidden="true">
+              Cuộn
             </p>
           </div>
-
-          <figure className="landing-hero-card">
-            <span className="landing-card-seal" aria-hidden="true">
-              <BrandMark size={34} />
-            </span>
-            <figcaption className="landing-demo-tag">
-              Minh họa cách NekoPath lập luận từ bằng chứng
-            </figcaption>
-            <dl className="landing-demo-signals">
-              <div>
-                <dt>Câu trả lời</dt>
-                <dd>So sánh 3/4 và 5/6 — chọn sai</dd>
-              </div>
-              <div>
-                <dt>Cách làm</dt>
-                <dd>Trình bày hợp lệ, sai ở bước quy đồng</dd>
-              </div>
-              <div>
-                <dt>Dấu hiệu lặp lại</dt>
-                <dd>Cộng thẳng hai mẫu số · thấy ở 2 bài độc lập</dd>
-              </div>
-            </dl>
-            <div className="landing-demo-verdict">
-              <p className="eyebrow">Chẩn đoán</p>
-              <p className="landing-demo-headline">Gốc rễ: Quy đồng mẫu số</p>
-              <div className="landing-demo-path" aria-label="Lộ trình đề xuất">
-                <span className="landing-demo-step">Quy đồng mẫu số</span>
-                <span className="landing-demo-arrow" aria-hidden="true">
-                  →
-                </span>
-                <span className="landing-demo-step">So sánh phân số</span>
-                <span className="landing-demo-arrow" aria-hidden="true">
-                  →
-                </span>
-                <span className="landing-demo-step">Tỉ lệ thức</span>
-              </div>
-            </div>
-            <p className="landing-demo-abstain">
-              Khi chưa đủ bằng chứng, hệ thống trả lời <strong>«Cần thêm bằng chứng»</strong> và hỏi
-              thêm một câu phân biệt thay vì gán nhãn vội.
-            </p>
-          </figure>
+          <EvidenceDemoCard />
         </section>
 
+        <div className="landing-ticker" aria-hidden="true">
+          <div className="landing-ticker-track">
+            {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, index) => (
+              <span key={`${item}-${index}`} className="landing-ticker-item">
+                <span className="landing-ticker-star">✦</span>
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+
         <section id="how-it-works" className="landing-section">
-          <p className="eyebrow">01 · Cách NekoPath làm việc</p>
-          <h2>Chẩn đoán gốc rễ, trung thực với bằng chứng</h2>
+          <div className="landing-section-head">
+            <span className="landing-section-num">01</span>
+            <h2>Chẩn đoán gốc rễ, trung thực với bằng chứng</h2>
+          </div>
           <div className="landing-grid landing-grid-3">
             {HOW_IT_WORKS.map((step, index) => (
               <article key={step.title} className="landing-card">
                 <span className="landing-step-index" aria-hidden="true">
-                  {index + 1}
+                  {String(index + 1).padStart(2, '0')}
                 </span>
                 <h3>{step.title}</h3>
                 <p>{step.body}</p>
@@ -299,9 +386,11 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-section">
-          <p className="eyebrow">02 · Hai không gian làm việc</p>
-          <h2>Học sinh học đúng bước, giáo viên nắm cả lớp</h2>
+        <section id="workspaces" className="landing-section">
+          <div className="landing-section-head">
+            <span className="landing-section-num">02</span>
+            <h2>Học sinh học đúng bước, giáo viên nắm cả lớp</h2>
+          </div>
           <div className="landing-grid landing-grid-2">
             <article className="landing-card">
               <h3>Dành cho học sinh</h3>
@@ -323,44 +412,31 @@ export function LandingPage() {
         </section>
 
         <section className="landing-section">
-          <p className="eyebrow">03 · Thiết kế cho nơi mạng chập chờn</p>
-          <h2>Cục bộ trước, đồng bộ sau</h2>
+          <div className="landing-section-head">
+            <span className="landing-section-num">03</span>
+            <h2>Cục bộ trước, đồng bộ sau</h2>
+          </div>
           <div className="landing-grid landing-grid-3">
-            <article className="landing-card">
-              <h3>Hoạt động khi mất mạng</h3>
-              <p>
-                Sau lần tải đầu, chẩn đoán, lộ trình, bài đọc và luyện tập chạy từ bộ nhớ thiết bị.
-                Sự kiện học xếp hàng chờ và tự đồng bộ khi có mạng, chống ghi trùng.
-              </p>
-            </article>
-            <article className="landing-card">
-              <h3>Dữ liệu được tôn trọng</h3>
-              <p>
-                Phiên làm việc dùng cookie an toàn thay vì token trong bộ nhớ trình duyệt; thiết bị
-                chỉ giữ hồ sơ đã rút gọn, không bao giờ lưu mật khẩu ngoại tuyến.
-              </p>
-            </article>
-            <article className="landing-card">
-              <h3>Trợ lý chỉ thuật lại</h3>
-              <p>
-                Trợ lý Neko diễn giải kết quả mà lõi chẩn đoán đã tính xong — không bao giờ tự quyết
-                định đáp án, mức thành thạo hay lộ trình học của học sinh.
-              </p>
-            </article>
+            {OFFLINE_CARDS.map((card) => (
+              <article key={card.title} className="landing-card">
+                <h3>{card.title}</h3>
+                <p>{card.body}</p>
+              </article>
+            ))}
           </div>
         </section>
 
-        <section className="landing-honesty">
-          <div className="landing-section">
-            <p className="eyebrow">04 · Cam kết trung thực</p>
+        <section id="honesty" className="landing-section">
+          <div className="landing-section-head">
+            <span className="landing-section-num">04</span>
             <h2>Nói đúng những gì đã làm</h2>
-            <div className="landing-honesty-card">
-              <ul className="landing-honesty-list">
-                {HONEST_NOTES.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </div>
+          </div>
+          <div className="landing-honesty-card">
+            <ul className="landing-honesty-list">
+              {HONEST_NOTES.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
           </div>
         </section>
       </main>
@@ -372,11 +448,8 @@ export function LandingPage() {
             NekoPath
           </span>
           <nav className="landing-footer-links" aria-label="Liên kết chân trang">
-            <Link className="text-link" to="/login">
-              Đăng nhập
-            </Link>
+            <Link to="/login">Đăng nhập</Link>
             <a
-              className="text-link"
               href="https://github.com/meiiie/neko-core-vaic-2026"
               target="_blank"
               rel="noreferrer"

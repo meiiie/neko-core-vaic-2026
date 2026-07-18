@@ -6041,45 +6041,120 @@ html:has(.question-selection-actions) {
   }
 }
 
-/* Landing (public introduction at "/", before sign-in). Same calm paper
-   idiom as the product — canvas, surface, evidence green, review amber —
-   plus an ambient animated backdrop: floating knowledge constellations, a
-   sine/cosine graph with a ball running the curve, school tools and math
-   glyphs adrift, and the cat watermark.
+/* Landing (public introduction at "/", before sign-in). Industrial studio
+   layout — monospace uppercase display type, giant numbered sections, a
+   scrolling capability ticker — recolored onto the product's own warm paper
+   ground: canvas/surface/ink from the system tokens, evidence teal for the
+   knowledge map, a burnt-vermilion display accent, review amber for the
+   honesty surfaces. Scoped to .landing; the workspace idiom is untouched.
 
    Deliberate exception to the product's reduced-motion rule: the landing's
    ambience animates regardless of prefers-reduced-motion (product owner's
-   call — this marketing surface is meant to visibly move; the workspace
-   behind sign-in keeps full reduced-motion discipline). */
+   call); the workspace behind sign-in keeps full reduced-motion discipline. */
 
 .landing {
+  --k-bg: var(--canvas);
+  --k-surface: var(--surface);
+  --k-ink: var(--ink);
+  --k-muted: var(--muted-strong);
+  --k-line: var(--rule);
+  --k-accent: #d34a12;
+  --k-accent-strong: #b93f0e;
+  --k-teal: var(--evidence);
+  --k-amber: var(--review);
+  --k-mono: ui-monospace, 'Cascadia Mono', Consolas, 'Courier New', monospace;
+
   position: relative;
   display: flex;
   min-height: 100dvh;
   flex-direction: column;
   background:
     radial-gradient(70rem 45rem at 75% -15%, var(--evidence-soft), transparent 65%),
-    radial-gradient(55rem 40rem at 0% 30%, var(--review-soft), transparent 60%), var(--canvas);
+    radial-gradient(55rem 40rem at 0% 30%, var(--review-soft), transparent 60%), var(--k-bg);
+  color: var(--k-muted);
+  font-family: var(--k-mono);
 }
 
+/* Hairline page columns. */
 .landing::before {
   position: fixed;
   z-index: 0;
   inset: 0;
-  background-image:
-    linear-gradient(to right, rgb(23 33 29 / 3%) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(23 33 29 / 3%) 1px, transparent 1px);
-  background-size: 3rem 3rem;
+  background-image: linear-gradient(to right, var(--k-line) 1px, transparent 1px);
+  background-size: 25% 100%;
   content: '';
+  opacity: 0.55;
   pointer-events: none;
 }
+
+.landing h1,
+.landing h2,
+.landing h3 {
+  color: var(--k-ink);
+  font-family: var(--k-mono);
+  text-transform: uppercase;
+}
+
+/* Buttons */
+
+.landing-btn {
+  display: inline-flex;
+  min-height: var(--touch-target);
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  padding: 0.625rem var(--s-5);
+  border: 1px solid transparent;
+  border-radius: 0.1875rem;
+  cursor: pointer;
+  font-family: var(--k-mono);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition:
+    background-color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    transform 100ms var(--ease-out);
+}
+
+.landing-btn:active {
+  transform: translateY(0.0625rem);
+}
+
+.landing-btn-solid {
+  border-color: var(--k-accent);
+  background: var(--k-accent);
+  color: #fff;
+}
+
+.landing-btn-solid:hover {
+  border-color: var(--k-accent-strong);
+  background: var(--k-accent-strong);
+}
+
+.landing-btn-ghost {
+  border-color: var(--rule-strong);
+  background: var(--k-surface);
+  color: var(--k-ink);
+}
+
+.landing-btn-ghost:hover {
+  border-color: var(--k-accent);
+  color: var(--k-accent-strong);
+}
+
+/* Header */
 
 .landing-header {
   position: sticky;
   z-index: 20;
   top: 0;
-  border-bottom: 1px solid var(--rule);
-  background: rgb(244 240 230 / 82%);
+  border-bottom: 1px solid var(--k-line);
+  background: rgb(244 240 230 / 84%);
   backdrop-filter: blur(0.75rem);
 }
 
@@ -6094,18 +6169,46 @@ html:has(.question-selection-actions) {
   padding: var(--s-3) clamp(var(--s-4), 4vw, var(--s-8));
 }
 
+.landing .brand-lockup {
+  color: var(--k-ink);
+  font-family: var(--k-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .landing .brand-mark {
   box-sizing: border-box;
   padding: 0.1875rem;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border: 1px solid var(--k-line);
+  border-radius: 0.25rem;
+  background: var(--k-surface);
+}
+
+.landing-nav {
+  display: flex;
+  gap: clamp(var(--s-4), 3vw, var(--s-8));
+}
+
+.landing-nav a {
+  display: inline-flex;
+  min-height: var(--touch-target);
+  align-items: center;
+  color: var(--k-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.landing-nav a:hover {
+  color: var(--k-accent-strong);
 }
 
 .landing main {
   flex: 1;
 }
 
-.landing-header,
 .landing main,
 .landing-footer {
   position: relative;
@@ -6200,7 +6303,7 @@ html:has(.question-selection-actions) {
 }
 
 .backdrop-traveler {
-  fill: #006b61;
+  fill: #d34a12;
   opacity: 0;
   offset-path: path('M 80 480 C 400 420, 700 520, 1000 460 S 1360 420, 1420 470');
   animation: backdrop-travel 11s linear infinite;
@@ -6214,10 +6317,10 @@ html:has(.question-selection-actions) {
 
 .backdrop-glyph {
   fill: #5b625d;
-  font-family: var(--font-body);
+  font-family: var(--k-mono);
   font-size: 2rem;
   font-weight: 650;
-  opacity: 0.15;
+  opacity: 0.13;
   animation: backdrop-float 8s ease-in-out infinite alternate;
   transform-box: fill-box;
 }
@@ -6236,8 +6339,6 @@ html:has(.question-selection-actions) {
   animation: backdrop-drift-b 26s ease-in-out infinite alternate;
 }
 
-/* Sine/cosine plot; the ball runs the sine curve end to end. */
-
 .backdrop-axis {
   stroke: #5b625d;
   stroke-width: 1.5;
@@ -6250,7 +6351,7 @@ html:has(.question-selection-actions) {
   stroke-dasharray: 10 7;
   stroke-linecap: round;
   stroke-width: 2.5;
-  opacity: 0.34;
+  opacity: 0.32;
   animation: backdrop-flow 4s linear infinite;
 }
 
@@ -6265,7 +6366,7 @@ html:has(.question-selection-actions) {
 }
 
 .backdrop-graph-ball {
-  fill: #006b61;
+  fill: #d34a12;
   opacity: 0;
   offset-path: path(
     'M 0 100 C 25 30, 75 30, 100 100 S 175 170, 200 100 S 275 30, 300 100 S 375 170, 400 100'
@@ -6273,15 +6374,13 @@ html:has(.question-selection-actions) {
   animation: backdrop-travel 7s ease-in-out infinite;
 }
 
-/* School tools left on the desk. */
-
 .backdrop-tool {
   fill: none;
   stroke: #424a45;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2;
-  opacity: 0.2;
+  opacity: 0.16;
   animation: backdrop-tool-float 8s ease-in-out infinite alternate;
   transform-box: fill-box;
   transform-origin: center;
@@ -6308,39 +6407,62 @@ html:has(.question-selection-actions) {
   animation: backdrop-sway 14s ease-in-out infinite alternate;
 }
 
-/* Hero */
+/* Hero — centered display type. */
 
 .landing-hero {
   display: grid;
   max-width: var(--content-max);
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   align-items: center;
   gap: clamp(var(--s-8), 6vw, 5rem);
   margin: 0 auto;
-  padding: clamp(var(--s-10), 9vh, 5.5rem) clamp(var(--s-4), 4vw, var(--s-8));
+  padding: clamp(var(--s-10), 10vh, 6rem) clamp(var(--s-4), 4vw, var(--s-8))
+    clamp(var(--s-8), 7vh, 4rem);
 }
 
 .landing-hero > * {
   animation: landing-rise 640ms var(--ease-out) both;
 }
 
+.landing-hero > :nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.landing-badge {
+  display: inline-block;
+  width: fit-content;
+  margin-bottom: var(--s-6);
+  padding: var(--s-2) var(--s-4);
+  border: 1px solid rgb(211 74 18 / 45%);
+  border-radius: 0.1875rem;
+  background: rgb(211 74 18 / 7%);
+  color: var(--k-accent-strong);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
 .landing-hero h1 {
   max-width: 16ch;
-  font-size: clamp(2.375rem, 4.8vw, 3.5rem);
-  line-height: 1.06;
+  margin-bottom: var(--s-5);
+  font-size: clamp(2rem, 4.2vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  /* Uppercase Vietnamese stacks diacritics; extra leading keeps them clear. */
+  line-height: 1.18;
 }
 
 .landing-hero h1 em {
-  color: var(--primary);
+  color: var(--k-accent);
   font-style: normal;
-  background: linear-gradient(var(--primary), var(--primary)) no-repeat 0 94% / 100% 0.12em;
-  animation: landing-hl-sweep 900ms var(--ease-out) 800ms both;
 }
 
 .landing-lead {
-  max-width: 34rem;
-  color: var(--muted-strong);
-  font-size: 1.125rem;
+  max-width: 44rem;
+  margin-bottom: 0;
+  color: var(--k-muted);
+  font-size: 1rem;
   line-height: 1.75rem;
 }
 
@@ -6351,27 +6473,182 @@ html:has(.question-selection-actions) {
   margin-top: var(--s-6);
 }
 
-.landing-hero-note {
-  margin: var(--s-5) 0 0;
+.landing-scroll-hint {
+  position: relative;
+  width: fit-content;
+  margin: clamp(var(--s-8), 6vh, 4rem) 0 0;
+  padding-bottom: 2.75rem;
   color: var(--muted);
-  font-size: 0.875rem;
-  line-height: 1.375rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
 }
 
-/* Hero card: mirrors the product's reasoning surface — separated evidence
-   signals first (a ledger), then the verdict computed from them. */
+.landing-scroll-hint::after {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  height: 2.25rem;
+  background: linear-gradient(var(--k-accent), transparent);
+  content: '';
+  animation: landing-scroll-drop 1.8s ease-in-out infinite;
+}
+
+/* Capability ticker */
+
+.landing-ticker {
+  overflow: hidden;
+  border-top: 1px solid var(--k-line);
+  border-bottom: 1px solid var(--k-line);
+  background: rgb(23 33 29 / 3%);
+}
+
+.landing-ticker-track {
+  display: inline-flex;
+  width: max-content;
+  animation: landing-ticker-scroll 28s linear infinite;
+}
+
+.landing-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-3) var(--s-4);
+  color: var(--k-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.landing-ticker-star {
+  color: var(--k-accent);
+}
+
+/* Numbered sections */
+
+.landing-section {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: clamp(var(--s-10), 9vh, 5.5rem) clamp(var(--s-4), 4vw, var(--s-8));
+  scroll-margin-top: 4.5rem;
+}
+
+.landing-section-head {
+  margin-bottom: var(--s-8);
+}
+
+.landing-section-num {
+  display: block;
+  margin-bottom: var(--s-2);
+  color: var(--k-accent);
+  font-size: clamp(2.5rem, 5vw, 3.75rem);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.landing-section h2 {
+  max-width: 32ch;
+  font-size: clamp(1.375rem, 2.4vw, 1.875rem);
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.landing-grid {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.landing-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-card {
+  padding: var(--s-6);
+  border: 1px solid var(--k-line);
+  border-radius: 0.25rem;
+  background: var(--k-surface);
+  transition:
+    border-color 240ms var(--ease-out),
+    box-shadow 240ms var(--ease-out),
+    transform 240ms var(--ease-out);
+}
+
+.landing-card:hover {
+  border-color: rgb(211 74 18 / 55%);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-0.1875rem);
+}
+
+@supports (animation-timeline: view()) {
+  .landing-card,
+  .landing-hero-card,
+  .landing-honesty-card {
+    animation: landing-reveal linear both;
+    animation-range: entry 0% entry 40%;
+    animation-timeline: view();
+  }
+}
+
+.landing-card h3 {
+  margin-bottom: var(--s-3);
+  font-size: 0.9375rem;
+  letter-spacing: 0.08em;
+}
+
+.landing-card p {
+  margin: 0;
+  color: var(--k-muted);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+.landing-card ul {
+  display: grid;
+  gap: var(--s-3);
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--k-muted);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+.landing-card li::marker {
+  color: var(--k-accent);
+}
+
+.landing-step-index {
+  display: block;
+  margin-bottom: var(--s-3);
+  color: var(--k-accent);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+/* Evidence demo card */
 
 .landing-hero-card {
   position: relative;
   margin: 0;
   padding: var(--s-6);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  border: 1px solid var(--k-line);
+  border-top: 0.1875rem solid var(--k-accent);
+  border-radius: 0.25rem;
+  background: var(--k-surface);
   box-shadow: var(--shadow-md);
-  animation:
-    landing-rise 640ms var(--ease-out) 140ms both,
-    landing-bob 6s ease-in-out 1.6s infinite alternate;
+  transition: box-shadow 240ms var(--ease-out);
+  animation: landing-bob 6s ease-in-out infinite alternate;
+}
+
+.landing-hero-card:hover {
+  box-shadow: 0 1rem 2.5rem rgb(23 33 29 / 14%);
 }
 
 .landing-card-seal {
@@ -6385,8 +6662,8 @@ html:has(.question-selection-actions) {
   width: 3.25rem;
   height: 3.25rem;
   border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  border-radius: 0.375rem;
+  background: var(--k-surface);
   box-shadow: var(--shadow-sm);
   transform: rotate(6deg);
   animation: landing-seal-wiggle 6s ease-in-out 2.4s infinite;
@@ -6395,8 +6672,9 @@ html:has(.question-selection-actions) {
 .landing-demo-tag {
   margin-bottom: var(--s-5);
   color: var(--muted);
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .landing-demo-signals {
@@ -6407,23 +6685,25 @@ html:has(.question-selection-actions) {
 
 .landing-demo-signals div {
   display: grid;
-  grid-template-columns: 8rem minmax(0, 1fr);
+  grid-template-columns: 8.5rem minmax(0, 1fr);
   gap: var(--s-3);
   padding-bottom: var(--s-3);
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--k-line);
 }
 
 .landing-demo-signals dt {
   color: var(--muted);
-  font-size: 0.8125rem;
+  font-size: 0.6875rem;
   font-weight: 650;
+  letter-spacing: 0.1em;
   line-height: 1.375rem;
+  text-transform: uppercase;
 }
 
 .landing-demo-signals dd {
   margin: 0;
-  color: var(--ink);
-  font-size: 0.9375rem;
+  color: var(--k-ink);
+  font-size: 0.875rem;
   line-height: 1.375rem;
 }
 
@@ -6431,15 +6711,20 @@ html:has(.question-selection-actions) {
   margin-bottom: var(--s-5);
 }
 
-.landing-demo-verdict .eyebrow {
+.landing-demo-label {
   margin-bottom: var(--s-1);
+  color: var(--k-accent);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .landing-demo-headline {
   margin-bottom: 0;
-  font-size: 1.25rem;
+  color: var(--k-ink);
+  font-size: 1.125rem;
   font-weight: 700;
-  letter-spacing: -0.015em;
 }
 
 .landing-demo-path {
@@ -6450,14 +6735,13 @@ html:has(.question-selection-actions) {
   margin: var(--s-3) 0 0;
 }
 
-/* Path chips light up in order (chips sit at child positions 1, 3, 5). */
-
 .landing-demo-step {
   padding: var(--s-1) var(--s-3);
-  border-radius: 999px;
+  border: 1px solid rgb(0 107 97 / 25%);
+  border-radius: 0.1875rem;
   background: var(--evidence-soft);
   color: var(--evidence);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   font-weight: 650;
   line-height: 1.375rem;
   animation: landing-chip-glow 4.8s ease-in-out infinite;
@@ -6479,120 +6763,27 @@ html:has(.question-selection-actions) {
 .landing-demo-abstain {
   margin: 0;
   padding: var(--s-3) var(--s-4);
-  border-radius: var(--radius-md);
+  border: 1px solid rgb(154 90 0 / 30%);
+  border-radius: 0.1875rem;
   background: var(--review-soft);
-  color: var(--muted-strong);
-  font-size: 0.875rem;
+  color: var(--k-muted);
+  font-size: 0.8125rem;
   line-height: 1.375rem;
 }
 
 .landing-demo-abstain strong {
-  color: var(--review);
+  color: var(--k-amber);
 }
 
-/* Numbered sections */
-
-.landing-section {
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: clamp(var(--s-8), 7vh, 4.5rem) clamp(var(--s-4), 4vw, var(--s-8));
-}
-
-.landing-section h2 {
-  max-width: 30ch;
-  font-size: clamp(1.5rem, 2.5vw, 2rem);
-  line-height: 1.2;
-}
-
-.landing-grid {
-  display: grid;
-  gap: var(--s-4);
-  margin-top: var(--s-6);
-}
-
-.landing-grid-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.landing-grid-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.landing-card {
-  padding: var(--s-6);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  transition:
-    border-color 240ms var(--ease-out),
-    box-shadow 240ms var(--ease-out),
-    transform 240ms var(--ease-out);
-}
-
-.landing-card:hover {
-  border-color: var(--rule-strong);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-0.1875rem);
-}
-
-/* Scroll reveal where supported; elsewhere cards simply stay visible. */
-@supports (animation-timeline: view()) {
-  .landing-card,
-  .landing-honesty-card {
-    animation: landing-reveal linear both;
-    animation-range: entry 0% entry 40%;
-    animation-timeline: view();
-  }
-}
-
-.landing-card h3 {
-  font-size: 1.0625rem;
-}
-
-.landing-card p {
-  margin: 0;
-  color: var(--muted-strong);
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
-}
-
-.landing-card ul {
-  display: grid;
-  gap: var(--s-2);
-  margin: 0;
-  padding-left: 1.25rem;
-  color: var(--muted-strong);
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
-}
-
-.landing-card li::marker {
-  color: var(--primary);
-}
-
-.landing-step-index {
-  display: inline-flex;
-  width: 2rem;
-  height: 2rem;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--s-3);
-  border-radius: 999px;
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-weight: 700;
-}
-
-/* Honesty: the one amber-toned card — uncertainty named out loud. */
+/* Honesty */
 
 .landing-honesty-card {
-  max-width: 52rem;
-  margin-top: var(--s-6);
+  max-width: 56rem;
   padding: clamp(var(--s-6), 4vw, var(--s-10));
   border: 1px solid var(--rule-strong);
-  border-left: 0.25rem solid var(--review);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  border-left: 0.25rem solid var(--k-amber);
+  border-radius: 0.25rem;
+  background: var(--k-surface);
 }
 
 .landing-honesty-list {
@@ -6600,17 +6791,20 @@ html:has(.question-selection-actions) {
   gap: var(--s-3);
   margin: 0;
   padding-left: 1.25rem;
-  color: var(--muted-strong);
+  color: var(--k-muted);
+  font-size: 0.875rem;
   line-height: 1.5rem;
 }
 
 .landing-honesty-list li::marker {
-  color: var(--review);
+  color: var(--k-amber);
 }
 
+/* Footer */
+
 .landing-footer {
-  border-top: 1px solid var(--rule);
-  background: var(--surface);
+  border-top: 1px solid var(--k-line);
+  background: var(--k-surface);
 }
 
 .landing-footer-inner {
@@ -6622,14 +6816,28 @@ html:has(.question-selection-actions) {
   gap: var(--s-4);
   margin: 0 auto;
   padding: var(--s-5) clamp(var(--s-4), 4vw, var(--s-8));
-  color: var(--muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .landing-footer-links {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-5);
+}
+
+.landing-footer-links a {
+  display: inline-flex;
+  min-height: var(--touch-target);
+  align-items: center;
+  color: var(--k-muted);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.landing-footer-links a:hover {
+  color: var(--k-accent-strong);
 }
 
 /* Keyframes */
@@ -6685,16 +6893,6 @@ html:has(.question-selection-actions) {
   }
 }
 
-@keyframes landing-hl-sweep {
-  from {
-    background-size: 0% 0.12em;
-  }
-
-  to {
-    background-size: 100% 0.12em;
-  }
-}
-
 @keyframes landing-chip-glow {
   0%,
   28%,
@@ -6706,6 +6904,28 @@ html:has(.question-selection-actions) {
   12% {
     box-shadow: 0 0.25rem 0.875rem rgb(0 107 97 / 30%);
     transform: translateY(-0.125rem);
+  }
+}
+
+@keyframes landing-scroll-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+
+  40% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+
+@keyframes landing-ticker-scroll {
+  to {
+    transform: translateX(-50%);
   }
 }
 
@@ -6766,11 +6986,11 @@ html:has(.question-selection-actions) {
   }
 
   6% {
-    opacity: 0.48;
+    opacity: 0.55;
   }
 
   94% {
-    opacity: 0.48;
+    opacity: 0.55;
   }
 
   100% {
@@ -6817,6 +7037,10 @@ html:has(.question-selection-actions) {
   .landing-hero-card {
     max-width: 34rem;
   }
+
+  .landing-nav {
+    display: none;
+  }
 }
 
 @media (max-width: 52rem) {
@@ -6824,4 +7048,77 @@ html:has(.question-selection-actions) {
   .landing-grid-3 {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Micro-interactions: small, fast, always in direct response to the cursor. */
+
+.landing-btn-solid:hover {
+  transform: translateY(-0.0625rem);
+  box-shadow: 0 0.375rem 1rem rgb(211 74 18 / 30%);
+}
+
+.landing-btn-ghost span {
+  transition: transform 160ms var(--ease-out);
+}
+
+.landing-btn-ghost:hover span {
+  transform: translateX(0.25rem);
+}
+
+.landing-nav a {
+  position: relative;
+}
+
+.landing-nav a::after {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--k-accent);
+  content: '';
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 200ms var(--ease-out);
+}
+
+.landing-nav a:hover::after,
+.landing-nav a:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.landing-ticker:hover .landing-ticker-track {
+  animation-play-state: paused;
+}
+
+.landing-card h3 {
+  transition: color 200ms var(--ease-out);
+}
+
+.landing-card:hover h3 {
+  color: var(--k-accent-strong);
+}
+
+.landing-step-index {
+  transition: transform 200ms var(--ease-out);
+}
+
+.landing-card:hover .landing-step-index {
+  transform: translateX(0.25rem);
+}
+
+.landing-demo-step {
+  transition: transform 160ms var(--ease-out);
+}
+
+.landing-demo-step:hover {
+  transform: translateY(-0.125rem) scale(1.04);
+}
+
+.landing .brand-mark {
+  transition: transform 200ms var(--ease-out);
+}
+
+.landing .brand-lockup:hover .brand-mark {
+  transform: rotate(-8deg);
 }
