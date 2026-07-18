@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SessionProvider } from '../app/session';
+import { AgentSessionStore } from '../services/agent/session-store';
 import { db } from '../storage/db';
 import { installApiStub } from '../test/api-stub';
 import { NekoDock } from './NekoDock';
@@ -10,6 +11,7 @@ import { NekoDock } from './NekoDock';
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
   await db.agentSessions.clear();
 });
 
@@ -26,7 +28,7 @@ describe('NekoDock agent session', () => {
     await screen.findByText(/Chào Cô Hà/);
     const select = screen.getByRole('combobox', { name: 'Chọn nguồn AI cho Neko' });
     expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
-      'Local · Ollama',
+      'Tự động · ưu tiên cục bộ',
       'Gemma · trên thiết bị',
       'ChatGPT',
     ]);
@@ -216,5 +218,181 @@ describe('NekoDock agent session', () => {
     ).toBe(true);
     expect(assignmentChanged).toHaveBeenCalledOnce();
     window.removeEventListener('nekopath:assignments-changed', assignmentChanged);
+  });
+
+  it('keeps an unsent multiline draft across a dock remount', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    const user = userEvent.setup();
+    const first = render(
+      <SessionProvider>
+        <NekoDock open onClose={() => undefined} />
+      </SessionProvider>,
+    );
+    const textarea = await screen.findByRole('textbox', { name: 'Câu hỏi cho Neko' });
+    await waitFor(() => expect(textarea.hasAttribute('disabled')).toBe(false));
+    await user.type(textarea, 'Dòng một{shift>}{enter}{/shift}Dòng hai');
+    expect((textarea as HTMLTextAreaElement).value).toBe('Dòng một\nDòng hai');
+
+    first.unmount();
+    render(
+      <SessionProvider>
+        <NekoDock open onClose={() => undefined} />
+      </SessionProvider>,
+    );
+
+    const restored = await screen.findByRole('textbox', { name: 'Câu hỏi cho Neko' });
+    await waitFor(() => expect((restored as HTMLTextAreaElement).value).toBe('Dòng một\nDòng hai'));
+  });
+
+  it('keeps the composer editable while busy and drains a bounded prompt queue', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    const baseFetch = globalThis.fetch;
+    let releaseFirst!: () => void;
+    let completions = 0;
+    const completionResponse = (text: string) =>
+      new Response(
+        `event: delta\ndata: ${JSON.stringify({ text })}\n\n` +
+          `event: done\ndata: ${JSON.stringify({ content: text, modelId: 'gpt-test' })}\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } },
+      );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/ai/chatgpt/status')) {
+          return Response.json({
+            available: true,
+            authenticated: true,
+            defaultModel: 'gpt-test',
+            models: [
+              {
+                id: 'gpt-test',
+                model: 'gpt-test',
+                displayName: 'GPT Test',
+                isDefault: true,
+              },
+            ],
+          });
+        }
+        if (url.endsWith('/api/ai/chatgpt/complete')) {
+          completions += 1;
+          if (completions === 1) {
+            return new Promise<Response>((resolve, reject) => {
+              releaseFirst = () => resolve(completionResponse('Lượt đầu đã xong.'));
+              init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+                once: true,
+              });
+            });
+          }
+          return completionResponse('Lượt xếp hàng đã xong.');
+        }
+        return baseFetch(input, init);
+      }),
+    );
+    const user = userEvent.setup();
+    render(
+      <SessionProvider>
+        <NekoDock open onClose={() => undefined} />
+      </SessionProvider>,
+    );
+    await screen.findByText(/Chào Cô Hà/);
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Chọn nguồn AI cho Neko' }),
+      'chatgpt',
+    );
+    const textarea = screen.getByRole('textbox', { name: 'Câu hỏi cho Neko' });
+    await user.type(textarea, 'Câu đầu');
+    await user.click(screen.getByRole('button', { name: 'Gửi' }));
+    expect(await screen.findByRole('button', { name: 'Dừng' })).toBeTruthy();
+    expect(textarea.hasAttribute('disabled')).toBe(false);
+
+    await user.type(textarea, 'Câu tiếp theo');
+    await user.click(screen.getByRole('button', { name: 'Xếp hàng' }));
+    expect(screen.getByText('1/3 câu đang chờ')).toBeTruthy();
+    expect((textarea as HTMLTextAreaElement).value).toBe('');
+
+    releaseFirst();
+
+    expect(await screen.findByText('Lượt xếp hàng đã xong.')).toBeTruthy();
+    expect(completions).toBe(2);
+    expect(screen.queryByText(/câu đang chờ/)).toBeNull();
+  });
+
+  it('uses Escape to stop an active turn before Escape closes the dock', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    const baseFetch = globalThis.fetch;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/ai/chatgpt/status')) {
+          return Response.json({
+            available: true,
+            authenticated: true,
+            defaultModel: 'gpt-test',
+            models: [
+              {
+                id: 'gpt-test',
+                model: 'gpt-test',
+                displayName: 'GPT Test',
+                isDefault: true,
+              },
+            ],
+          });
+        }
+        if (url.endsWith('/api/ai/chatgpt/complete')) {
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('Stopped', 'AbortError')),
+              { once: true },
+            );
+          });
+        }
+        return baseFetch(input, init);
+      }),
+    );
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SessionProvider>
+        <NekoDock open onClose={onClose} />
+      </SessionProvider>,
+    );
+    await screen.findByText(/Chào Cô Hà/);
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Chọn nguồn AI cho Neko' }),
+      'chatgpt',
+    );
+    const textarea = screen.getByRole('textbox', { name: 'Câu hỏi cho Neko' });
+    await user.type(textarea, 'Lượt chậm');
+    await user.click(screen.getByRole('button', { name: 'Gửi' }));
+    await screen.findByRole('button', { name: 'Dừng' });
+
+    await user.keyboard('{Escape}');
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(await screen.findByText('Đã dừng lượt đang xử lý.')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the answer visible and discloses when local session persistence fails', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    vi.spyOn(AgentSessionStore.prototype, 'save').mockRejectedValueOnce(
+      new Error('storage unavailable'),
+    );
+    const user = userEvent.setup();
+    render(
+      <SessionProvider>
+        <NekoDock open onClose={() => undefined} />
+      </SessionProvider>,
+    );
+    await screen.findByText(/Chào Cô Hà/);
+
+    await user.click(screen.getByRole('button', { name: 'Chẩn đoán của bạn An thế nào?' }));
+
+    expect((await screen.findAllByText(/Phân số bằng nhau/)).length).toBeGreaterThan(0);
+    expect(screen.getByRole('alert').textContent).toContain('chưa lưu được phiên');
   });
 });

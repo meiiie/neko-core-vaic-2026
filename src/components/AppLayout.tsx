@@ -49,6 +49,7 @@ export function AppLayout() {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const nekoLauncherRef = useRef<HTMLButtonElement>(null);
   const restoreMenuFocusRef = useRef(false);
 
   const closeMobileNavigation = useCallback((restoreMenuFocus: boolean) => {
@@ -181,6 +182,11 @@ export function AppLayout() {
     setNekoOpen((open) => !open);
   }
 
+  function closeNeko(): void {
+    setNekoOpen(false);
+    window.requestAnimationFrame(() => nekoLauncherRef.current?.focus());
+  }
+
   return (
     <div className="product-shell" data-focus-mode={isAssessmentMode || undefined}>
       <a className="skip-link" href="#main-content">
@@ -189,7 +195,10 @@ export function AppLayout() {
 
       {!isAssessmentMode ? (
         <>
-          <header className="mobile-header" inert={isMobile && mobileOpen ? true : undefined}>
+          <header
+            className="mobile-header"
+            inert={isMobile && (mobileOpen || (isTeacher && nekoOpen)) ? true : undefined}
+          >
             <NavLink className="brand-lockup" to={home}>
               <BrandMark size={36} />
               <span>NekoPath</span>
@@ -214,7 +223,7 @@ export function AppLayout() {
             id="product-sidebar"
             className="product-sidebar"
             data-open={mobileOpen || undefined}
-            inert={isMobile && !mobileOpen ? true : undefined}
+            inert={isMobile && (!mobileOpen || (isTeacher && nekoOpen)) ? true : undefined}
           >
             <div className="sidebar-head">
               <NavLink
@@ -290,7 +299,11 @@ export function AppLayout() {
         className="product-workspace"
         data-focus-mode={isAssessmentMode || undefined}
         data-neko-open={(isTeacher && nekoOpen) || undefined}
-        inert={!isAssessmentMode && isMobile && mobileOpen ? true : undefined}
+        inert={
+          !isAssessmentMode && isMobile && (mobileOpen || (isTeacher && nekoOpen))
+            ? true
+            : undefined
+        }
       >
         <main ref={mainRef} id="main-content" tabIndex={-1}>
           <Outlet />
@@ -299,6 +312,7 @@ export function AppLayout() {
 
       {isTeacher && !nekoOpen ? (
         <button
+          ref={nekoLauncherRef}
           type="button"
           className="neko-launcher"
           aria-label="Mở trợ lý Neko"
@@ -312,7 +326,7 @@ export function AppLayout() {
 
       {isTeacher && nekoLoaded ? (
         <Suspense fallback={null}>
-          <NekoDock open={nekoOpen} onClose={() => setNekoOpen(false)} />
+          <NekoDock open={nekoOpen} onClose={closeNeko} />
         </Suspense>
       ) : null}
     </div>

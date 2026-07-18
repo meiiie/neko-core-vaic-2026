@@ -11,7 +11,7 @@ function installMobileViewport() {
   vi.stubGlobal(
     'matchMedia',
     vi.fn((query: string) => ({
-      matches: query === '(max-width: 52rem)',
+      matches: query === '(max-width: 52rem)' || query === '(max-width: 34rem)',
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -464,5 +464,35 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     ).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.id).toBe('main-content'));
     expect(sidebar?.hasAttribute('inert')).toBe(true);
+  });
+
+  it('treats the full-screen mobile Neko panel as a modal surface and restores focus', async () => {
+    installMobileViewport();
+    installApiStub('co.ha@nekopath.edu.vn');
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/teacher']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    const launcher = await screen.findByRole('button', { name: 'Mở trợ lý Neko' });
+    await user.click(launcher);
+    const dialog = await screen.findByRole('dialog', { name: 'Neko — trợ lý lớp học' });
+    const workspace = document.querySelector<HTMLElement>('.product-workspace');
+    const mobileHeader = document.querySelector<HTMLElement>('.mobile-header');
+    const sidebar = document.querySelector<HTMLElement>('#product-sidebar');
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(workspace?.hasAttribute('inert')).toBe(true);
+    expect(mobileHeader?.hasAttribute('inert')).toBe(true);
+    expect(sidebar?.hasAttribute('inert')).toBe(true);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    await user.click(screen.getByRole('button', { name: 'Đóng (Esc)' }));
+
+    const restoredLauncher = await screen.findByRole('button', { name: 'Mở trợ lý Neko' });
+    await waitFor(() => expect(document.activeElement).toBe(restoredLauncher));
+    expect(workspace?.hasAttribute('inert')).toBe(false);
+    expect(document.body.style.overflow).toBe('');
   });
 });

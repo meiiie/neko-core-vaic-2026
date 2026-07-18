@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../app/session';
 import { registerAgentSession } from '../services/agent/agent-lifecycle';
 import {
@@ -42,6 +42,11 @@ interface PendingApproval {
   readonly resolve: (approved: boolean) => void;
 }
 
+interface SessionNotice {
+  readonly kind: 'info' | 'warning';
+  readonly text: string;
+}
+
 const SUGGESTIONS = [
   'Hôm nay nên dạy lại gì cho lớp?',
   'Chẩn đoán của bạn An thế nào?',
@@ -55,6 +60,16 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   bai_duoc_giao: 'Bài đã giao',
   de_xuat_bai_tap: 'Đề xuất bài tập',
   giao_bai: 'Giao bài cho lớp',
+};
+
+const TOOL_ERROR_LABELS: Readonly<Record<string, string>> = {
+  TOOL_TIMEOUT: 'quá thời gian',
+  TOOL_ABORTED: 'đã dừng',
+  TOOL_DENIED: 'không được xác nhận',
+  TOOL_APPROVAL_REQUIRED: 'cần xác nhận',
+  INVALID_TOOL_ARGS: 'yêu cầu chưa hợp lệ',
+  TOOL_NOT_ALLOWED: 'không được phép trong phiên',
+  TOOL_ERROR: 'không khả dụng',
 };
 
 let messageId = 0;
@@ -75,6 +90,23 @@ function displayMessages(snapshot: AgentSessionSnapshot): ChatMessage[] {
 
 function duration(value: number): string {
   return value < 1_000 ? `${Math.round(value)} ms` : `${(value / 1_000).toFixed(1)} s`;
+}
+
+function toolContext(name: string, args: Readonly<Record<string, unknown>>): string {
+  if (name === 'chan_doan_hoc_sinh' && typeof args.hoc_sinh === 'string') {
+    return ` · ${args.hoc_sinh.slice(0, 80)}`;
+  }
+  if (name === 'giai_thich_kien_thuc' && typeof args.kc === 'string') {
+    return ` · ${args.kc.slice(0, 16)}`;
+  }
+  if (name === 'giao_bai' && typeof args.title === 'string') {
+    return ` · ${args.title.slice(0, 80)}`;
+  }
+  return '';
+}
+
+function draftStorageKey(accountId: string): string {
+  return `nekopath:neko-draft:${encodeURIComponent(accountId)}`;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -132,11 +164,16 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const { account } = useSession();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
+  const [draftReady, setDraftReady] = useState(false);
+  const [queuedPrompts, setQueuedPrompts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [busyElapsed, setBusyElapsed] = useState(0);
   const [controllerReady, setControllerReady] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [activity, setActivity] = useState<string | null>(null);
+  const [liveTrace, setLiveTrace] = useState<TraceLine[]>([]);
+  const [sessionNotice, setSessionNotice] = useState<SessionNotice | null>(null);
+  const [announcement, setAnnouncement] = useState('');
   const [approval, setApproval] = useState<PendingApproval | null>(null);
   const [providerId, setProviderId] = useState('local');
   const [chatGpt, setChatGpt] = useState<ChatGptStatus>({
@@ -145,18 +182,86 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   });
   const [chatGptModel, setChatGptModel] = useState('');
   const [browserLogin, setBrowserLogin] = useState<ChatGptBrowserLogin | null>(null);
+  const [mobileModal, setMobileModal] = useState(false);
   const controllerRef = useRef<AgentSessionController | null>(null);
   const turnGenerationRef = useRef(0);
   const stoppedByUserRef = useRef(false);
+  const skipQueueDrainRef = useRef(false);
+  const busyRef = useRef(false);
+  const queuedPromptsRef = useRef<string[]>([]);
   const bufferedTextRef = useRef('');
   const frameRef = useRef<number | null>(null);
   const turnStartedAtRef = useRef(0);
   const approvalRef = useRef<PendingApproval | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const store = useMemo(() => new AgentSessionStore(db), []);
   const provider =
     AGENT_PROVIDERS.find((candidate) => candidate.id === providerId) ?? AGENT_PROVIDERS[0];
+  const providerLabel =
+    providerId === 'local'
+      ? 'Tự động · ưu tiên cục bộ'
+      : providerId === 'web'
+        ? 'Gemma · trên thiết bị'
+        : (chatGpt.models?.find((model) => model.model === chatGptModel)?.displayName ?? 'ChatGPT');
+
+  const replaceQueuedPrompts = useCallback((next: string[]): void => {
+    queuedPromptsRef.current = next;
+    setQueuedPrompts(next);
+  }, []);
+
+  useEffect(() => {
+    const accountId = account?.id;
+    setDraftReady(false);
+    replaceQueuedPrompts([]);
+    if (!accountId) {
+      setInput('');
+      return;
+    }
+    try {
+      setInput(window.sessionStorage.getItem(draftStorageKey(accountId)) ?? '');
+    } catch {
+      setInput('');
+    }
+    setDraftReady(true);
+  }, [account?.id, replaceQueuedPrompts]);
+
+  useEffect(() => {
+    const accountId = account?.id;
+    if (!accountId || !draftReady) return;
+    try {
+      if (input) window.sessionStorage.setItem(draftStorageKey(accountId), input);
+      else window.sessionStorage.removeItem(draftStorageKey(accountId));
+    } catch {
+      // The draft remains in React state when browser storage is unavailable.
+    }
+  }, [account?.id, draftReady, input]);
+
+  useLayoutEffect(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 136)}px`;
+  }, [input]);
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(max-width: 34rem)');
+    if (!media) return;
+    const update = () => setMobileModal(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (!open || !mobileModal) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileModal, open]);
 
   const applyChatGptStatus = useCallback((status: ChatGptStatus): void => {
     setChatGpt(status);
@@ -170,6 +275,21 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       CHATGPT_PROVIDER.setModel(next || null);
       return next;
     });
+  }, []);
+
+  const stop = useCallback((): void => {
+    if (!busyRef.current) return;
+    stoppedByUserRef.current = true;
+    skipQueueDrainRef.current = true;
+    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
+    frameRef.current = null;
+    bufferedTextRef.current = '';
+    approvalRef.current?.resolve(false);
+    approvalRef.current = null;
+    setApproval(null);
+    setStreamText('');
+    setAnnouncement('Đang dừng lượt hiện tại.');
+    controllerRef.current?.abort(new DOMException('Stopped', 'AbortError'));
   }, []);
 
   useEffect(() => {
@@ -220,22 +340,45 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     let unregister: () => void = () => undefined;
     setControllerReady(false);
     setMessages([]);
+    setSessionNotice(null);
     void (async () => {
       const next = new AgentSessionController({
         provider,
         tools: AGENT_TOOLS,
         scope: { accountId, role: 'teacher', classId: '7A' },
       });
-      const saved = await store
-        .load({ accountId, role: 'teacher', classId: '7A' }, provider.id)
-        .catch(() => null);
+      let saved: AgentSessionSnapshot | null = null;
+      try {
+        saved = await store.load({ accountId, role: 'teacher', classId: '7A' }, provider.id);
+      } catch {
+        if (!cancelled) {
+          setSessionNotice({
+            kind: 'warning',
+            text: 'Không thể đọc phiên trước trên thiết bị. Bạn vẫn có thể bắt đầu phiên mới.',
+          });
+        }
+      }
       if (saved) {
         try {
           next.restore(saved);
         } catch {
-          await store
-            .remove({ accountId, role: 'teacher', classId: '7A' }, provider.id)
-            .catch(() => undefined);
+          saved = null;
+          if (!cancelled) {
+            setSessionNotice({
+              kind: 'info',
+              text: 'Neko đã bắt đầu phiên mới vì phiên cũ dùng hợp đồng dữ liệu khác.',
+            });
+          }
+          try {
+            await store.remove({ accountId, role: 'teacher', classId: '7A' }, provider.id);
+          } catch {
+            if (!cancelled) {
+              setSessionNotice({
+                kind: 'warning',
+                text: 'Phiên cũ không hợp lệ và chưa thể dọn khỏi thiết bị.',
+              });
+            }
+          }
         }
       }
       if (cancelled) {
@@ -266,6 +409,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   useEffect(() => {
     if (!open) {
       turnGenerationRef.current += 1;
+      skipQueueDrainRef.current = true;
       controllerRef.current?.abort('dock closed');
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
@@ -274,16 +418,40 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       approvalRef.current?.resolve(false);
       approvalRef.current = null;
       setApproval(null);
+      busyRef.current = false;
       setBusy(false);
       return;
     }
     inputRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        if (busyRef.current) stop();
+        else onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !window.matchMedia?.('(max-width: 34rem)').matches) return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const tabbable = [
+        ...panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), select:not([disabled]), summary',
+        ),
+      ].filter((element) => element.tabIndex >= 0);
+      const first = tabbable[0];
+      const last = tabbable.at(-1);
+      if (!first || !last) return;
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !panel.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !panel.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open, onClose, stop]);
 
   async function refreshChatGpt(): Promise<boolean> {
     try {
@@ -305,6 +473,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   function abandonTurn(reason: string): void {
     turnGenerationRef.current += 1;
     stoppedByUserRef.current = false;
+    skipQueueDrainRef.current = true;
     controllerRef.current?.abort(reason);
     if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
     frameRef.current = null;
@@ -313,11 +482,13 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     approvalRef.current = null;
     setApproval(null);
     setStreamText('');
+    setLiveTrace([]);
+    busyRef.current = false;
     setBusy(false);
   }
 
   async function switchProvider(id: string): Promise<void> {
-    if (busy) abandonTurn('provider switched');
+    if (busyRef.current) abandonTurn('provider switched');
     if (id === 'chatgpt' && !chatGpt.authenticated) {
       const popup = window.open('', '_blank');
       if (popup) popup.opener = null;
@@ -341,16 +512,37 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   async function ask(raw: string): Promise<void> {
     const question = raw.trim();
     const controller = controllerRef.current;
-    if (!question || busy || !controller) return;
+    if (!question || !controller) return;
+    if (busyRef.current) {
+      if (queuedPromptsRef.current.length >= 3) {
+        setSessionNotice({
+          kind: 'warning',
+          text: 'Hàng đợi đã có 3 câu. Hãy chờ hoặc bỏ một câu trước khi thêm.',
+        });
+        setAnnouncement('Hàng đợi Neko đã đầy.');
+        return;
+      }
+      replaceQueuedPrompts([...queuedPromptsRef.current, question]);
+      setSessionNotice({
+        kind: 'info',
+        text: 'Đã xếp câu hỏi. Neko sẽ xử lý ngay sau lượt hiện tại.',
+      });
+      setAnnouncement('Đã xếp câu hỏi vào hàng đợi.');
+      return;
+    }
     const generation = ++turnGenerationRef.current;
     const telemetry = new GenerationTelemetry();
     stoppedByUserRef.current = false;
+    skipQueueDrainRef.current = false;
+    busyRef.current = true;
     bufferedTextRef.current = '';
     turnStartedAtRef.current = performance.now();
     setBusyElapsed(0);
     setMessages((previous) => [...previous, { id: nextId(), role: 'user', text: question }]);
     setBusy(true);
     setStreamText('');
+    setLiveTrace([]);
+    setSessionNotice((current) => (current?.kind === 'warning' ? current : null));
     const selectedChatGptModel = chatGpt.models?.find(
       (model) => model.model === chatGptModel,
     )?.displayName;
@@ -363,19 +555,31 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     const beforeCompactions = controller.snapshot().compactionCount;
     const onTrace = (event: AgentTraceEvent) => {
       if (generation !== turnGenerationRef.current) return;
-      if (event.kind === 'tool_call') {
+      if (event.kind === 'step') {
+        setActivity(
+          event.index === 1
+            ? 'Đang xác định dữ liệu cần kiểm tra…'
+            : `Đang đối chiếu thêm dữ liệu · bước ${event.index}/${event.max}`,
+        );
+      } else if (event.kind === 'tool_call') {
         setActivity('Đang kiểm tra dữ liệu lớp…');
         trace.push({
           kind: 'source',
-          text: `Kiểm tra ${TOOL_LABELS[event.name] ?? 'dữ liệu hệ thống'}`,
+          text: `Kiểm tra ${TOOL_LABELS[event.name] ?? 'dữ liệu hệ thống'}${toolContext(event.name, event.args)}`,
         });
+        setLiveTrace([...trace].slice(-4));
       } else if (event.kind === 'tool_result') {
+        const resultLabel = event.ok
+          ? 'đã đối chiếu'
+          : (TOOL_ERROR_LABELS[event.errorCode ?? ''] ?? 'không khả dụng');
         trace.push({
           kind: event.ok ? 'source' : 'note',
-          text: `${TOOL_LABELS[event.name] ?? 'Dữ liệu hệ thống'} · ${event.ok ? 'đã đối chiếu' : 'không khả dụng'}`,
+          text: `${TOOL_LABELS[event.name] ?? 'Dữ liệu hệ thống'} · ${resultLabel} · ${duration(event.durationMs)}`,
         });
+        setLiveTrace([...trace].slice(-4));
       } else if (event.kind === 'note') {
         trace.push({ kind: 'note', text: event.text });
+        setLiveTrace([...trace].slice(-4));
       }
     };
     try {
@@ -421,7 +625,15 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
           text: `Đã nén ngữ cảnh theo ngân sách token · lần ${snapshot.compactionCount}.`,
         });
       }
-      await store.save(snapshot, provider.id).catch(() => undefined);
+      try {
+        await store.save(snapshot, provider.id);
+        setSessionNotice(null);
+      } catch {
+        setSessionNotice({
+          kind: 'warning',
+          text: 'Neko đã trả lời nhưng chưa lưu được phiên trên thiết bị.',
+        });
+      }
       if (generation !== turnGenerationRef.current) return;
       const metrics = telemetry.finish(result.displayUsage);
       setMessages((previous) => [
@@ -435,7 +647,8 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
           fallback: result.fallback,
         },
       ]);
-      setActivity(result.fallback ? 'Đã trả lời bằng dữ liệu cục bộ.' : null);
+      setActivity(null);
+      setAnnouncement('Neko đã trả lời.');
     } catch (error) {
       if (generation !== turnGenerationRef.current) return;
       if (stoppedByUserRef.current) {
@@ -444,7 +657,9 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
           { id: nextId(), role: 'assistant', text: 'Đã dừng lượt đang xử lý.' },
         ]);
         setActivity('Đã dừng.');
+        setAnnouncement('Đã dừng lượt hiện tại.');
       } else if (!isAbortError(error)) {
+        skipQueueDrainRef.current = true;
         setMessages((previous) => [
           ...previous,
           {
@@ -454,6 +669,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
           },
         ]);
         setActivity('Có lỗi khi xử lý.');
+        setAnnouncement('Neko gặp lỗi khi xử lý.');
       }
     } finally {
       if (generation === turnGenerationRef.current) {
@@ -464,43 +680,63 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         frameRef.current = null;
         bufferedTextRef.current = '';
         setStreamText('');
+        setLiveTrace([]);
+        busyRef.current = false;
         setBusy(false);
         inputRef.current?.focus();
+        if (!skipQueueDrainRef.current && queuedPromptsRef.current.length > 0) {
+          window.setTimeout(runNextQueued, 0);
+        }
       }
     }
   }
 
-  function stop(): void {
-    stoppedByUserRef.current = true;
-    if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
-    bufferedTextRef.current = '';
-    approvalRef.current?.resolve(false);
-    approvalRef.current = null;
-    setApproval(null);
-    setStreamText('');
-    controllerRef.current?.abort(new DOMException('Stopped', 'AbortError'));
+  function runNextQueued(): void {
+    if (busyRef.current || queuedPromptsRef.current.length === 0) return;
+    const [next, ...remaining] = queuedPromptsRef.current;
+    replaceQueuedPrompts(remaining);
+    void ask(next);
   }
 
   if (!open) return null;
   const greetName = account?.shortName ?? 'bạn';
 
   return (
-    <aside className="neko-panel" role="complementary" aria-label="Neko — trợ lý lớp học">
+    <aside
+      ref={panelRef}
+      className="neko-panel"
+      role={mobileModal ? 'dialog' : 'complementary'}
+      aria-modal={mobileModal || undefined}
+      aria-label="Neko — trợ lý lớp học"
+    >
       <header className="neko-panel-head">
         <span className="neko-mark" aria-hidden="true">
           ✦
         </span>
         <div>
           <strong>Neko</strong>
-          <small>Trợ lý lớp học · dựa trên dữ liệu hệ thống</small>
+          <small>Lớp 7A · dữ liệu hệ thống là nguồn sự thật</small>
         </div>
         <button type="button" className="dock-close" onClick={onClose} aria-label="Đóng (Esc)">
           ×
         </button>
       </header>
 
-      <div className="neko-scroll" ref={logRef} role="log" aria-live="polite">
+      <p className="visually-hidden" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </p>
+
+      <div
+        className="neko-scroll"
+        ref={logRef}
+        role="log"
+        aria-live="off"
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const selection = window.getSelection();
+          if (!selection || selection.isCollapsed) inputRef.current?.focus();
+        }}
+      >
         {messages.length === 0 ? (
           <div className="neko-hello">
             <h2>Chào {greetName}</h2>
@@ -522,6 +758,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
         {messages.map((message) => (
           <div key={message.id} className={`neko-msg neko-msg--${message.role}`}>
+            <span className="neko-role">{message.role === 'user' ? 'Bạn' : 'Neko'}</span>
             <p>{message.text}</p>
             {message.metrics ? (
               <Metrics metrics={message.metrics} fallback={message.fallback} />
@@ -543,10 +780,21 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
         {busy ? (
           <div className="neko-msg neko-msg--assistant neko-msg--live">
-            <p>
-              {streamText ||
-                `${activity || 'Đang kiểm tra dữ liệu lớp…'}${busyElapsed > 0 ? ` · ${busyElapsed}s` : ''}`}
-            </p>
+            <div className="neko-live-status" role="status" aria-live="polite" aria-atomic="true">
+              <span className="neko-pulse" aria-hidden="true" />
+              <span>{activity || 'Đang kiểm tra dữ liệu lớp…'}</span>
+              {busyElapsed > 0 ? <time>{busyElapsed}s</time> : null}
+            </div>
+            {liveTrace.length > 0 ? (
+              <ul className="neko-live-trace" aria-label="Các bước vừa thực hiện">
+                {liveTrace.map((line, index) => (
+                  <li key={`${line.text}-${index}`} data-kind={line.kind}>
+                    {line.text}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {streamText ? <p className="neko-stream-text">{streamText}</p> : null}
           </div>
         ) : null}
         {approval ? (
@@ -603,6 +851,16 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         ) : null}
       </div>
 
+      {sessionNotice ? (
+        <p
+          className="neko-notice"
+          data-kind={sessionNotice.kind}
+          role={sessionNotice.kind === 'warning' ? 'alert' : 'status'}
+        >
+          {sessionNotice.text}
+        </p>
+      ) : null}
+
       {browserLogin ? (
         <div className="neko-login" role="status">
           <span>Phiên đăng nhập ChatGPT đang chờ hoàn tất.</span>
@@ -621,73 +879,133 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         </div>
       ) : null}
 
+      {queuedPrompts.length > 0 ? (
+        <section className="neko-queue" aria-label="Câu hỏi đang chờ">
+          <div>
+            <strong>{queuedPrompts.length}/3 câu đang chờ</strong>
+            {!busy ? (
+              <button type="button" onClick={runNextQueued}>
+                Tiếp tục
+              </button>
+            ) : null}
+          </div>
+          <ol>
+            {queuedPrompts.map((prompt, index) => (
+              <li key={`${prompt}-${index}`}>
+                <span>{prompt}</span>
+                <button
+                  type="button"
+                  aria-label={`Bỏ câu hỏi chờ: ${prompt}`}
+                  onClick={() =>
+                    replaceQueuedPrompts(
+                      queuedPromptsRef.current.filter((_, itemIndex) => itemIndex !== index),
+                    )
+                  }
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
       <form
         className="neko-input-row"
         onSubmit={(event) => {
           event.preventDefault();
-          const value = input;
+          const value = input.trim();
+          if (!value) return;
+          if (busyRef.current && queuedPromptsRef.current.length >= 3) {
+            setSessionNotice({
+              kind: 'warning',
+              text: 'Hàng đợi đã có 3 câu. Nội dung bạn đang gõ vẫn được giữ lại.',
+            });
+            return;
+          }
           setInput('');
           void ask(value);
         }}
       >
-        <input
+        <textarea
           ref={inputRef}
           autoComplete="off"
-          disabled={busy || !controllerReady}
+          disabled={!controllerReady}
           value={input}
           onChange={(event) => setInput(event.target.value)}
-          placeholder="Hỏi về lớp học…"
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }}
+          placeholder={busy ? 'Nhập câu tiếp theo để xếp hàng…' : 'Hỏi về lớp học…'}
           aria-label="Câu hỏi cho Neko"
+          rows={1}
         />
-        {busy ? (
-          <button className="button-secondary" type="button" onClick={stop}>
-            Dừng
-          </button>
-        ) : (
+        <div className="neko-input-actions">
+          {busy ? (
+            <button className="button-secondary" type="button" onClick={stop}>
+              Dừng
+            </button>
+          ) : null}
           <button
             className="button-primary"
             type="submit"
             disabled={!controllerReady || !input.trim()}
           >
-            Gửi
+            {busy ? 'Xếp hàng' : 'Gửi'}
           </button>
-        )}
+        </div>
       </form>
 
       <footer className="neko-foot">
-        <label>
-          <span>Nguồn AI</span>
-          <select
-            value={providerId}
-            onChange={(event) => void switchProvider(event.target.value)}
-            aria-label="Chọn nguồn AI cho Neko"
-          >
-            <option value="local">Local · Ollama</option>
-            <option value="web">Gemma · trên thiết bị</option>
-            <option value="chatgpt">ChatGPT{chatGpt.authenticated ? ' · đã kết nối' : ''}</option>
-          </select>
-        </label>
-        {providerId === 'chatgpt' && chatGpt.authenticated && (chatGpt.models?.length ?? 0) > 0 ? (
-          <label>
-            <span>Mô hình ChatGPT</span>
-            <select
-              value={chatGptModel}
-              onChange={(event) => {
-                const model = event.target.value;
-                setChatGptModel(model);
-                CHATGPT_PROVIDER.setModel(model);
-                setActivity(`Đã chọn ${event.target.selectedOptions[0]?.textContent ?? model}.`);
-              }}
-              aria-label="Chọn mô hình ChatGPT"
-            >
-              {chatGpt.models?.map((model) => (
-                <option key={model.id} value={model.model} title={model.description}>
-                  {model.displayName}
+        <details className="neko-settings">
+          <summary>
+            <span>Tùy chọn AI</span>
+            <small>{providerLabel}</small>
+          </summary>
+          <div>
+            <label>
+              <span>Nguồn AI</span>
+              <select
+                value={providerId}
+                onChange={(event) => void switchProvider(event.target.value)}
+                aria-label="Chọn nguồn AI cho Neko"
+              >
+                <option value="local">Tự động · ưu tiên cục bộ</option>
+                <option value="web">Gemma · trên thiết bị</option>
+                <option value="chatgpt">
+                  ChatGPT{chatGpt.authenticated ? ' · đã kết nối' : ''}
                 </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+              </select>
+            </label>
+            {providerId === 'chatgpt' &&
+            chatGpt.authenticated &&
+            (chatGpt.models?.length ?? 0) > 0 ? (
+              <label>
+                <span>Mô hình ChatGPT</span>
+                <select
+                  value={chatGptModel}
+                  onChange={(event) => {
+                    const model = event.target.value;
+                    setChatGptModel(model);
+                    CHATGPT_PROVIDER.setModel(model);
+                    setActivity(
+                      `Đã chọn ${event.target.selectedOptions[0]?.textContent ?? model}.`,
+                    );
+                  }}
+                  aria-label="Chọn mô hình ChatGPT"
+                >
+                  {chatGpt.models?.map((model) => (
+                    <option key={model.id} value={model.model} title={model.description}>
+                      {model.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
+        </details>
       </footer>
     </aside>
   );
