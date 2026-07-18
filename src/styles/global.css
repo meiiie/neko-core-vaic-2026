@@ -1241,6 +1241,13 @@ details li {
   padding: var(--s-4) 0;
 }
 
+.path-steps li[data-current] {
+  margin-inline: calc(var(--s-3) * -1);
+  padding-inline: var(--s-3);
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+}
+
 .path-steps li:not(:last-child)::after {
   position: absolute;
   top: 3.35rem;
@@ -1273,6 +1280,32 @@ details li {
 .path-steps small {
   margin-bottom: var(--s-1);
   color: var(--muted);
+}
+
+.assessment-purpose {
+  max-width: 48rem;
+  margin: calc(var(--s-3) * -1) 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.offline-plan-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-5);
+}
+
+.offline-plan-panel h2,
+.offline-plan-panel p:last-child {
+  margin-bottom: 0;
+}
+
+.offline-video-option {
+  display: block;
+  margin-top: var(--s-2);
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .audit-grid {
@@ -5841,6 +5874,39 @@ html:has(.question-selection-actions) {
   font-size: 0.875rem;
   font-weight: 700;
   white-space: nowrap;
+}
+
+@media (max-width: 34rem) {
+  .hero-label-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--s-1);
+  }
+
+  .path-steps li,
+  .path-steps li:has(.step-lesson-link) {
+    grid-template-columns: 2.75rem minmax(0, 1fr);
+    gap: var(--s-3);
+  }
+
+  .step-index {
+    width: 2.75rem;
+  }
+
+  .path-steps li:not(:last-child)::after {
+    left: 1.35rem;
+  }
+
+  .path-steps .step-lesson-link {
+    grid-column: 2;
+    justify-self: start;
+    white-space: normal;
+  }
+
+  .offline-plan-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 /* Sign-in status states */

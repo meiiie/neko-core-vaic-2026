@@ -50,7 +50,7 @@ function ResourceRow({ resource }: { readonly resource: ResourceRecord }) {
       if (offline.url) URL.revokeObjectURL(offline.url);
       setOffline({ cached: false, url: null });
     } else {
-      const saved = await saveResourceOffline(resource.id);
+      const saved = await saveResourceOffline(resource.id, resource.sha256);
       const url = saved === 'SAVED' ? await cachedResourceObjectUrl(resource.id) : null;
       setOffline({ cached: url !== null, url });
     }
@@ -66,7 +66,13 @@ function ResourceRow({ resource }: { readonly resource: ResourceRecord }) {
           <strong>{resource.title}</strong>
           <small>
             {resource.kind === 'VIDEO' ? 'Video bài giảng' : 'Tài liệu PDF'} ·{' '}
-            {formatBytes(resource.byteSize)}
+            {resource.role === 'EXPLAIN'
+              ? 'Giải thích'
+              : resource.role === 'WORKED_EXAMPLE'
+                ? 'Ví dụ có lời giải'
+                : 'Tóm tắt'}{' '}
+            · {formatBytes(resource.byteSize)}
+            {resource.durationSeconds ? ` · ${Math.ceil(resource.durationSeconds / 60)} phút` : ''}
             {resource.uploadedByName ? ` · ${resource.uploadedByName}` : ''}
           </small>
         </span>
@@ -92,7 +98,16 @@ function ResourceRow({ resource }: { readonly resource: ResourceRecord }) {
         </span>
       </div>
       {resource.kind === 'VIDEO' ? (
-        <video className="resource-video" controls preload="none" src={mediaUrl} />
+        <>
+          <video className="resource-video" controls preload="none" src={mediaUrl} />
+          <details>
+            <summary>Transcript video</summary>
+            <p>
+              {resource.transcriptVi ??
+                'Video này chưa có transcript. Giáo viên cần bổ sung trước khi tuyên bố hỗ trợ tiếp cận đầy đủ.'}
+            </p>
+          </details>
+        </>
       ) : null}
     </li>
   );
@@ -100,13 +115,23 @@ function ResourceRow({ resource }: { readonly resource: ResourceRecord }) {
 
 export function LessonResources({ kcId }: { readonly kcId: string }) {
   const resources = useResourcesForKc(kcId);
-  if (!resources || resources.length === 0) return null;
+  const visibleResources = resources?.filter(
+    (resource) => resource.status === 'PUBLISHED' && resource.reviewState === 'ACCEPTED',
+  );
+  if (!visibleResources || visibleResources.length === 0) {
+    return (
+      <section className="summary-panel lesson-panel" aria-labelledby="lesson-resources-empty">
+        <h2 id="lesson-resources-empty">Video và tài liệu PDF</h2>
+        <p>Chưa có video/PDF đã duyệt cho bước này. Em vẫn có thể học bằng tóm tắt chữ ở trên.</p>
+      </section>
+    );
+  }
 
   return (
     <section className="summary-panel lesson-panel" aria-labelledby="lesson-resources">
       <h2 id="lesson-resources">Video và tài liệu của bài</h2>
       <ul className="resource-list">
-        {resources.map((resource) => (
+        {visibleResources.map((resource) => (
           <ResourceRow key={resource.id} resource={resource} />
         ))}
       </ul>

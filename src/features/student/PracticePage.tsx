@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { deriveStudentLearningPlan } from '../../app/adapters/student-learning-plan';
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
@@ -9,11 +10,11 @@ import {
   toDomainEvents,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
-import { nextPracticeQuestion } from '../../app/adapters/practice-selection';
+import { practiceQuestionForPhase } from '../../app/adapters/practice-selection';
 import { reviewRecommendation } from '../../app/adapters/review-selection';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
-import { type PracticeQuestion } from '../../content';
+import { curriculumCatalogDraft, type PracticeQuestion } from '../../content';
 import { useLesson } from '../../services/lessons';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
 import { recordAnswerWithReview } from '../../services/sync';
@@ -54,7 +55,20 @@ export function PracticePage() {
     localRecords === undefined || !learnerContext
       ? null
       : diagnoseHero(learnerContext, localRecords);
-  const rootKcId = result?.status === 'DIAGNOSED' ? result.rootKcId : undefined;
+  const learningPlan =
+    result && localRecords
+      ? deriveStudentLearningPlan({
+          diagnosis: result,
+          catalog: curriculumCatalogDraft,
+          records: localRecords,
+        })
+      : null;
+  const currentStep =
+    learningPlan?.currentStepIndex === undefined
+      ? undefined
+      : learningPlan.steps[learningPlan.currentStepIndex];
+  const rootKcId =
+    currentStep?.kcId ?? (result?.status === 'DIAGNOSED' ? result.rootKcId : undefined);
   const rootLesson = useLesson(rootKcId ?? '');
   const explainKey = rootKcId ? `${learnerId}-${rootKcId}` : null;
   const explain = explainState && explainState.key === explainKey ? explainState.reply : null;
@@ -93,7 +107,12 @@ export function PracticePage() {
 
   // During feedback the answered question stays frozen on screen; the live
   // re-diagnosed "next" question only takes over after Tiếp tục/Thử lại.
-  const upNext = rootKcId ? nextPracticeQuestion(rootKcId, localRecords) : undefined;
+  const upNext =
+    rootKcId &&
+    currentStep &&
+    (currentStep.phase === 'GUIDED_PRACTICE' || currentStep.phase === 'POST_CHECK')
+      ? practiceQuestionForPhase(rootKcId, currentStep.phase)
+      : undefined;
   const question = phase === 'feedback' && feedback?.question ? feedback.question : upNext;
   const transferQuestion =
     result.status === 'FAST_PATH' && result.nextItemId
@@ -118,6 +137,11 @@ export function PracticePage() {
       answered?.choices.find((choice) => choice.id === selectedChoiceId)?.misconceptionTag ??
       questionForItem(target.itemId)?.choices.find((choice) => choice.id === selectedChoiceId)
         ?.misconceptionId;
+    const answerKind = target.itemId.endsWith('-TRANSFER')
+      ? 'ANSWER'
+      : currentStep?.phase === 'POST_CHECK'
+        ? 'POST_CHECK_ANSWER'
+        : 'PRACTICE_ANSWER';
     try {
       const record = buildLocalAnswerRecord(
         activeLearnerContext,
@@ -126,8 +150,15 @@ export function PracticePage() {
         correct,
         localRecords.length,
         misconceptionId
-          ? { misconceptionId, methodValidity: 'INVALID' }
-          : { methodValidity: 'UNKNOWN' },
+          ? {
+              misconceptionId,
+              methodValidity: 'INVALID',
+              kind: answerKind,
+            }
+          : {
+              methodValidity: 'UNKNOWN',
+              kind: answerKind,
+            },
       );
       const kcId = kcIdForItem(record.itemId);
       if (!kcId) throw new Error('UNKNOWN_REVIEW_KC');
@@ -149,6 +180,23 @@ export function PracticePage() {
   }
 
   // ---------- Completion / no-practice states ----------
+
+  if (currentStep?.phase === 'EXPLAIN') {
+    return (
+      <div className="page-stack">
+        <header className="page-heading">
+          <p className="eyebrow">
+            Bước {learningPlan!.currentStepIndex! + 1}/{learningPlan!.steps.length}
+          </p>
+          <h1>Xem hoặc đọc trước khi luyện</h1>
+          <p>{currentStep.reasonVi}</p>
+        </header>
+        <Link className="button-primary" to={currentStep.nextHref}>
+          {currentStep.nextActionVi}
+        </Link>
+      </div>
+    );
+  }
 
   if (result.status === 'NEEDS_MORE_EVIDENCE') {
     return (
@@ -295,11 +343,19 @@ export function PracticePage() {
     <div className="assessment-page">
       <header className="assessment-header">
         <div>
-          <p className="eyebrow">Luyện tập · {kcName(rootKcId)}</p>
-          <h1>Lấp lỗ hổng: {kcName(rootKcId)}</h1>
+          <p className="eyebrow">
+            {currentStep?.phase === 'POST_CHECK' ? 'Kiểm tra lại độc lập' : 'Luyện có gợi ý'} ·{' '}
+            {kcName(rootKcId)}
+          </p>
+          <h1>
+            {currentStep?.phase === 'POST_CHECK'
+              ? 'Kiểm tra phần vừa học'
+              : `Củng cố: ${kcName(rootKcId)}`}
+          </h1>
           <p>
-            Trả lời đúng vài câu liên tiếp để chứng minh em đã vững — hệ thống sẽ tự chuyển sang
-            bước tiếp theo.
+            {currentStep?.phase === 'POST_CHECK'
+              ? 'Câu này không có gợi ý. Trả lời đúng mới hoàn thành bước và chuyển tiếp.'
+              : 'Em có thể dùng gợi ý. Làm đúng câu luyện sẽ mở một câu kiểm tra lại độc lập.'}
             {rootLesson?.lesson ? (
               <>
                 {' '}
@@ -398,10 +454,14 @@ export function PracticePage() {
               ) : (
                 <>
                   {selectedChoice?.noteVi ? <p>{selectedChoice.noteVi}</p> : null}
-                  <div className="hint-ladder">
-                    <p className="eyebrow">Gợi ý {hintLevel}/3</p>
-                    <p>{question.hints[hintLevel - 1]}</p>
-                  </div>
+                  {currentStep?.phase === 'POST_CHECK' ? (
+                    <p>Xem lại tóm tắt rồi thử một câu kiểm tra mới; lượt này không mở gợi ý.</p>
+                  ) : (
+                    <div className="hint-ladder">
+                      <p className="eyebrow">Gợi ý {hintLevel}/3</p>
+                      <p>{question.hints[hintLevel - 1]}</p>
+                    </div>
+                  )}
                 </>
               )}
               <button className="button-primary" type="button" onClick={continueSession}>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { storedHeroRecords } from '../../test/hero-evidence';
@@ -31,17 +31,27 @@ vi.mock('../../app/adapters/student-context', () => ({
 vi.mock('../../services/sync', () => ({ recordAnswerWithReview: vi.fn() }));
 
 describe('adaptive student check-in', () => {
-  it('lets a diagnosed learner start a bounded reassessment round', () => {
+  it('returns a diagnosed learner to the current learning step', () => {
     render(
       <MemoryRouter>
         <LearnPage />
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole('link', { name: 'Xem lộ trình của tôi' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Kiểm tra lại để cập nhật lộ trình' }));
+    expect(screen.getByRole('link', { name: 'Mở tóm tắt 2 phút' }).getAttribute('href')).toBe(
+      '/student/lesson/K02',
+    );
+    expect(screen.queryByRole('button', { name: 'Kiểm tra lại phần đã học' })).toBeNull();
+  });
+
+  it('opens a bounded reassessment only from an explicit review link', () => {
+    render(
+      <MemoryRouter initialEntries={['/student/check-in?mode=review']}>
+        <LearnPage />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByRole('heading', { name: /Phân số nào bằng 2\/3/ })).toBeTruthy();
-    expect(screen.getAllByText('Câu 1')).toHaveLength(2);
+    expect(screen.getByText(/không tính điểm.*tối đa 3 câu/i)).toBeTruthy();
   });
 });

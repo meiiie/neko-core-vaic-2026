@@ -1,27 +1,18 @@
 import type { CurriculumGraph, Item } from '../domain/index.ts';
+import { contentGraphDraft } from './curriculum.ts';
 import { PRACTICE_QUESTIONS } from './hero-practice.ts';
+import { toSupportedDomainGraph } from './schema.ts';
 
 export { eventsFor, HERO_EVENTS, type HeroAnswer } from './hero-events.ts';
 
-export const HERO_GRAPH: CurriculumGraph = {
-  version: 'hero-demo-v2-unreviewed',
-  nodes: [
-    { id: 'K01', name: 'Ý nghĩa phân số' },
-    { id: 'K02', name: 'Phân số bằng nhau' },
-    { id: 'K07', name: 'Ý nghĩa và thứ tự của tỉ số' },
-    { id: 'K08', name: 'Các tỉ số bằng nhau' },
-    { id: 'K09', name: 'Định nghĩa tỉ lệ thức' },
-    { id: 'K10', name: 'Tìm giá trị chưa biết trong tỉ lệ thức' },
-  ],
-  edges: [
-    { from: 'K01', to: 'K02' },
-    { from: 'K01', to: 'K07' },
-    { from: 'K02', to: 'K08' },
-    { from: 'K07', to: 'K08' },
-    { from: 'K08', to: 'K09' },
-    { from: 'K09', to: 'K10' },
-  ],
-};
+/** KCs with complete synthetic questions in the current demo slice. */
+export const HERO_SUPPORTED_KC_IDS = ['K01', 'K02', 'K07', 'K08', 'K09', 'K10'] as const;
+export const HERO_CHECK_IN_QUESTION_LIMIT = 3;
+
+export const HERO_GRAPH: CurriculumGraph = toSupportedDomainGraph(
+  contentGraphDraft,
+  HERO_SUPPORTED_KC_IDS,
+);
 
 function checkItems(kcId: string): Item[] {
   return [`${kcId}-CHECK-1`, `${kcId}-CHECK-2`].map((id) => {
@@ -43,7 +34,7 @@ function checkItems(kcId: string): Item[] {
 }
 
 export const HERO_ITEMS: Item[] = [
-  ...HERO_GRAPH.nodes.flatMap((node) => checkItems(node.id)),
+  ...HERO_SUPPORTED_KC_IDS.flatMap((kcId) => checkItems(kcId)),
   {
     id: 'K02-DIAGNOSTIC',
     kcIds: ['K02'],
@@ -134,4 +125,7 @@ export const HERO_QUESTIONS: readonly HeroQuestion[] = [
   },
 ];
 
-export const HERO_DEMO_CONFIG = { allowUnreviewedContent: true } as const;
+export const HERO_DEMO_CONFIG = {
+  allowUnreviewedContent: true,
+  maxDiagnosticItems: HERO_CHECK_IN_QUESTION_LIMIT,
+} as const;

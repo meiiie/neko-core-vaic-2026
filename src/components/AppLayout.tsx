@@ -19,9 +19,7 @@ interface NavItem {
 const NAVIGATION: Record<Role, readonly NavItem[]> = {
   STUDENT: [
     { to: '/student', label: 'Hôm nay', end: true },
-    { to: '/student/check-in', label: 'Kiểm tra thích ứng' },
-    { to: '/student/path', label: 'Lộ trình học' },
-    { to: '/student/practice', label: 'Luyện tập' },
+    { to: '/student/path', label: 'Kế hoạch của em' },
     { to: '/student/assignments', label: 'Bài được giao' },
   ],
   TEACHER: [

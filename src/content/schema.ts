@@ -1,5 +1,20 @@
 import { z } from 'zod';
-import { topologicalOrder, type CurriculumGraph } from '../domain';
+import { topologicalOrder, type CurriculumGraph, type ReviewState } from '../domain';
+
+export interface CurriculumAnchorView {
+  readonly grade: number;
+  readonly outcomeSummaryVi: string;
+  readonly sourceId: string;
+  readonly reviewState: ReviewState;
+}
+
+export interface CurriculumNodeView {
+  readonly id: string;
+  readonly titleVi: string;
+  readonly observableBehaviorVi: string;
+  readonly anchors: readonly CurriculumAnchorView[];
+  readonly reviewState: ReviewState;
+}
 
 const reviewSchema = z
   .object({
@@ -132,4 +147,41 @@ export function toDomainGraph(content: ContentGraph): CurriculumGraph {
     nodes: content.nodes.map((node) => ({ id: node.id, name: node.nameVi })),
     edges: content.edges.map(({ from, to }) => ({ from, to })),
   };
+}
+
+export function toSupportedDomainGraph(
+  content: ContentGraph,
+  supportedKcIds: readonly string[],
+): CurriculumGraph {
+  const supported = new Set(supportedKcIds);
+  const unknownIds = supportedKcIds.filter(
+    (kcId) => !content.nodes.some((node) => node.id === kcId),
+  );
+  if (unknownIds.length > 0) {
+    throw new Error(`Unknown supported KC ids: ${unknownIds.join(', ')}`);
+  }
+  return {
+    version: content.version,
+    nodes: content.nodes
+      .filter((node) => supported.has(node.id))
+      .map((node) => ({ id: node.id, name: node.nameVi })),
+    edges: content.edges
+      .filter((edge) => supported.has(edge.from) && supported.has(edge.to))
+      .map(({ from, to }) => ({ from, to })),
+  };
+}
+
+export function toCurriculumCatalog(content: ContentGraph): readonly CurriculumNodeView[] {
+  return content.nodes.map((node) => ({
+    id: node.id,
+    titleVi: node.nameVi,
+    observableBehaviorVi: node.observableBehaviorVi,
+    anchors: node.curriculumAnchors.map((anchor) => ({
+      grade: anchor.grade,
+      outcomeSummaryVi: anchor.summaryVi,
+      sourceId: anchor.sourceId,
+      reviewState: node.review.state,
+    })),
+    reviewState: node.review.state,
+  }));
 }

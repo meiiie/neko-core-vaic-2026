@@ -261,6 +261,21 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     expect(toDomainEvents([broken])).toEqual([]);
   });
 
+  it('keeps guided practice and resource views out of mastery evidence', () => {
+    const practice = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-CHECK-1', 'a', true, 0, {
+      kind: 'PRACTICE_ANSWER',
+    });
+    const resource = {
+      ...practice,
+      id: 'resource-view',
+      itemId: 'text:K02',
+      kind: 'RESOURCE_VIEWED',
+      payload: '{"kcId":"K02"}',
+    };
+
+    expect(toDomainEvents([practice, resource])).toEqual([]);
+  });
+
   it('feeds local answers into a fresh deterministic diagnosis', () => {
     const existing = storedHeroRecords('chi');
     const first = buildLocalAnswerRecord(CHI_CONTEXT, 'K02-DIAGNOSTIC', 'a', true, existing.length);

@@ -1,138 +1,244 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useSession } from '../../app/session';
+import {
+  deriveStudentLearningPlan,
+  gradeBandVi,
+  type StudentStepPhase,
+} from '../../app/adapters/student-learning-plan';
 import {
   diagnoseHero,
   DISPOSITION_LABELS,
-  HERO_TARGET_KC_ID,
   kcName,
-  misconceptionName,
   REASON_LABELS,
   STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
-import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { reviewRecommendation, REVIEW_REASON_LABELS } from '../../app/adapters/review-selection';
+import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
+import { curriculumCatalogDraft } from '../../content';
 import { useLessonKcIds } from '../../services/lessons';
+import { useResourceList } from '../../services/resources';
+import { formatBytes } from '../../services/resources';
+import { buildOfflinePlanManifest, downloadOfflinePlan } from '../../services/offline-plan';
+
+const PHASE_LABELS: Readonly<Record<StudentStepPhase, string>> = {
+  EXPLAIN: 'Xem hoặc đọc',
+  GUIDED_PRACTICE: 'Luyện có gợi ý',
+  POST_CHECK: 'Kiểm tra lại',
+  DONE: 'Đã hoàn thành',
+};
 
 export function PathPage() {
   const { account } = useSession();
   const learnerContext = studentContextForAccount(account);
-  const lessonKcIds = useLessonKcIds();
   const {
     records: localRecords,
     migrationError,
     retryMigration,
   } = useStudentEvents(learnerContext);
+  const lessonKcIds = useLessonKcIds();
+  const resources = useResourceList();
+  const [includeVideo, setIncludeVideo] = useState(true);
+  const [offlineState, setOfflineState] = useState<
+    'IDLE' | 'DOWNLOADING' | 'READY' | 'PARTIAL' | 'NO_SPACE'
+  >('IDLE');
+  const [downloadedBytes, setDownloadedBytes] = useState(0);
 
-  if (migrationError) {
-    return <StudentDataFailure onRetry={retryMigration} />;
-  }
-
+  if (migrationError) return <StudentDataFailure onRetry={retryMigration} />;
   if (localRecords === undefined || !learnerContext) {
-    return <div className="page-loading" aria-label="Đang tải lộ trình" />;
+    return <div className="page-loading" aria-label="Đang tải kế hoạch" />;
   }
 
-  const result = diagnoseHero(learnerContext, localRecords);
+  const diagnosis = diagnoseHero(learnerContext, localRecords);
+  const plan = deriveStudentLearningPlan({
+    diagnosis,
+    catalog: curriculumCatalogDraft,
+    records: localRecords,
+    resources: resources ?? [],
+  });
+  const currentStep =
+    plan.currentStepIndex === undefined ? undefined : plan.steps[plan.currentStepIndex];
   const review = reviewRecommendation(
     learnerContext,
-    result,
+    diagnosis,
     localRecords,
     new Date().toISOString(),
   );
-  const supported = result.status === 'DIAGNOSED' || result.status === 'FAST_PATH';
+  const offlineManifest = buildOfflinePlanManifest(plan, resources ?? [], { includeVideo });
+
+  if (plan.status === 'NEEDS_CHECK_IN' || plan.status === 'TEACHER_REVIEW') {
+    const canCheckIn = plan.status === 'NEEDS_CHECK_IN';
+    return (
+      <div className="page-stack">
+        <header className="page-heading">
+          <p className="eyebrow">Kế hoạch của em</p>
+          <h1>Chưa tạo kế hoạch học</h1>
+          <p>
+            {canCheckIn
+              ? 'Cần thêm một vài câu trả lời để phân biệt đúng phần kiến thức đang cản em.'
+              : 'Bằng chứng hiện tại chưa đủ an toàn; giáo viên cần xem lại trước khi chọn phần ôn.'}
+          </p>
+        </header>
+        {canCheckIn ? (
+          <Link className="button-primary" to="/student/check-in">
+            Trả lời câu phân biệt tiếp theo
+          </Link>
+        ) : (
+          <p role="status" className="decision-panel decision-panel--review">
+            Đã đưa vào danh sách để giáo viên xem xét. NekoPath không tự ép một nguyên nhân gốc.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="page-stack">
       <header className="page-heading page-heading--split">
         <div>
-          <p className="eyebrow">Hồ sơ học tập · Toán 7</p>
-          <h1>Lộ trình của {account?.shortName}</h1>
-          <p>Cập nhật từ các câu trả lời đã lưu trên thiết bị này.</p>
+          <p className="eyebrow">Toán 7 · Cập nhật từ thiết bị này</p>
+          <h1>Kế hoạch học của {account?.shortName}</h1>
+          <p>Mỗi bước chỉ hoàn thành sau một câu kiểm tra lại độc lập.</p>
         </div>
-        <span
-          className={`status-label ${supported ? 'status-label--evidence' : 'status-label--review'}`}
-        >
-          {STATUS_LABELS[result.status]}
+        <span className="status-label status-label--evidence">
+          {plan.status === 'FAST_PATH'
+            ? 'Không cần học lại'
+            : plan.status === 'COMPLETED'
+              ? 'Đã hoàn thành'
+              : `Bước ${plan.currentStepIndex! + 1}/${plan.steps.length}`}
         </span>
       </header>
 
-      {result.status === 'NEEDS_MORE_EVIDENCE' ? (
-        <section className="decision-panel decision-panel--review">
+      {currentStep ? (
+        <section className="decision-panel" aria-labelledby="next-step-heading">
           <div>
-            <p className="eyebrow">Quyết định an toàn</p>
-            <h2>Chưa đủ bằng chứng để chọn một lỗ hổng gốc</h2>
+            <p className="eyebrow">Việc tiếp theo · {gradeBandVi(currentStep.gradeLabels)}</p>
+            <h2 id="next-step-heading">{currentStep.titleVi}</h2>
+            <p>{currentStep.reasonVi}</p>
             <p>
-              {result.competingKcIds.length > 0
-                ? result.competingKcIds.length === 1
-                  ? `Còn một giả thuyết cần thêm bằng chứng trực tiếp: ${kcName(result.competingKcIds[0])}.`
-                  : `${result.competingKcIds.length} hướng còn cạnh tranh: ${result.competingKcIds.map((id) => kcName(id)).join(' và ')}.`
-                : 'Cần thêm một câu kiểm tra trực tiếp trước khi mở nội dung bù.'}
+              {PHASE_LABELS[currentStep.phase]} · Khoảng {currentStep.estimatedMinutes} phút
             </p>
           </div>
-          {result.disposition === 'ASK_VERIFY' && result.nextItemId ? (
-            <Link className="button-primary" to="/student/check-in">
-              Làm câu kiểm tra tiếp theo
-            </Link>
-          ) : (
-            <p role="status">Đã chuyển vào danh sách để giáo viên xem xét.</p>
-          )}
-        </section>
-      ) : null}
-
-      {result.rootKcId ? (
-        <section className="decision-panel">
-          <div>
-            <p className="eyebrow">Trọng tâm được bằng chứng hỗ trợ</p>
-            <h2>{kcName(result.rootKcId)}</h2>
-            <p>
-              NekoPath bỏ qua phần đã vững và chỉ giữ các bước cần thiết để quay lại mục tiêu lớp.
-            </p>
-          </div>
-          <Link className="button-primary" to="/student/practice">
-            Bắt đầu luyện tập
+          <Link className="button-primary" to={currentStep.nextHref}>
+            {currentStep.nextActionVi}
           </Link>
         </section>
       ) : null}
 
-      {result.status === 'FAST_PATH' ? (
+      {plan.steps.length > 0 ? (
+        <section
+          className="summary-panel offline-plan-panel"
+          aria-labelledby="offline-plan-heading"
+        >
+          <div>
+            <p className="eyebrow">Học khi mất mạng</p>
+            <h2 id="offline-plan-heading">Gói ngoại tuyến của kế hoạch này</h2>
+            {offlineManifest.resources.length > 0 ? (
+              <p>
+                {offlineState === 'DOWNLOADING'
+                  ? `Đã tải ${formatBytes(downloadedBytes)} / ${formatBytes(offlineManifest.totalBytes)}`
+                  : `${offlineManifest.resources.length} tệp · ${formatBytes(offlineManifest.totalBytes)}`}
+              </p>
+            ) : (
+              <p>Tóm tắt chữ đã sẵn sàng ngoại tuyến; chưa có video/PDF đã duyệt để tải.</p>
+            )}
+            {offlineManifest.resources.some(
+              (selected) =>
+                resources?.find((resource) => resource.id === selected.id)?.kind === 'VIDEO',
+            ) ? (
+              <label className="offline-video-option">
+                <input
+                  type="checkbox"
+                  checked={includeVideo}
+                  disabled={offlineState === 'DOWNLOADING'}
+                  onChange={(event) => setIncludeVideo(event.target.checked)}
+                />{' '}
+                Kèm video trong gói tải
+              </label>
+            ) : null}
+            {offlineState === 'PARTIAL' ? (
+              <p role="status">Một số tệp chưa tải xong. Có thể thử lại.</p>
+            ) : null}
+            {offlineState === 'NO_SPACE' ? (
+              <p role="alert">Thiết bị không còn đủ dung lượng cho gói này.</p>
+            ) : null}
+            {offlineState === 'READY' ? (
+              <p role="status">Gói ngoại tuyến đã sẵn sàng trên thiết bị.</p>
+            ) : null}
+          </div>
+          {offlineManifest.resources.length > 0 ? (
+            <button
+              className="button-secondary"
+              type="button"
+              disabled={offlineState === 'DOWNLOADING'}
+              onClick={() => {
+                setOfflineState('DOWNLOADING');
+                setDownloadedBytes(0);
+                void downloadOfflinePlan(offlineManifest, (progress) =>
+                  setDownloadedBytes(progress.completedBytes),
+                ).then((result) => setOfflineState(result.status));
+              }}
+            >
+              {offlineState === 'DOWNLOADING'
+                ? 'Đang tải…'
+                : `Tải để học ngoại tuyến · ${formatBytes(offlineManifest.totalBytes)}`}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {plan.status === 'FAST_PATH' ? (
         <section className="decision-panel">
           <div>
-            <p className="eyebrow">Sẵn sàng tiến tiếp</p>
-            <h2>Không cần học lại phần đã nắm chắc</h2>
-            <p>Bước tiếp theo là một bài toán chuyển giao thay vì lặp lại bài cơ bản.</p>
+            <p className="eyebrow">Em đã vững phần nền</p>
+            <h2>Bài vận dụng tiếp theo</h2>
+            <p>Không cần học lại phần em đã chứng minh là đã nắm chắc.</p>
           </div>
           <Link className="button-primary" to="/student/practice">
-            Nhận bài thử thách
+            Nhận bài vận dụng
           </Link>
         </section>
       ) : null}
 
-      {result.pathKcIds.length > 0 ? (
+      {plan.steps.length > 0 ? (
         <section className="path-panel" aria-labelledby="path-heading">
           <header className="panel-heading">
             <div>
-              <p className="eyebrow">Đường học được đề xuất</p>
-              <h2 id="path-heading">Từ kiến thức nền đến mục tiêu của lớp</h2>
+              <p className="eyebrow">Kế hoạch phục hồi tối giản</p>
+              <h2 id="path-heading">Từ kiến thức nền tới mục tiêu lớp 7</h2>
             </div>
-            <span>{result.pathKcIds.length} bước</span>
+            <span>{plan.steps.length} bước</span>
           </header>
           <ol className="path-steps">
-            {result.pathKcIds.map((kcId, index) => (
-              <li key={kcId}>
+            {plan.steps.map((step, index) => (
+              <li key={step.kcId} data-current={step.status === 'CURRENT' || undefined}>
                 <span className="step-index">{String(index + 1).padStart(2, '0')}</span>
                 <span>
                   <small>
-                    {index === 0
-                      ? 'Bắt đầu ở đây'
-                      : kcId === HERO_TARGET_KC_ID
-                        ? 'Mục tiêu của lớp'
-                        : 'Bước nối tiếp'}
+                    {step.status === 'CURRENT'
+                      ? 'Bước hiện tại'
+                      : step.status === 'DONE'
+                        ? 'Đã xong'
+                        : 'Sắp tới'}{' '}
+                    · {PHASE_LABELS[step.phase]}
                   </small>
-                  <strong>{kcName(kcId)}</strong>
+                  <strong>{step.titleVi}</strong>
+                  <small>
+                    {gradeBandVi(step.gradeLabels)} · {step.estimatedMinutes} phút
+                  </small>
+                  <small>{step.reasonVi}</small>
+                  <small>
+                    {step.resourceIds.length > 0
+                      ? `${step.resourceIds.length} học liệu đã duyệt`
+                      : lessonKcIds?.has(step.kcId)
+                        ? 'Tóm tắt chữ có sẵn ngoại tuyến'
+                        : 'Tóm tắt chữ sẽ được tải khi có kết nối'}
+                  </small>
                 </span>
-                {lessonKcIds?.has(kcId) ? (
-                  <Link className="step-lesson-link" to={`/student/lesson/${kcId}`}>
-                    Ôn tóm tắt
+                {step.status === 'CURRENT' ? (
+                  <Link className="step-lesson-link" to={step.nextHref}>
+                    {step.nextActionVi}
                   </Link>
                 ) : null}
               </li>
@@ -141,22 +247,12 @@ export function PathPage() {
         </section>
       ) : null}
 
-      {result.status === 'FAST_PATH' && review ? (
+      {plan.status === 'FAST_PATH' && review ? (
         <section className="decision-panel">
           <div>
             <p className="eyebrow">Kế hoạch duy trì tiếp theo</p>
             <h2>Ôn thông minh: {kcName(review.kcId)}</h2>
             <p>{REVIEW_REASON_LABELS[review.reason]}.</p>
-            {review.dueAt ? (
-              <p>
-                {review.isDue ? 'Đã đến hạn ôn' : 'Lịch ôn tiếp theo'}:{' '}
-                <time dateTime={review.dueAt}>
-                  {new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(
-                    new Date(review.dueAt),
-                  )}
-                </time>
-              </p>
-            ) : null}
           </div>
           <Link className="button-primary" to="/student/check-in?mode=review">
             {review.isDue ? 'Bắt đầu lượt ôn 3 câu' : 'Ôn sớm 3 câu'}
@@ -166,40 +262,27 @@ export function PathPage() {
 
       <section className="audit-panel">
         <details>
-          <summary>Xem căn cứ kỹ thuật của quyết định</summary>
+          <summary>Xem căn cứ kỹ thuật</summary>
           <div className="audit-grid">
+            <div>
+              <h3>Trạng thái máy tính</h3>
+              <p>{STATUS_LABELS[diagnosis.status]}</p>
+            </div>
             <div>
               <h3>Quy tắc đã kích hoạt</h3>
               <ul>
-                {result.reasonCodes.map((code) => (
+                {diagnosis.reasonCodes.map((code) => (
                   <li key={code}>{REASON_LABELS[code]}</li>
                 ))}
               </ul>
             </div>
             <div>
-              <h3>Bằng chứng được sử dụng</h3>
-              <p>{result.evidenceEventIds.length} lượt trả lời theo đúng thứ tự thời gian.</p>
+              <h3>Số câu trả lời được dùng</h3>
+              <p>{diagnosis.evidenceEventIds.length}</p>
             </div>
             <div>
-              <h3>Bước xử lý tiếp theo</h3>
-              <p>{DISPOSITION_LABELS[result.disposition]}</p>
-            </div>
-            <div>
-              <h3>Mẫu ngộ nhận đã quan sát</h3>
-              {result.misconceptionHypotheses.length > 0 ? (
-                <ul>
-                  {result.misconceptionHypotheses.map((hypothesis) => (
-                    <li key={`${hypothesis.kcId}:${hypothesis.misconceptionId}`}>
-                      {misconceptionName(hypothesis.misconceptionId)} —{' '}
-                      {hypothesis.verificationStatus === 'SUPPORTED_BY_MULTIPLE_ITEMS'
-                        ? `lặp lại ở ${hypothesis.independentItemCount} câu hỏi khác nhau`
-                        : 'mới có một quan sát, cần xác minh'}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>Chưa có đáp án nhiễu đủ rõ để nêu một mẫu ngộ nhận.</p>
-              )}
+              <h3>Bước xử lý</h3>
+              <p>{DISPOSITION_LABELS[diagnosis.disposition]}</p>
             </div>
           </div>
         </details>

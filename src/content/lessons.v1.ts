@@ -18,7 +18,7 @@ export interface LessonSummary {
   };
   /** Lỗi hay gặp — khớp misconception catalog của engine. */
   readonly commonMistakeVi: string;
-  readonly reviewState: 'UNREVIEWED';
+  readonly reviewState: import('../domain').ReviewState;
 }
 
 export const LESSON_SUMMARIES: readonly LessonSummary[] = [

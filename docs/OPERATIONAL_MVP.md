@@ -76,3 +76,13 @@ Direct links remain recoverable.
 7. Disconnect the network, reload and verify the installed shell plus local answer still work.
 
 Passing screenshots alone is insufficient; the interaction and persisted state must pass.
+
+## Student adaptive task (2026-07-18)
+
+`/student` is the single entry to the current learning task. `/student/check-in` and
+`/student/practice` remain recoverable deep links, but they are not separate top-level products.
+The student navigation is `Hôm nay`, `Kế hoạch của em`, `Bài được giao`.
+
+All student surfaces derive their action from the same non-persisted `StudentLearningPlan`
+projection. The exact state language, phase progression and offline truth rules are defined in
+`STUDENT_EXPERIENCE_CONTRACT.md`.

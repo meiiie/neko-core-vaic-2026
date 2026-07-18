@@ -75,17 +75,25 @@ export interface ResourceRecord {
   id: string;
   kcId: string;
   kind: 'PDF' | 'VIDEO';
+  role: 'EXPLAIN' | 'WORKED_EXAMPLE' | 'SUMMARY';
   title: string;
   fileName: string;
   mimeType: string;
+  durationSeconds: number | null;
+  transcriptVi: string | null;
   byteSize: number;
   sha256: string;
+  sortOrder: number;
+  status: 'DRAFT' | 'PUBLISHED';
+  reviewState: 'UNREVIEWED' | 'ACCEPTED' | 'REVISE' | 'REJECTED';
+  gradeMin: number;
+  gradeMax: number;
   createdAt: string;
   uploadedByName: string | null;
 }
 
 export const DB_NAME = 'nekopath';
-export const DB_SCHEMA_VERSION = 4;
+export const DB_SCHEMA_VERSION = 5;
 
 export class NekoPathDb extends Dexie {
   meta!: Table<MetaRecord, string>;
@@ -112,8 +120,11 @@ export class NekoPathDb extends Dexie {
     });
     // v4: devices that already opened v3 (agent sessions only) still gain the
     // resource mirror through a separate upgrade step.
-    this.version(DB_SCHEMA_VERSION).stores({
+    this.version(4).stores({
       resources: 'id, kcId',
+    });
+    this.version(DB_SCHEMA_VERSION).stores({
+      resources: 'id, kcId, status, reviewState, sortOrder',
     });
   }
 }

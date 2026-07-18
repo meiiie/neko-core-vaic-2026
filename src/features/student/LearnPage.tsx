@@ -14,10 +14,10 @@ import {
 import { reviewRecommendation, REVIEW_REASON_LABELS } from '../../app/adapters/review-selection';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
+import { curriculumCatalogDraft, HERO_CHECK_IN_QUESTION_LIMIT } from '../../content';
+import { deriveStudentLearningPlan } from '../../app/adapters/student-learning-plan';
 import { recordAnswerWithReview } from '../../services/sync';
 import { buildReviewScheduleRecord } from '../../storage/review-schedule-repository';
-
-const QUESTION_BUDGET = 3;
 
 export function LearnPage() {
   const { account } = useSession();
@@ -44,12 +44,20 @@ export function LearnPage() {
 
   const activeLearnerContext = learnerContext;
   const result = diagnoseHero(activeLearnerContext, localRecords);
+  const plan = deriveStudentLearningPlan({
+    diagnosis: result,
+    catalog: curriculumCatalogDraft,
+    records: localRecords,
+    checkInQuestionLimit: HERO_CHECK_IN_QUESTION_LIMIT,
+  });
+  const currentStep =
+    plan.currentStepIndex === undefined ? undefined : plan.steps[plan.currentStepIndex];
   const recommendedQuestion = result.nextItemId ? questionForItem(result.nextItemId) : undefined;
   const review = reassessment
     ? reviewRecommendation(activeLearnerContext, result, localRecords, new Date().toISOString())
     : undefined;
   const candidateQuestion = recommendedQuestion ?? review?.question;
-  const roundComplete = answeredThisRound >= QUESTION_BUDGET;
+  const roundComplete = answeredThisRound >= plan.checkInQuestionLimit;
   const probeQuestion = roundComplete ? undefined : candidateQuestion;
   const questionNumber = answeredThisRound + 1;
   const canContinueAssessment =
@@ -90,7 +98,7 @@ export function LearnPage() {
           Thoát bài
         </Link>
         <div className="assessment-title">
-          <h1>Bài kiểm tra nền tảng</h1>
+          <h1>Kiểm tra nền tảng</h1>
           <p>Toán 7 · Chủ đề tỉ lệ thức</p>
         </div>
         <span className="status-label status-label--neutral">Lưu trên thiết bị</span>
@@ -101,6 +109,13 @@ export function LearnPage() {
         <strong>{probeQuestion ? `Câu ${questionNumber}` : 'Hoàn thành'}</strong>
         <span>{probeQuestion ? 'Đang làm' : 'Đã hoàn thành'}</span>
       </div>
+
+      {probeQuestion ? (
+        <p className="assessment-purpose">
+          Để tìm đúng phần em cần ôn; không tính điểm. Lượt này tối đa {plan.checkInQuestionLimit}{' '}
+          câu.
+        </p>
+      ) : null}
 
       {probeQuestion ? (
         <div className="assessment-layout">
@@ -204,7 +219,7 @@ export function LearnPage() {
             size={56}
             weight="fill"
           />
-          <p className="eyebrow">Đã hoàn thành bài kiểm tra nền tảng</p>
+          <p className="eyebrow">Kiểm tra nền tảng đã xong</p>
           {result.status === 'NEEDS_MORE_EVIDENCE' ? (
             <>
               <h2>Đã lưu câu trả lời của em</h2>
@@ -232,13 +247,13 @@ export function LearnPage() {
               Làm tiếp lượt cần bằng chứng
             </button>
           ) : (
-            <Link className="button-primary" to="/student/path">
+            <Link className="button-primary" to={currentStep?.nextHref ?? '/student/path'}>
               {result.status === 'NEEDS_MORE_EVIDENCE'
-                ? 'Xem trạng thái bằng chứng'
-                : 'Xem lộ trình của tôi'}
+                ? 'Xem trạng thái kiểm tra'
+                : (currentStep?.nextActionVi ?? 'Xem kế hoạch của em')}
             </Link>
           )}
-          {result.status === 'DIAGNOSED' || result.status === 'FAST_PATH' ? (
+          {reassessment || (result.status === 'FAST_PATH' && review?.isDue) ? (
             <button
               className="button-secondary"
               type="button"
@@ -248,7 +263,7 @@ export function LearnPage() {
                 setSaveState('idle');
               }}
             >
-              Kiểm tra lại để cập nhật lộ trình
+              Kiểm tra lại phần đã học
             </button>
           ) : null}
         </section>

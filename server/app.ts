@@ -210,7 +210,7 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
   // resources (up to RESOURCE_MAX_BYTES) both stream through this plugin;
   // per-route validation enforces the tighter domain rules.
   void app.register(fastifyMultipart, {
-    limits: { files: 1, fields: 8, parts: 10, fileSize: RESOURCE_MAX_BYTES },
+    limits: { files: 1, fields: 12, parts: 14, fileSize: RESOURCE_MAX_BYTES },
   });
   app.addHook('onRequest', (_request, reply, done) => {
     void reply.header('Origin-Agent-Cluster', '?1');
@@ -1257,22 +1257,38 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     id: string;
     kc_id: string;
     kind: string;
+    role: string;
     title: string;
     file_name: string;
     mime_type: string;
+    duration_seconds: number | null;
+    transcript_vi: string | null;
     byte_size: number;
     sha256: string;
+    sort_order: number;
+    status: string;
+    review_state: string;
+    grade_min: number;
+    grade_max: number;
     created_at: string;
     uploaded_by_name: string | null;
   }) => ({
     id: row.id,
     kcId: row.kc_id,
     kind: row.kind,
+    role: row.role,
     title: row.title,
     fileName: row.file_name,
     mimeType: row.mime_type,
+    durationSeconds: row.duration_seconds,
+    transcriptVi: row.transcript_vi,
     byteSize: row.byte_size,
     sha256: row.sha256,
+    sortOrder: row.sort_order,
+    status: row.status,
+    reviewState: row.review_state,
+    gradeMin: row.grade_min,
+    gradeMax: row.grade_max,
     createdAt: row.created_at,
     uploadedByName: row.uploaded_by_name,
   });
@@ -1280,10 +1296,13 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
   app.get('/api/resources', (request, reply) => {
     const user = requireUser(request, reply);
     if (!user) return;
+    const visibility =
+      user.role === 'STUDENT' ? "WHERE r.status = 'PUBLISHED' AND r.review_state = 'ACCEPTED'" : '';
     const rows = db
       .prepare(
         `SELECT r.*, u.name AS uploaded_by_name
          FROM resources r LEFT JOIN users u ON u.id = r.uploaded_by
+         ${visibility}
          ORDER BY r.kc_id, r.created_at`,
       )
       .all() as Parameters<typeof resourceDto>[0][];
@@ -1304,13 +1323,49 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         return field && 'value' in field ? String(field.value) : '';
       };
       const kcId = fieldValue('kcId');
-      const title = fieldValue('title').trim() || part.filename;
+      const title = fieldValue('title').trim();
       const kind = RESOURCE_MIME_ALLOW[part.mimetype];
+      const role = fieldValue('role');
+      const durationValue = fieldValue('durationSeconds');
+      const durationSeconds = durationValue === '' ? null : Number(durationValue);
+      const transcriptVi = fieldValue('transcriptVi').trim() || null;
+      const sortOrder = Number(fieldValue('sortOrder') || '0');
+      const status = fieldValue('status');
+      const reviewState = fieldValue('reviewState');
+      const gradeMin = Number(fieldValue('gradeMin'));
+      const gradeMax = Number(fieldValue('gradeMax'));
 
       if (!LESSON_KC_IDS.has(kcId)) return reply.code(400).send({ error: 'UNKNOWN_KC' });
       if (!kind) return reply.code(415).send({ error: 'UNSUPPORTED_TYPE' });
       if (title.length < 3 || title.length > 120) {
         return reply.code(400).send({ error: 'INVALID_TITLE' });
+      }
+      if (!['EXPLAIN', 'WORKED_EXAMPLE', 'SUMMARY'].includes(role)) {
+        return reply.code(400).send({ error: 'INVALID_ROLE' });
+      }
+      if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 10_000) {
+        return reply.code(400).send({ error: 'INVALID_SORT_ORDER' });
+      }
+      if (!['DRAFT', 'PUBLISHED'].includes(status)) {
+        return reply.code(400).send({ error: 'INVALID_STATUS' });
+      }
+      if (!['UNREVIEWED', 'ACCEPTED', 'REVISE', 'REJECTED'].includes(reviewState)) {
+        return reply.code(400).send({ error: 'INVALID_REVIEW_STATE' });
+      }
+      if (status === 'PUBLISHED' && reviewState !== 'ACCEPTED') {
+        return reply.code(400).send({ error: 'PUBLISHED_REQUIRES_ACCEPTED_REVIEW' });
+      }
+      if (
+        !Number.isInteger(gradeMin) ||
+        !Number.isInteger(gradeMax) ||
+        gradeMin < 1 ||
+        gradeMax > 12 ||
+        gradeMin > gradeMax
+      ) {
+        return reply.code(400).send({ error: 'INVALID_GRADE_BAND' });
+      }
+      if (kind === 'VIDEO' && (!Number.isInteger(durationSeconds) || durationSeconds! <= 0)) {
+        return reply.code(400).send({ error: 'VIDEO_DURATION_REQUIRED' });
       }
 
       const id = `res-${randomUUID()}`;
@@ -1325,17 +1380,27 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       const byteSize = statSync(filePath).size;
       db.prepare(
         `INSERT INTO resources
-         (id, kc_id, kind, title, file_name, mime_type, byte_size, sha256, uploaded_by, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, kc_id, kind, role, title, file_name, mime_type, duration_seconds, transcript_vi,
+          byte_size, sha256, sort_order, status, review_state, grade_min, grade_max,
+          uploaded_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id,
         kcId,
         kind,
+        role,
         title,
         part.filename,
         part.mimetype,
+        durationSeconds,
+        transcriptVi,
         byteSize,
         hash.digest('hex'),
+        sortOrder,
+        status,
+        reviewState,
+        gradeMin,
+        gradeMax,
         user.id,
         new Date().toISOString(),
       );
@@ -1352,6 +1417,14 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       .prepare('SELECT mime_type, byte_size, file_name FROM resources WHERE id = ?')
       .get(id) as { mime_type: string; byte_size: number; file_name: string } | undefined;
     if (!row) return reply.code(404).send({ error: 'NOT_FOUND' });
+    if (user.role === 'STUDENT') {
+      const visible = db
+        .prepare(
+          "SELECT 1 AS visible FROM resources WHERE id = ? AND status = 'PUBLISHED' AND review_state = 'ACCEPTED'",
+        )
+        .get(id);
+      if (!visible) return reply.code(404).send({ error: 'NOT_FOUND' });
+    }
     const filePath = join(resourcesDir, id);
 
     void reply.header('accept-ranges', 'bytes');

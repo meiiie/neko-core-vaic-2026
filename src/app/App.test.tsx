@@ -102,9 +102,7 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     const navigation = await screen.findByRole('navigation', { name: 'Điều hướng chính' });
     expect([...navigation.querySelectorAll('a')].map((link) => link.textContent)).toEqual([
       'Hôm nay',
-      'Kiểm tra thích ứng',
-      'Lộ trình học',
-      'Luyện tập',
+      'Kế hoạch của em',
       'Bài được giao',
       'Dữ liệu & ngoại tuyến',
     ]);
@@ -289,13 +287,13 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     );
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Bài kiểm tra nền tảng' }),
+      await screen.findByRole('heading', { level: 1, name: 'Kiểm tra nền tảng' }),
     ).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Điều hướng chính' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Thoát bài' })).toBeTruthy();
     expect(screen.getByText('Tiến trình đánh giá')).toBeTruthy();
-    expect(screen.queryByText(/tối đa 3 câu/i)).toBeNull();
+    expect(screen.getByText(/không tính điểm.*tối đa 3 câu/i)).toBeTruthy();
     expect(screen.queryByText('Chọn một đáp án')).toBeNull();
     expect(screen.queryByText('Cần thêm bằng chứng')).toBeNull();
     expect(screen.queryByText('Đang phân biệt')).toBeNull();
