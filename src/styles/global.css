@@ -1497,10 +1497,7 @@ details li {
 }
 
 .intervention-row {
-  display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr) 18rem;
-  gap: var(--s-5);
-  padding: var(--s-5);
+  overflow: clip;
   border: 1px solid var(--rule);
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -1512,50 +1509,138 @@ details li {
   box-shadow: 0 0 0 0.125rem var(--primary-soft);
 }
 
+.intervention-row > details {
+  width: 100%;
+}
+
+.intervention-summary {
+  display: grid;
+  min-height: 7rem;
+  grid-template-columns: 2.75rem minmax(16rem, 1fr) minmax(17rem, auto) auto;
+  align-items: center;
+  gap: var(--s-5);
+  padding: var(--s-4) var(--s-5);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 140ms var(--ease-out);
+}
+
+.intervention-summary::-webkit-details-marker {
+  display: none;
+}
+
+.intervention-summary:hover {
+  background: var(--surface-subtle);
+}
+
 .rank-cell {
   color: #98a2b3;
-  font-size: 1.25rem;
+  font-size: 1rem;
   font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.intervention-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.intervention-copy .eyebrow {
+  margin-bottom: var(--s-1);
+  color: var(--navigation-active-ink);
+}
+
+.intervention-title {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.5rem;
+  text-wrap: balance;
+}
+
+.intervention-title > strong {
   font-weight: 800;
 }
 
-.intervention-main h2 {
-  margin-bottom: var(--s-1);
+.intervention-guidance {
+  margin-top: var(--s-1);
+  color: var(--muted-strong);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
-.intervention-main > p:not(.eyebrow) {
-  color: var(--muted-strong);
+.intervention-guidance strong {
+  color: var(--ink);
+  font-weight: 650;
 }
 
 .intervention-metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  align-self: start;
+  grid-template-columns: repeat(3, minmax(5rem, 1fr));
   gap: var(--s-2);
-  margin: 0;
 }
 
-.intervention-metrics div {
-  padding: var(--s-3);
+.intervention-metrics > span {
+  display: flex;
+  min-width: 0;
+  min-height: 3.5rem;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--s-2) var(--s-3);
   border-radius: var(--radius-sm);
   background: var(--surface-subtle);
 }
 
-.intervention-metrics dt {
+.intervention-metrics small {
+  overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 0.6875rem;
+  line-height: 1rem;
 }
 
-.intervention-metrics dd {
-  margin: var(--s-1) 0 0;
+.intervention-metrics strong {
+  margin-top: var(--s-1);
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
+  font-size: 0.9375rem;
+  font-weight: 750;
+  line-height: 1.25rem;
+}
+
+.intervention-disclosure-label {
+  display: flex;
+  min-height: var(--touch-target);
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.intervention-row .when-open {
+  display: none;
+}
+
+.intervention-row details[open] .when-closed {
+  display: none;
+}
+
+.intervention-row details[open] .when-open {
+  display: inline;
+}
+
+.intervention-detail {
+  padding: var(--s-5);
+  border-top: 1px solid var(--rule);
+  background: var(--surface-subtle);
 }
 
 .teacher-filter-bar,
 .question-filter-bar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   align-items: end;
   gap: var(--s-3);
   padding: var(--s-4);
@@ -1598,6 +1683,7 @@ details li {
   padding-bottom: var(--s-2);
   color: var(--muted);
   font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .group-actions,
@@ -1612,46 +1698,67 @@ details li {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-5);
-  padding: var(--s-4);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--surface-subtle);
 }
 
 .group-detail-grid h3 {
-  font-size: 0.875rem;
+  font-size: 1rem;
 }
 
-.wrong-question-list {
+.wrong-question-summary-list {
   display: grid;
   gap: var(--s-2);
   margin: 0;
-  padding-left: var(--s-5);
+  padding: 0;
+  list-style: none;
 }
 
-.wrong-question-list strong,
-.wrong-question-list small {
-  display: block;
-}
-
-.wrong-question-list small {
-  color: var(--muted);
-}
-
-.learner-mistake-list > li {
-  padding-bottom: var(--s-2);
-}
-
-.learner-mistake-list > li > ul {
+.wrong-question-summary-list > li {
   display: grid;
-  gap: var(--s-1);
-  margin-top: var(--s-1);
-  padding-left: var(--s-4);
-  color: var(--muted-strong);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s-1) var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
 }
 
-.learner-mistake-list > li > ul small {
-  display: inline;
+.wrong-question-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.wrong-question-copy strong {
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.wrong-question-copy small {
+  margin-top: var(--s-1);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
+.wrong-question-count {
+  align-self: start;
+  padding: var(--s-1) var(--s-2);
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wrong-question-learners {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+  color: var(--muted-strong);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
 }
 
 .group-audit-note {
@@ -1822,12 +1929,16 @@ details li {
     position: static;
   }
 
-  .intervention-row {
-    grid-template-columns: 3rem minmax(0, 1fr);
+  .intervention-summary {
+    grid-template-columns: 2.5rem minmax(0, 1fr) auto;
   }
 
   .intervention-metrics {
     grid-column: 2;
+  }
+
+  .intervention-disclosure-label {
+    grid-column: 3;
   }
 }
 
@@ -2029,16 +2140,19 @@ details li {
     width: 100%;
   }
 
-  .intervention-row {
-    grid-template-columns: 1fr;
+  .intervention-summary {
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: var(--s-3);
+    padding: var(--s-4);
   }
 
   .intervention-metrics {
-    grid-column: 1;
+    grid-column: 1 / -1;
   }
 
-  .rank-cell {
-    display: none;
+  .intervention-disclosure-label {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 }
 
@@ -2864,7 +2978,7 @@ html:has(.question-selection-actions) {
   }
 
   .teacher-filter-bar {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .teacher-filter-bar > p {

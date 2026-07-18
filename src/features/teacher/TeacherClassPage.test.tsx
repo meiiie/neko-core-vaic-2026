@@ -21,17 +21,17 @@ describe('teacher diagnosis override', () => {
 
     const details = (await screen.findAllByText('Xem chi tiết'))[0];
     await user.click(details);
-    const heading = screen.getAllByRole('heading', { name: 'Điều chỉnh chẩn đoán' })[0];
+    const heading = screen.getAllByRole('heading', { name: 'Sửa kết quả của học sinh' })[0];
     const form = heading.closest('form');
     expect(form).toBeTruthy();
     const controls = within(form!);
 
-    await user.selectOptions(controls.getByLabelText('Quyết định chuyên môn'), 'ROOT:K07');
+    await user.selectOptions(controls.getByLabelText('Kết quả sau khi xem lại'), 'ROOT:K07');
     await user.type(
-      controls.getByLabelText('Lý do điều chỉnh'),
+      controls.getByLabelText('Lý do thay đổi'),
       'Đã trao đổi trực tiếp và xem cách làm của em.',
     );
-    await user.click(controls.getByRole('button', { name: 'Lưu điều chỉnh' }));
+    await user.click(controls.getByRole('button', { name: 'Lưu thay đổi' }));
 
     await waitFor(async () => expect(await db.overrides.count()).toBe(1));
     expect(await db.overrides.toArray()).toEqual([
@@ -41,6 +41,6 @@ describe('teacher diagnosis override', () => {
         rootKcId: 'K07',
       }),
     ]);
-    expect(await screen.findByText('Đã lưu trên thiết bị này và cập nhật lại nhóm.')).toBeTruthy();
+    expect(await screen.findByText('Đã lưu thay đổi và cập nhật lại danh sách nhóm.')).toBeTruthy();
   });
 });

@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -114,6 +114,37 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
     expect(screen.getByRole('heading', { name: 'Kế hoạch trong 15 phút' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Giải thích chỉ số Đã đánh giá' })).toBeTruthy();
     expect(screen.queryByText('Đủ bằng chứng')).toBeNull();
+  });
+
+  it('keeps teacher support groups compact until details are requested', async () => {
+    installApiStub('co.ha@nekopath.edu.vn');
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/teacher/class']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Nhóm học sinh cần hỗ trợ' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Bài: Phân số bằng nhau' })).toBeTruthy();
+    const firstDisclosure = screen.getAllByText('Xem chi tiết')[0];
+    const firstDetails = firstDisclosure.closest('details');
+    expect(firstDetails).toBeTruthy();
+    expect(firstDetails?.hasAttribute('open')).toBe(false);
+    expect(firstDetails?.querySelector('.group-actions')).toBeTruthy();
+
+    await user.click(firstDisclosure);
+
+    expect(firstDetails?.hasAttribute('open')).toBe(true);
+    const firstGroup = within(firstDetails!);
+    expect(firstGroup.getByRole('heading', { name: 'Học sinh trong nhóm (12)' })).toBeTruthy();
+    expect(
+      firstGroup.getByRole('heading', { name: 'Câu nhiều học sinh trả lời sai' }),
+    ).toBeTruthy();
+    expect(firstGroup.getByRole('link', { name: 'Giao bài cho nhóm' })).toBeTruthy();
+    expect(firstGroup.getByRole('button', { name: 'Tải danh sách' })).toBeTruthy();
   });
 
   it('redirects protected routes to login when the server has no session', async () => {
@@ -250,7 +281,9 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
 
     await user.click(menu);
     await user.click(await screen.findByRole('link', { name: /Nhóm cần hỗ trợ/ }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Nhóm cần hỗ trợ' })).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Nhóm học sinh cần hỗ trợ' }),
+    ).toBeTruthy();
     await waitFor(() => expect(document.activeElement?.id).toBe('main-content'));
     expect(sidebar?.hasAttribute('inert')).toBe(true);
   });

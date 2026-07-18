@@ -60,8 +60,8 @@ function TeacherOverrideForm({
   return (
     <form className="teacher-override" onSubmit={(event) => void submit(event)}>
       <header>
-        <h3>Điều chỉnh chẩn đoán</h3>
-        <p>Quyết định của cô được lưu riêng; lịch sử trả lời của học sinh không bị sửa.</p>
+        <h3>Sửa kết quả của học sinh</h3>
+        <p>Dùng khi cô đã xem bài hoặc trao đổi trực tiếp và thấy kết quả chưa phù hợp.</p>
       </header>
       <div className="teacher-override-grid">
         <label>
@@ -82,41 +82,43 @@ function TeacherOverrideForm({
           </select>
         </label>
         <label>
-          Quyết định chuyên môn
+          Kết quả sau khi xem lại
           <select value={selectedDecision} onChange={(event) => setDecision(event.target.value)}>
-            <option value="NEEDS_MORE_EVIDENCE">Cần thêm bằng chứng</option>
+            <option value="NEEDS_MORE_EVIDENCE">Chưa đủ thông tin để kết luận</option>
             {HERO_GRAPH.nodes.map((node) => (
               <option key={node.id} value={`ROOT:${node.id}`}>
-                Chọn gốc: {node.name}
+                Cần ôn bài: {node.name}
               </option>
             ))}
           </select>
         </label>
         <label className="teacher-override-reason">
-          Lý do điều chỉnh
+          Lý do thay đổi
           <input
             required
             minLength={8}
             maxLength={240}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Ví dụ: Đã trao đổi trực tiếp và xem cách làm của em"
+            placeholder="Ví dụ: Cô đã xem bài làm và trao đổi trực tiếp…"
           />
         </label>
       </div>
       {current ? (
         <p className="teacher-override-current">
-          Quyết định gần nhất:{' '}
-          {current.decision === 'SET_ROOT' ? kcName(current.rootKcId ?? '') : 'Cần thêm bằng chứng'}{' '}
+          Lần sửa gần nhất:{' '}
+          {current.decision === 'SET_ROOT'
+            ? `Cần ôn bài ${kcName(current.rootKcId ?? '')}`
+            : 'Chưa đủ thông tin để kết luận'}{' '}
           — {current.reason}
         </p>
       ) : null}
       <div className="teacher-override-actions">
         <button className="button-secondary" type="submit" disabled={saveState === 'saving'}>
-          {saveState === 'saving' ? 'Đang lưu…' : 'Lưu điều chỉnh'}
+          {saveState === 'saving' ? 'Đang lưu…' : 'Lưu thay đổi'}
         </button>
         {saveState === 'saved' ? (
-          <span role="status">Đã lưu trên thiết bị này và cập nhật lại nhóm.</span>
+          <span role="status">Đã lưu thay đổi và cập nhật lại danh sách nhóm.</span>
         ) : null}
         {saveState === 'error' ? (
           <span role="alert">Không lưu được điều chỉnh. Hãy thử lại.</span>
@@ -131,7 +133,6 @@ export function TeacherClassPage() {
   const [searchParams] = useSearchParams();
   const [topic, setTopic] = useState('ALL');
   const [priority, setPriority] = useState('ALL');
-  const [minimumSize, setMinimumSize] = useState('0');
   const selectedGroupId = searchParams.get('group');
   const selectedStatus = searchParams.get('status');
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
@@ -139,29 +140,33 @@ export function TeacherClassPage() {
   const filteredGroups = groups.filter((group) => {
     if (topic !== 'ALL' && group.rootKcId !== topic) return false;
     if (priority !== 'ALL' && priorityBand(group.priorityScore) !== priority) return false;
-    if (group.totalLearnerCount < Number(minimumSize)) return false;
     return true;
   });
   const learnerLabel = (learnerId: string) =>
     dashboard.learners.find((learner) => learner.id === learnerId)?.displayLabel ??
     learnerId.toUpperCase();
 
-  function wrongQuestionsByLearner(learnerIds: readonly string[]) {
-    return dashboard.learners
+  function wrongQuestionSummaries(learnerIds: readonly string[]) {
+    const learnersByQuestion = new Map<string, string[]>();
+    dashboard.learners
       .filter((learner) => learnerIds.includes(learner.id))
-      .map((learner) => {
-        const questionIds = [
-          ...new Set(learner.events.filter((event) => !event.correct).map((event) => event.itemId)),
-        ];
-        return {
-          learnerId: learner.id,
-          questions: questionIds.map((id) => ({
-            id,
-            prompt: practiceById.get(id)?.promptVi ?? id,
-          })),
-        };
-      })
-      .filter((learner) => learner.questions.length > 0);
+      .forEach((learner) => {
+        const questionIds = new Set(
+          learner.events.filter((event) => !event.correct).map((event) => event.itemId),
+        );
+        questionIds.forEach((questionId) => {
+          learnersByQuestion.set(questionId, [
+            ...(learnersByQuestion.get(questionId) ?? []),
+            learner.id,
+          ]);
+        });
+      });
+
+    return [...learnersByQuestion].map(([id, ids]) => ({
+      id,
+      prompt: practiceById.get(id)?.promptVi ?? id,
+      learnerIds: ids,
+    }));
   }
 
   function exportGroup(group: (typeof groups)[number]) {
@@ -186,18 +191,18 @@ export function TeacherClassPage() {
   return (
     <div className="page-stack teacher-class-page">
       <header className="page-heading">
-        <h1>Nhóm cần hỗ trợ</h1>
+        <h1>Nhóm học sinh cần hỗ trợ</h1>
         <p className="page-meta">
-          Lớp 7A · {dashboard.learners.length} học sinh · So sánh các nhóm, xem câu trả lời sai và
-          chọn việc nên làm tiếp theo.
+          Lớp 7A · {dashboard.learners.length} học sinh · Chọn một nhóm để xem học sinh đang vướng ở
+          đâu và giao bài phù hợp.
         </p>
       </header>
 
       <section className="teacher-filter-bar" aria-label="Lọc nhóm học sinh">
         <label>
-          Chủ đề
+          Bài học
           <select value={topic} onChange={(event) => setTopic(event.target.value)}>
-            <option value="ALL">Tất cả chủ đề</option>
+            <option value="ALL">Tất cả bài học</option>
             {HERO_GRAPH.nodes.map((node) => (
               <option key={node.id} value={node.id}>
                 {node.name}
@@ -206,74 +211,98 @@ export function TeacherClassPage() {
           </select>
         </label>
         <label>
-          Mức ưu tiên
+          Mức cần hỗ trợ
           <select value={priority} onChange={(event) => setPriority(event.target.value)}>
-            <option value="ALL">Tất cả mức</option>
+            <option value="ALL">Tất cả nhóm</option>
             <option value="SUPPORT_FIRST">Cần hỗ trợ trước</option>
-            <option value="MONITOR">Theo dõi thêm</option>
+            <option value="MONITOR">Có thể xem sau</option>
           </select>
         </label>
-        <label>
-          Số học sinh
-          <select value={minimumSize} onChange={(event) => setMinimumSize(event.target.value)}>
-            <option value="0">Mọi quy mô nhóm</option>
-            <option value="10">Từ 10 học sinh</option>
-            <option value="12">Từ 12 học sinh</option>
-          </select>
-        </label>
-        <p role="status">Hiển thị {filteredGroups.length} nhóm</p>
+        <p role="status">Có {filteredGroups.length} nhóm</p>
       </section>
 
       <section className="group-table" aria-label="Danh sách nhóm cần hỗ trợ">
         {filteredGroups.map((group, index) => {
-          const learnerMistakes = wrongQuestionsByLearner(group.learnerIds);
+          const wrongQuestions = wrongQuestionSummaries(group.learnerIds);
           const isHighlighted = selectedGroupId === group.id || selectedStatus === group.status;
+          const groupName = group.rootKcId
+            ? kcName(group.rootKcId)
+            : TEACHER_GROUP_LABELS[group.status];
           return (
             <article
               className={isHighlighted ? 'intervention-row is-highlighted' : 'intervention-row'}
               id={`group-${group.id.replaceAll(':', '-')}`}
               key={group.id}
             >
-              <div className="rank-cell" aria-label={`Thứ tự ${index + 1}`}>
-                <span>{String(index + 1).padStart(2, '0')}</span>
-              </div>
-              <div className="intervention-main">
-                <p className="eyebrow">{TEACHER_GROUP_LABELS[group.status] ?? group.status}</p>
-                <h2>
-                  {group.rootKcId ? kcName(group.rootKcId) : TEACHER_GROUP_LABELS[group.status]}
-                </h2>
-                <p>{teacherActionLabel(group.suggestedActionId)}</p>
+              <details open={isHighlighted || undefined}>
+                <summary className="intervention-summary">
+                  <span className="rank-cell" aria-label={`Thứ tự ${index + 1}`}>
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span className="intervention-copy">
+                    <span className="eyebrow">
+                      {TEACHER_GROUP_LABELS[group.status] ?? group.status}
+                    </span>
+                    <span className="intervention-title" role="heading" aria-level={2}>
+                      <strong>{group.rootKcId ? 'Bài:' : 'Nhóm:'}</strong> {groupName}
+                    </span>
+                    <span className="intervention-guidance">
+                      <strong>Gợi ý:</strong> {teacherActionLabel(group.suggestedActionId)}
+                    </span>
+                  </span>
+                  <span className="intervention-metrics">
+                    <span>
+                      <small>Học sinh</small>
+                      <strong>{group.totalLearnerCount}</strong>
+                    </span>
+                    <span>
+                      <small>Đã có đủ dữ liệu</small>
+                      <strong>
+                        {group.sufficientEvidenceCount}/{group.totalLearnerCount}
+                      </strong>
+                    </span>
+                    <span>
+                      <small>Cần làm trước?</small>
+                      <strong>{group.priorityScore > 0 ? 'Có' : 'Chưa'}</strong>
+                    </span>
+                  </span>
+                  <span className="intervention-disclosure-label">
+                    <span className="when-closed">Xem chi tiết</span>
+                    <span className="when-open">Thu gọn</span>
+                  </span>
+                </summary>
 
-                <details open={isHighlighted || undefined}>
-                  <summary>Xem chi tiết</summary>
+                <div className="intervention-detail">
                   <div className="group-detail-grid">
                     <div>
-                      <h3>Học sinh trong nhóm</h3>
+                      <h3>Học sinh trong nhóm ({group.totalLearnerCount})</h3>
                       <div className="learner-chip-list">
                         {group.learnerIds.map((id) => (
                           <span key={id}>
                             {learnerLabel(id)}
                             {overrides.some((item) => item.learnerId === id) ? (
-                              <small>Giáo viên đã điều chỉnh</small>
+                              <small>Đã được cô sửa</small>
                             ) : null}
                           </span>
                         ))}
                       </div>
                     </div>
                     <div>
-                      <h3>Học sinh và câu trả lời sai</h3>
-                      {learnerMistakes.length > 0 ? (
-                        <ul className="wrong-question-list learner-mistake-list">
-                          {learnerMistakes.map((learner) => (
-                            <li key={learner.learnerId}>
-                              <strong>{learnerLabel(learner.learnerId)}</strong>
-                              <ul>
-                                {learner.questions.map((question) => (
-                                  <li key={question.id}>
-                                    {question.prompt} <small>({question.id})</small>
-                                  </li>
-                                ))}
-                              </ul>
+                      <h3>Câu nhiều học sinh trả lời sai</h3>
+                      {wrongQuestions.length > 0 ? (
+                        <ul className="wrong-question-summary-list">
+                          {wrongQuestions.map((question) => (
+                            <li key={question.id}>
+                              <span className="wrong-question-copy">
+                                <strong>{question.prompt}</strong>
+                                <small>{question.id}</small>
+                              </span>
+                              <span className="wrong-question-count">
+                                {question.learnerIds.length} học sinh
+                              </span>
+                              <small className="wrong-question-learners">
+                                {question.learnerIds.map(learnerLabel).join(', ')}
+                              </small>
                             </li>
                           ))}
                         </ul>
@@ -284,8 +313,7 @@ export function TeacherClassPage() {
                   </div>
                   {group.representativeEventIds.length > 0 ? (
                     <p className="muted group-audit-note">
-                      {group.representativeEventIds.length} câu trả lời đại diện đã được kiểm tra
-                      theo đúng thứ tự thời gian.
+                      Đã kiểm tra {group.representativeEventIds.length} câu trả lời gần đây.
                     </p>
                   ) : null}
                   <TeacherOverrideForm
@@ -293,40 +321,23 @@ export function TeacherClassPage() {
                     learnerLabel={learnerLabel}
                     overrides={overrides}
                   />
-                </details>
-
-                <div className="group-actions">
-                  <Link
-                    className="button-primary"
-                    to={`/teacher/assignments${group.rootKcId ? `?kc=${group.rootKcId}` : ''}`}
-                  >
-                    Giao bài
-                  </Link>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => exportGroup(group)}
-                  >
-                    Xuất danh sách
-                  </button>
+                  <div className="group-actions">
+                    <Link
+                      className="button-primary"
+                      to={`/teacher/assignments${group.rootKcId ? `?kc=${group.rootKcId}` : ''}`}
+                    >
+                      Giao bài cho nhóm
+                    </Link>
+                    <button
+                      className="button-secondary"
+                      type="button"
+                      onClick={() => exportGroup(group)}
+                    >
+                      Tải danh sách
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <dl className="intervention-metrics">
-                <div>
-                  <dt>Số học sinh</dt>
-                  <dd>{group.totalLearnerCount}</dd>
-                </div>
-                <div>
-                  <dt>Đã đánh giá</dt>
-                  <dd>
-                    {group.sufficientEvidenceCount}/{group.totalLearnerCount}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Mức ưu tiên</dt>
-                  <dd>{group.priorityScore > 0 ? 'Hỗ trợ trước' : 'Theo dõi'}</dd>
-                </div>
-              </dl>
+              </details>
             </article>
           );
         })}
@@ -335,7 +346,7 @@ export function TeacherClassPage() {
       {filteredGroups.length === 0 ? (
         <section className="empty-state" role="status">
           <h2>Không có nhóm phù hợp</h2>
-          <p>Thử đổi chủ đề, mức ưu tiên hoặc số học sinh tối thiểu.</p>
+          <p>Thử chọn bài học khác hoặc xem tất cả nhóm.</p>
         </section>
       ) : null}
     </div>
