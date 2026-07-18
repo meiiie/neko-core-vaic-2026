@@ -210,6 +210,7 @@ labs/           Image-generation lab with asset register and review rubric
 | [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Submission video script with claim discipline |
 | [PROBLEM_FIT_AUDIT.md](docs/PROBLEM_FIT_AUDIT.md) | Requirement-by-requirement technical audit with measurements |
 | [ENGINEERING_STANDARDS.md](docs/ENGINEERING_STANDARDS.md) | Team delivery rules benchmarked against industry practice |
+| [ARCHITECTURE_REVIEW_VS_LMS.md](docs/ARCHITECTURE_REVIEW_VS_LMS.md) | Honest architecture review against the team's mature LMS |
 | [CURRICULUM_SCOPE_DECISIONS.md](docs/CURRICULUM_SCOPE_DECISIONS.md) | Team-lead-approved curriculum scope and architecture decisions |
 | [ops/RUNBOOK.md](ops/RUNBOOK.md) | Operations: deploy, accounts, recovery |
 

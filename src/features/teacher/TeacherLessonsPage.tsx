@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { refreshLessons, useLessonList } from '../../services/lessons';
+import { refreshLessons, saveLesson, useLessonList } from '../../services/lessons';
 import type { LessonRecord } from '../../storage/db';
 
 /**
@@ -42,25 +42,14 @@ function LessonForm({ lesson }: { readonly lesson: LessonRecord }) {
     event.preventDefault();
     if (saveState === 'saving') return;
     setSaveState('saving');
-    try {
-      const response = await fetch(`/api/lessons/${encodeURIComponent(lesson.kcId)}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          title: form.title.trim(),
-          keyPoints: lines(form.keyPoints),
-          exampleProblem: form.exampleProblem.trim(),
-          exampleSteps: lines(form.exampleSteps),
-          commonMistake: form.commonMistake.trim(),
-        }),
-      });
-      if (!response.ok) throw new Error(String(response.status));
-      await refreshLessons();
-      setSaveState('saved');
-    } catch {
-      setSaveState('error');
-    }
+    const result = await saveLesson(lesson.kcId, {
+      title: form.title.trim(),
+      keyPoints: lines(form.keyPoints),
+      exampleProblem: form.exampleProblem.trim(),
+      exampleSteps: lines(form.exampleSteps),
+      commonMistake: form.commonMistake.trim(),
+    });
+    setSaveState(result === 'SAVED' ? 'saved' : 'error');
   }
 
   return (

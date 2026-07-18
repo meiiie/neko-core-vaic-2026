@@ -30,6 +30,35 @@ export async function refreshLessons(database: NekoPathDb = db): Promise<LessonR
   }
 }
 
+export interface LessonDraft {
+  title: string;
+  keyPoints: string[];
+  exampleProblem: string;
+  exampleSteps: string[];
+  commonMistake: string;
+}
+
+/** Teacher-only publish; the server stamps ownership. Mirrors refresh after. */
+export async function saveLesson(
+  kcId: string,
+  draft: LessonDraft,
+  database: NekoPathDb = db,
+): Promise<'SAVED' | 'FAILED'> {
+  try {
+    const response = await fetch(`/api/lessons/${encodeURIComponent(kcId)}`, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(draft),
+    });
+    if (!response.ok) return 'FAILED';
+    await refreshLessons(database);
+    return 'SAVED';
+  } catch {
+    return 'FAILED';
+  }
+}
+
 /** undefined = still reading IndexedDB; null = not on this device yet. */
 export function useLesson(kcId: string): { lesson: LessonRecord | null } | undefined {
   return useLiveQuery(async () => ({ lesson: (await db.lessons.get(kcId)) ?? null }), [kcId]);
