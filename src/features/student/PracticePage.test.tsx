@@ -111,6 +111,26 @@ describe('multi-step practice flow', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Phân số nào bằng 2/3?' })).toBeTruthy();
   });
 
+  it('advances to the next KC in place when the requested step is already mastered', () => {
+    // Regression: previously, once K01 flipped to COMPLETED the URL ?kc=K01
+    // silently switched into repeat/review mode and looped the same two K01
+    // questions instead of advancing the path. The live currentKcId must take
+    // over so the learner lands on K02 without clicking "Lưu và thoát".
+    practiceState.records = [
+      ...diagnosedK01,
+      answer(4, 'K01-CHECK-1', true),
+      answer(5, 'K01-CHECK-2', true),
+      answer(6, 'K01-CHECK-1', true),
+    ];
+
+    renderPractice('/student/practice?kc=K01');
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Bước tiếp theo: Phân số bằng nhau' }),
+    ).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Phân số nào bằng 2/3?' })).toBeTruthy();
+    expect(screen.queryByText('Ôn lại')).toBeNull();
+  });
+
   it('shows an honest evidence gap instead of repeating correct questions or completing', () => {
     practiceState.records = [
       ...diagnosedK01,

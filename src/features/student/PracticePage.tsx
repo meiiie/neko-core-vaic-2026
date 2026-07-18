@@ -66,12 +66,18 @@ export function PracticePage() {
     : undefined;
   const lockedRequestedKcId = requestedStep?.status === 'UPCOMING' ? requestedStep.kcId : undefined;
   const confirmationMode = searchParams.get('mode') === 'confirm';
-  const reviewMode =
-    searchParams.get('mode') === 'review' ||
-    (requestedStep?.status === 'COMPLETED' && !confirmationMode);
+  const explicitReview = searchParams.get('mode') === 'review';
+  // When the learner just mastered the requested step (it flipped to COMPLETED
+  // during this session), do NOT pin them on the finished KC and do NOT silently
+  // enter review/repeat mode — follow the live `currentKcId` so the path
+  // advances in place. Only an explicit ?mode=review keeps them practising the
+  // completed KC; ?mode=confirm is an intentional labelled repeat.
+  const requestedAdvancedAway =
+    requestedStep?.status === 'COMPLETED' && !explicitReview && !confirmationMode;
+  const reviewMode = explicitReview || (requestedStep?.status === 'COMPLETED' && confirmationMode);
   const activeKcId = lockedRequestedKcId
     ? undefined
-    : requestedStep
+    : requestedStep && !requestedAdvancedAway
       ? requestedStep.kcId
       : (progress?.currentKcId ?? (result?.status === 'DIAGNOSED' ? result.rootKcId : undefined));
   const activeLesson = useLesson(activeKcId ?? '');
@@ -366,6 +372,19 @@ export function PracticePage() {
   const hintLevel = Math.min(Math.max(incorrectAttemptCount, 1), 3);
   const isRootRemediation =
     result.status === 'DIAGNOSED' && result.rootKcId === activeKcId && !reviewMode;
+  // The KC whose question is frozen on the feedback screen. When the live path
+  // has moved past it (currentKcId advanced), we surface a "step completed"
+  // notice and route the learner to the next KC instead of looping back into
+  // the finished one.
+  const feedbackKcId = feedback?.question?.kcId ?? null;
+  const feedbackStep = feedbackKcId
+    ? progress?.steps.find((step) => step.kcId === feedbackKcId)
+    : undefined;
+  const stepJustCompleted =
+    feedback?.correct === true &&
+    feedbackStep?.status === 'COMPLETED' &&
+    !confirmationMode &&
+    !reviewMode;
 
   return (
     <div className="assessment-page">
@@ -488,7 +507,14 @@ export function PracticePage() {
             >
               <h3>{feedback.correct ? 'Chính xác!' : 'Chưa đúng — cùng xem lại nhé'}</h3>
               {feedback.correct ? (
-                <p>{question.explanationVi}</p>
+                <>
+                  <p>{question.explanationVi}</p>
+                  {stepJustCompleted && feedbackKcId ? (
+                    <p className="eyebrow">
+                      Đã hoàn thành bước {kcName(feedbackKcId)} — đủ bằng chứng trực tiếp.
+                    </p>
+                  ) : null}
+                </>
               ) : (
                 <>
                   {selectedChoice?.noteVi ? <p>{selectedChoice.noteVi}</p> : null}
@@ -501,6 +527,13 @@ export function PracticePage() {
               {feedback.correct && confirmationMode ? (
                 <Link className="button-primary" to="/student/path">
                   Xem bước tiếp theo
+                </Link>
+              ) : stepJustCompleted && progress?.currentKcId ? (
+                <Link
+                  className="button-primary"
+                  to={`/student/practice?kc=${progress.currentKcId}`}
+                >
+                  Tiếp tục bước kế tiếp: {kcName(progress.currentKcId)}
                 </Link>
               ) : (
                 <button className="button-primary" type="button" onClick={continueSession}>
