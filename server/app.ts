@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { HERO_GRAPH } from '../src/content/hero-demo.ts';
+import { HERO_GRAPH, HERO_ITEMS } from '../src/content/hero-demo.ts';
 import { CodexAccountManager } from './ai/codex-account-manager.ts';
 import { registerCodexRoutes, type CodexManagerPort } from './ai/codex-routes.ts';
 import { registerResponsesRoutes } from './ai/responses.ts';
@@ -970,8 +970,37 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
               kind, payload
        FROM events WHERE id = ?`,
     );
-    for (const event of parsed.data.events) {
-      if (event.kind !== 'REVIEW_SCHEDULED') continue;
+    const existingSchedules = (
+      db
+        .prepare(
+          `SELECT id, sequence, occurred_at AS occurredAt, payload
+           FROM events
+           WHERE learner_id = ? AND kind = 'REVIEW_SCHEDULED'`,
+        )
+        .all(user.id) as {
+        id: string;
+        sequence: number;
+        occurredAt: string;
+        payload: string;
+      }[]
+    ).flatMap((record) => {
+      try {
+        const payload = reviewSchedulePayloadSchema.safeParse(JSON.parse(record.payload));
+        return payload.success ? [{ ...record, payload: payload.data }] : [];
+      } catch {
+        return [];
+      }
+    });
+    const validatedIncomingSchedules: typeof existingSchedules = [];
+    const incomingSchedules = parsed.data.events
+      .filter((event) => event.kind === 'REVIEW_SCHEDULED')
+      .sort(
+        (left, right) =>
+          left.sequence - right.sequence ||
+          left.occurredAt.localeCompare(right.occurredAt) ||
+          left.id.localeCompare(right.id),
+      );
+    for (const event of incomingSchedules) {
       const schedule = reviewSchedulePayloadSchema.parse(JSON.parse(event.payload));
       const source =
         eventsById.get(schedule.sourceEventId) ??
@@ -994,15 +1023,14 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       } catch {
         sourceCorrect = undefined;
       }
-      const expectedReason = sourceCorrect
-        ? schedule.intervalDays === 3
-          ? 'RECOVERY_CHECK'
-          : 'SPACED_REVIEW'
-        : 'REMEDIATE_SOON';
-      const sourceTimestamp = source ? Date.parse(source.occurredAt) : Number.NaN;
-      const expectedDueAt = Number.isFinite(sourceTimestamp)
-        ? new Date(sourceTimestamp + schedule.intervalDays * 24 * 60 * 60 * 1_000).toISOString()
-        : null;
+      const authoredKcId = HERO_ITEMS.find(
+        (item) => item.id === event.itemId || `bank-${item.id}` === event.itemId,
+      )?.kcIds[0];
+      const questionKcId = (
+        db.prepare('SELECT kc_id FROM questions WHERE id = ?').get(event.itemId) as
+          { kc_id: string } | undefined
+      )?.kc_id;
+      const expectedKcId = authoredKcId ?? questionKcId;
       if (
         !source ||
         source.learnerId !== user.id ||
@@ -1011,13 +1039,42 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
         sourceCorrect === undefined ||
         event.sequence !== source.sequence + 1 ||
         event.occurredAt !== source.occurredAt ||
-        expectedDueAt !== schedule.dueAt ||
-        schedule.reason !== expectedReason ||
-        (sourceCorrect && schedule.intervalDays === 1) ||
-        (!sourceCorrect && schedule.intervalDays !== 1)
+        !expectedKcId ||
+        schedule.kcId !== expectedKcId
       ) {
         return reply.code(400).send({ error: 'INVALID_REVIEW_LINK' });
       }
+      const previous = [...existingSchedules, ...validatedIncomingSchedules]
+        .filter(
+          (candidate) =>
+            candidate.sequence < event.sequence && candidate.payload.kcId === expectedKcId,
+        )
+        .sort(
+          (left, right) =>
+            right.sequence - left.sequence ||
+            right.occurredAt.localeCompare(left.occurredAt) ||
+            right.id.localeCompare(left.id),
+        )[0];
+      const expectedSchedule = buildReviewSchedulePayload({
+        kcId: expectedKcId,
+        sourceEventId: source.id,
+        occurredAt: source.occurredAt,
+        correct: sourceCorrect,
+        ...(previous ? { previousIntervalDays: previous.payload.intervalDays } : {}),
+      });
+      if (
+        schedule.intervalDays !== expectedSchedule.intervalDays ||
+        schedule.dueAt !== expectedSchedule.dueAt ||
+        schedule.reason !== expectedSchedule.reason
+      ) {
+        return reply.code(400).send({ error: 'INVALID_REVIEW_LINK' });
+      }
+      validatedIncomingSchedules.push({
+        id: event.id,
+        sequence: event.sequence,
+        occurredAt: event.occurredAt,
+        payload: schedule,
+      });
     }
     const insert = db.prepare(
       `INSERT OR IGNORE INTO events

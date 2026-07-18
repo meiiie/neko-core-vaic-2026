@@ -1147,11 +1147,60 @@ describe('NekoPath API', () => {
     });
     expect(rejected.statusCode).toBe(400);
     expect(rejected.json()).toMatchObject({ error: 'INVALID_REVIEW_LINK' });
+
+    const wrongKc = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: {
+        events: [
+          { ...answer, id: 'evt-wrong-kc', sequence: 40 },
+          {
+            ...review,
+            id: 'review-evt-wrong-kc',
+            sequence: 41,
+            payload:
+              '{"version":"review-schedule-v1","kcId":"K07","sourceEventId":"evt-wrong-kc","dueAt":"2026-07-21T08:00:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
+          },
+        ],
+      },
+    });
+    expect(wrongKc.statusCode).toBe(400);
+    expect(wrongKc.json()).toMatchObject({ error: 'INVALID_REVIEW_LINK' });
+
+    const jumpedInterval = await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: student,
+      payload: {
+        events: [
+          {
+            ...answer,
+            id: 'evt-jumped-interval',
+            itemId: 'K07-CHECK-1',
+            sequence: 50,
+          },
+          {
+            ...review,
+            id: 'review-evt-jumped-interval',
+            itemId: 'K07-CHECK-1',
+            sequence: 51,
+            payload:
+              '{"version":"review-schedule-v1","kcId":"K07","sourceEventId":"evt-jumped-interval","dueAt":"2026-07-25T08:00:00.000Z","intervalDays":7,"reason":"SPACED_REVIEW"}',
+          },
+        ],
+      },
+    });
+    expect(jumpedInterval.statusCode).toBe(400);
+    expect(jumpedInterval.json()).toMatchObject({ error: 'INVALID_REVIEW_LINK' });
+
     const history = await app.inject({ method: 'GET', url: '/api/events', cookies: student });
     const ids = (history.json() as { events: { id: string }[] }).events.map((event) => event.id);
     expect(ids).toContain(answer.id);
     expect(ids).toContain(review.id);
     expect(ids).not.toContain('evt-fabricated');
+    expect(ids).not.toContain('evt-wrong-kc');
+    expect(ids).not.toContain('evt-jumped-interval');
     await app.close();
   });
 });
