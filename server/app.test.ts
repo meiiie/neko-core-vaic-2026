@@ -216,6 +216,52 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('paginates only the authenticated student event history', async () => {
+    const app = await makeApp();
+    const an = await loginCookie(app, STUDENT_EMAIL);
+    const chi = await loginCookie(app, 'chi@nekopath.edu.vn');
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const eventFor = (id: string, learnerId: string) => ({
+      id,
+      learnerId,
+      itemId: 'K02-DIAGNOSTIC',
+      sequence: 1,
+      occurredAt: '2026-07-18T08:00:00.000Z',
+      kind: 'ANSWER',
+      payload: '{"choiceId":"a","correct":true}',
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: an,
+      payload: { events: [eventFor('evt-an-history', 'user-student-an')] },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/events',
+      cookies: chi,
+      payload: { events: [eventFor('evt-chi-history', 'user-student-chi')] },
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/events?offset=0', cookies: an });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      events: [expect.objectContaining({ id: 'evt-an-history', learnerId: 'user-student-an' })],
+      nextOffset: null,
+    });
+    expect(
+      (response.json() as { events: { id: string }[] }).events.some(
+        (event) => event.id === 'evt-chi-history',
+      ),
+    ).toBe(false);
+
+    const forbidden = await app.inject({ method: 'GET', url: '/api/events', cookies: teacher });
+    expect(forbidden.statusCode).toBe(403);
+    const invalid = await app.inject({ method: 'GET', url: '/api/events?offset=-1', cookies: an });
+    expect(invalid.statusCode).toBe(400);
+    await app.close();
+  });
+
   it('returns structured misconception evidence for an assigned authored bank item', async () => {
     const app = await makeApp();
     const student = await loginCookie(app, STUDENT_EMAIL);

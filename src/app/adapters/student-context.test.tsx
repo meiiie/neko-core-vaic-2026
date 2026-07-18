@@ -11,10 +11,17 @@ const repository = vi.hoisted(() => {
       if (state.migrationShouldFail) throw new Error('IndexedDB unavailable');
       return 0;
     }),
+    mergeServerEvents: vi.fn(async () => 0),
   };
 });
 
 vi.mock('../../storage/event-repository', () => repository);
+
+const hydration = vi.hoisted(() => ({
+  fetchServerEvidence: vi.fn(async () => ({ events: [] })),
+}));
+
+vi.mock('../../services/evidence-hydration', () => hydration);
 
 import { useStudentEvents } from './student-context';
 
@@ -49,5 +56,11 @@ describe('student event preparation', () => {
     await waitFor(() => expect(repository.listEventsByLearner).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('ready'));
     expect(repository.listEventsByLearner).toHaveBeenCalledWith('user-student-an');
+    await waitFor(() =>
+      expect(hydration.fetchServerEvidence).toHaveBeenCalledWith(CONTEXT.learnerId),
+    );
+    await waitFor(() =>
+      expect(repository.mergeServerEvents).toHaveBeenCalledWith(CONTEXT.learnerId, []),
+    );
   });
 });

@@ -3,6 +3,7 @@ import { learnerEventSchema } from '../../storage/event-repository';
 import {
   buildHeroClassDashboard,
   buildConfirmedAssignmentRecord,
+  buildHydratedEventRecords,
   buildLocalAnswerRecord,
   diagnoseHero,
   isHeroLearnerId,
@@ -144,6 +145,21 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
         },
         0,
       ),
+    ).toBeNull();
+  });
+
+  it('orders a complete hydrated history after seeded evidence', () => {
+    const context = { learnerId: 'user-student-an', simulationProfileId: 'an' } as const;
+    const later = buildLocalAnswerRecord(context, 'K02-DIAGNOSTIC', 'a', true, 0);
+    const earlier = { ...later, id: 'evt-earlier', occurredAt: '2026-07-18T08:00:00.000Z' };
+    const hydrated = buildHydratedEventRecords(context, [later, earlier]);
+
+    expect(hydrated?.map(({ id, sequence }) => ({ id, sequence }))).toEqual([
+      { id: 'evt-earlier', sequence: 8 },
+      { id: later.id, sequence: 9 },
+    ]);
+    expect(
+      buildHydratedEventRecords(context, [{ ...earlier, learnerId: 'user-student-chi' }]),
     ).toBeNull();
   });
 
