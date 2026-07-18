@@ -49,7 +49,6 @@ export function credentialsByEmail(db: DatabaseSync, email: string): Credentials
   return row ? { id: row.id, passwordHash: row.password_hash } : null;
 }
 
-
 export function createSession(db: DatabaseSync, userId: string): string {
   const id = randomUUID() + randomUUID().replaceAll('-', '');
   const now = Date.now();

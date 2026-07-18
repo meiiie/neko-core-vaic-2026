@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useSession, type Role } from '../app/session';
-import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { registerSyncTriggers } from '../services/sync';
 import { OnlineStatusBadge } from './OnlineStatusBadge';
 import { SyncBadge } from './SyncBadge';
@@ -282,7 +281,6 @@ export function AppLayout() {
             </button>
           ) : null}
         </header>
-        <UpdatePrompt />
         <main ref={mainRef} id="main-content" tabIndex={-1}>
           <Outlet />
         </main>

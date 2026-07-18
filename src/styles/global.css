@@ -3298,3 +3298,26 @@ details li {
   color: var(--muted, #667085);
   font-weight: 400;
 }
+
+/* Update prompt (app-level toast) */
+
+.update-prompt {
+  position: fixed;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--rule, #e4e7ec);
+  border-radius: 0.75rem;
+  background: var(--surface, #fff);
+  box-shadow: 0 0.75rem 2rem rgb(16 24 40 / 15%);
+}
+
+.update-prompt p {
+  margin: 0;
+  font-weight: 650;
+}

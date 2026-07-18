@@ -11,6 +11,7 @@ import { TeacherClassPage } from '../features/teacher/TeacherClassPage';
 import { TeacherPage } from '../features/teacher/TeacherPage';
 import { TeacherQuestionsPage } from '../features/teacher/TeacherQuestionsPage';
 import { SessionProvider, useSession, type Role } from './session';
+import { UpdatePrompt } from '../features/pwa-status/UpdatePrompt';
 import { LoginPage } from './pages/LoginPage';
 
 function RequireSession() {
@@ -54,6 +55,7 @@ function NotFoundPage() {
 export function App() {
   return (
     <SessionProvider>
+      <UpdatePrompt />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<RequireSession />}>
