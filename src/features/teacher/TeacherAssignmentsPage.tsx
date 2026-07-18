@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { HERO_GRAPH } from '../../content';
+import { ASSIGNMENTS_CHANGED_EVENT } from '../../services/assignment-events';
 import type { TeacherDashboardDto, TeacherSupportGroupDto } from './teacher-api';
 
 interface ApiQuestionSummary {
@@ -164,6 +165,12 @@ export function TeacherAssignmentsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async load; state changes only after awaited responses
     void reload();
+  }, [reload]);
+
+  useEffect(() => {
+    const handleAssignmentsChanged = () => void reload();
+    window.addEventListener(ASSIGNMENTS_CHANGED_EVENT, handleAssignmentsChanged);
+    return () => window.removeEventListener(ASSIGNMENTS_CHANGED_EVENT, handleAssignmentsChanged);
   }, [reload]);
 
   const group = dashboard?.groups.find((candidate) => candidate.id === groupId);

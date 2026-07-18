@@ -1,4 +1,8 @@
-import type { AgentToolCall } from './loop';
+export interface AgentToolCall {
+  readonly id?: string;
+  readonly name: string;
+  readonly args: Readonly<Record<string, unknown>>;
+}
 
 /**
  * Parse the deliberately narrow JSON fallback used by providers that do not
@@ -13,13 +17,8 @@ export function parseJsonToolEnvelope(content: string | null): AgentToolCall | n
     const parsed = JSON.parse(match[0]) as { tool?: unknown; args?: unknown };
     if (typeof parsed.tool !== 'string') return null;
     const args =
-      typeof parsed.args === 'object' && parsed.args !== null
-        ? Object.fromEntries(
-            Object.entries(parsed.args as Record<string, unknown>).map(([key, value]) => [
-              key,
-              String(value),
-            ]),
-          )
+      typeof parsed.args === 'object' && parsed.args !== null && !Array.isArray(parsed.args)
+        ? (parsed.args as Record<string, unknown>)
         : {};
     return { name: parsed.tool, args };
   } catch {

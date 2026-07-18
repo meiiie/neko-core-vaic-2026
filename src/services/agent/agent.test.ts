@@ -1,8 +1,20 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installApiStub } from '../../test/api-stub';
-import { runAgent, type AgentProvider, type AgentToolCall, type AgentTraceEvent } from './loop';
-import { OpenAiCompatAgentProvider, RuleBasedProvider } from './providers';
+import {
+  AGENT_SYSTEM_PROMPT,
+  runAgent,
+  runAgentTurn,
+  type AgentProvider,
+  type AgentToolCall,
+  type AgentTraceEvent,
+} from './loop';
+import {
+  AGENT_PROVIDERS,
+  DeterministicFirstProvider,
+  OpenAiCompatAgentProvider,
+  RuleBasedProvider,
+} from './providers';
 import { AGENT_TOOLS, toolByName } from './tools';
 
 function collect(): { events: AgentTraceEvent[]; onTrace: (e: AgentTraceEvent) => void } {
@@ -65,6 +77,64 @@ describe('agent loop with the rule-based brain', () => {
     expect(answer).toContain('tổng quan lớp');
   });
 
+  it('proposes from the real question bank, asks approval, then creates an assignment', async () => {
+    const baseFetch = globalThis.fetch;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/questions')) {
+        return Response.json({
+          questions: [
+            {
+              id: 'q-k02-1',
+              kcId: 'K02',
+              prompt: 'Phân số nào bằng 1/2?',
+              difficulty: 'EASY',
+              reviewState: 'REVIEWED',
+            },
+            {
+              id: 'q-k02-2',
+              kcId: 'K02',
+              prompt: 'Chọn hai phân số bằng nhau.',
+              difficulty: 'MEDIUM',
+              reviewState: 'REVIEWED',
+            },
+          ],
+        });
+      }
+      if (url.endsWith('/api/assignments') && init?.method === 'POST') {
+        return Response.json({ id: 'assignment-created' }, { status: 201 });
+      }
+      return baseFetch(input, init);
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const approve = vi.fn(async () => true);
+    const { events, onTrace } = collect();
+
+    const answer = await runAgent(
+      'Giao bài tập cho lớp đi',
+      new RuleBasedProvider(),
+      AGENT_TOOLS,
+      onTrace,
+      undefined,
+      undefined,
+      approve,
+    );
+
+    expect(answer).toContain('Đã giao');
+    expect(approve).toHaveBeenCalledTimes(1);
+    expect(events.flatMap((event) => (event.kind === 'tool_call' ? [event.name] : []))).toEqual([
+      'de_xuat_bai_tap',
+      'giao_bai',
+    ]);
+    const post = fetchImpl.mock.calls.find(
+      ([input, init]) => String(input).endsWith('/api/assignments') && init?.method === 'POST',
+    );
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({
+      title: 'Luyện tập Phân số bằng nhau',
+      questionIds: ['q-k02-1', 'q-k02-2'],
+    });
+  });
+
   it('stops a spinning provider that repeats the same tool call (stuck guard)', async () => {
     const looping: AgentProvider = {
       id: 'loop',
@@ -101,6 +171,71 @@ describe('agent loop with the rule-based brain', () => {
     const answer = await runAgent('nói nhiều', chatty, AGENT_TOOLS, onTrace);
     expect(answer).toContain('giới hạn số bước');
     expect(events.filter((e) => e.kind === 'tool_call')).toHaveLength(8); // 4 bước × 2 tool song song
+  });
+});
+
+describe('deterministic-first model routing', () => {
+  it('exposes exactly the three supported model routes', () => {
+    expect(AGENT_PROVIDERS.map(({ id }) => id)).toEqual(['local', 'web', 'chatgpt']);
+  });
+
+  it('routes evidence deterministically before asking the selected model to synthesize', async () => {
+    const complete = vi.fn<AgentProvider['complete']>(async (messages) => ({
+      content: messages.some((message) => message.role === 'tool')
+        ? 'An cần củng cố Phân số bằng nhau.'
+        : 'không được gọi',
+      toolCalls: [],
+      usage: { inputTokens: 20, outputTokens: 6 },
+    }));
+    const provider = new DeterministicFirstProvider({ id: 'model', label: 'Model', complete });
+
+    const result = await runAgentTurn('Chẩn đoán của bạn An thế nào?', provider, AGENT_TOOLS, [
+      { role: 'system', content: AGENT_SYSTEM_PROMPT },
+    ]);
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(result.text).toContain('Phân số bằng nhau');
+    expect(result.displayUsage).toEqual({ inputTokens: 20, outputTokens: 6 });
+    expect(result.usage).toEqual({ inputTokens: 20, outputTokens: 6, cachedInputTokens: 0 });
+    expect(result.fallback).toBe(false);
+  });
+
+  it('falls back only after evidence and never converts abort into fallback', async () => {
+    const failing: AgentProvider = {
+      id: 'model',
+      label: 'Model',
+      complete: async () => {
+        throw new Error('offline');
+      },
+    };
+    const fallback = await runAgentTurn(
+      'Chẩn đoán của bạn An thế nào?',
+      new DeterministicFirstProvider(failing),
+      AGENT_TOOLS,
+      [{ role: 'system', content: AGENT_SYSTEM_PROMPT }],
+    );
+    expect(fallback.fallback).toBe(true);
+    expect(fallback.text).toContain('Phân số bằng nhau');
+
+    const controller = new AbortController();
+    const aborted: AgentProvider = {
+      id: 'model',
+      label: 'Model',
+      complete: async () => {
+        controller.abort();
+        throw new DOMException('Aborted', 'AbortError');
+      },
+    };
+    await expect(
+      runAgentTurn(
+        'Chẩn đoán của bạn An thế nào?',
+        new DeterministicFirstProvider(aborted),
+        AGENT_TOOLS,
+        [{ role: 'system', content: AGENT_SYSTEM_PROMPT }],
+        undefined,
+        controller.signal,
+      ),
+    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
 
@@ -189,7 +324,7 @@ describe('JSON tool envelope fallback (models without native tools, e.g. Gemma)'
 });
 
 describe('SSE streaming (NekoCore parseStream, miniaturised)', () => {
-  it('streams content deltas and accumulates split tool-call arguments', async () => {
+  it('hides pre-evidence content while accumulating split tool-call arguments', async () => {
     const sse = [
       'data: {"choices":[{"delta":{"content":"Xin "}}]}',
       'data: {"choices":[{"delta":{"content":"chào"}}]}',
@@ -213,7 +348,7 @@ describe('SSE streaming (NekoCore parseStream, miniaturised)', () => {
       undefined,
       (delta) => deltas.push(delta),
     );
-    expect(deltas.join('')).toBe('Xin chào');
+    expect(deltas.join('')).toBe('');
     expect(completion.toolCalls).toEqual([
       { name: 'chan_doan_hoc_sinh', args: { hoc_sinh: 'an' } },
     ]);

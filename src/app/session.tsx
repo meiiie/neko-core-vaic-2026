@@ -7,6 +7,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { disposeAgentSessions } from '../services/agent/agent-lifecycle';
+import { AgentSessionStore } from '../services/agent/session-store';
+import { db } from '../storage/db';
 import { fetchWithDeadline } from '../services/fetch-with-deadline';
 import { bindBrowserProfile, markBrowserSignedOut } from '../services/profile-binding';
 
@@ -76,7 +79,7 @@ export interface SessionState {
   readonly ready: boolean;
   readonly resumeOffline: (email: string) => boolean;
   readonly signIn: (email: string, password: string) => Promise<SignInFailure | null>;
-  readonly signOut: () => void;
+  readonly signOut: () => Promise<void>;
 }
 
 const CACHE_KEY = 'nekopath.session-cache.v1';
@@ -292,14 +295,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [deviceProfiles],
   );
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async () => {
     markBrowserSignedOut();
+    const accountId = account?.id;
+    if (accountId) {
+      await disposeAgentSessions(accountId);
+      await new AgentSessionStore(db).clearAccount(accountId).catch(() => undefined);
+    }
     setAccount(null);
     writeCache(null);
-    void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {
       // Cookie clearing is best-effort offline; the local state is already gone.
     });
-  }, []);
+  }, [account?.id]);
 
   const value = useMemo<SessionState>(
     () => ({ account, deviceProfiles, ready, resumeOffline, signIn, signOut }),

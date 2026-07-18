@@ -1,9 +1,13 @@
 import fastifyCookie from '@fastify/cookie';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { createHash, randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { HERO_GRAPH } from '../src/content/hero-demo.ts';
+import { CodexAccountManager } from './ai/codex-account-manager.ts';
+import { registerCodexRoutes, type CodexManagerPort } from './ai/codex-routes.ts';
+import { registerResponsesRoutes } from './ai/responses.ts';
 import {
   createSession,
   credentialsByEmail,
@@ -147,9 +151,21 @@ function stableOrder(seed: string): number {
   return hash >>> 0;
 }
 
-export function buildApp(db: DatabaseSync): FastifyInstance {
+export interface AppOptions {
+  readonly fetchImpl?: typeof fetch;
+  readonly openAiApiKey?: string;
+  readonly openAiModel?: string;
+  readonly codexManager?: CodexManagerPort;
+}
+
+export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false, bodyLimit: 32 * 1024 });
   void app.register(fastifyCookie);
+  app.addHook('onRequest', (_request, reply, done) => {
+    void reply.header('Origin-Agent-Cluster', '?1');
+    void reply.header('Permissions-Policy', 'tools=(self)');
+    done();
+  });
 
   function currentUser(request: FastifyRequest) {
     const sid = request.cookies[SESSION_COOKIE];
@@ -178,6 +194,25 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     }
     return user;
   }
+
+  const codexManager =
+    options.codexManager ??
+    new CodexAccountManager({
+      enabled: process.env.NEKOPATH_CODEX_APP_SERVER_ENABLED === '1',
+      rootDir: resolve(process.env.NEKOPATH_CODEX_DATA ?? 'server/data/codex-accounts'),
+      codexBin: process.env.NEKOPATH_CODEX_BIN,
+      model: process.env.NEKOPATH_CODEX_MODEL,
+    });
+
+  registerResponsesRoutes(app, {
+    apiKey: options.openAiApiKey ?? process.env.OPENAI_API_KEY ?? '',
+    model: options.openAiModel ?? process.env.NEKOPATH_OPENAI_MODEL ?? 'gpt-5.6-sol',
+    fetchImpl: options.fetchImpl ?? fetch,
+    requireTeacher,
+    chatGptAvailable: () => codexManager.isEnabled(),
+  });
+  registerCodexRoutes(app, codexManager, requireTeacher);
+  app.addHook('onClose', async () => codexManager.disposeAll());
 
   function recipientIds(value: string): string[] {
     const parsed: unknown = JSON.parse(value);
@@ -243,9 +278,13 @@ export function buildApp(db: DatabaseSync): FastifyInstance {
     return { user: startSession(reply, credentials.id) };
   });
 
-  app.post('/api/auth/logout', (request, reply) => {
+  app.post('/api/auth/logout', async (request, reply) => {
     const sid = request.cookies[SESSION_COOKIE];
-    if (sid) destroySession(db, sid);
+    if (sid) {
+      const user = userForSession(db, sid);
+      if (user?.role === 'TEACHER') await codexManager.logout(user.id).catch(() => undefined);
+      destroySession(db, sid);
+    }
     void reply.clearCookie(SESSION_COOKIE, { path: '/' });
     void reply.clearCookie(PROFILE_BINDING_COOKIE, { path: '/' });
     return { ok: true };

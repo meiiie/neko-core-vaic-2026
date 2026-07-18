@@ -42,6 +42,17 @@ export interface OutboxRecord {
   nextRetryAt: string;
 }
 
+export interface AgentSessionRecord {
+  id: string;
+  accountId: string;
+  role: 'teacher';
+  classId: string | null;
+  providerId: string;
+  /** Canonical compacted capsule + recent tail; never provider credentials. */
+  payload: string;
+  updatedAt: string;
+}
+
 /**
  * Local mirror of a server-owned lesson row, kept so students can read
  * materials offline. The server is the source of truth; the mirror refreshes
@@ -60,13 +71,14 @@ export interface LessonRecord {
 }
 
 export const DB_NAME = 'nekopath';
-export const DB_SCHEMA_VERSION = 2;
+export const DB_SCHEMA_VERSION = 3;
 
 export class NekoPathDb extends Dexie {
   meta!: Table<MetaRecord, string>;
   events!: Table<LearnerEventRecord, string>;
   overrides!: Table<OverrideRecord, string>;
   outbox!: Table<OutboxRecord, string>;
+  agentSessions!: Table<AgentSessionRecord, string>;
   lessons!: Table<LessonRecord, string>;
 
   constructor(name: string = DB_NAME) {
@@ -77,7 +89,11 @@ export class NekoPathDb extends Dexie {
       overrides: 'id, learnerId, targetKcId, updatedAt',
       outbox: 'eventId, status, createdAt, nextRetryAt',
     });
+    this.version(2).stores({
+      lessons: 'kcId',
+    });
     this.version(DB_SCHEMA_VERSION).stores({
+      agentSessions: 'id, accountId, providerId, updatedAt',
       lessons: 'kcId',
     });
   }

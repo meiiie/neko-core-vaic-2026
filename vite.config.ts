@@ -50,12 +50,12 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
-        // The 6MB WebLLM engine chunk is teacher-only: keep it OUT of the
+        // The 6MB WebLLM engine and worker chunks are teacher-only: keep them OUT of the
         // precache every student pays for, but cache it on first use so the
         // in-browser Gemma brain works offline afterwards (with its weights,
         // which WebLLM itself caches). Still no /api response caching.
         globIgnores: [
-          '**/webllm-*.js',
+          '**/webllm*.js',
           '**/nekopath-share-v1.png',
           '**/nekopath-mark-v1.png',
           '**/icons/icon-192.png',
@@ -67,7 +67,7 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//, /^\/healthz/],
         runtimeCaching: [
           {
-            urlPattern: /\/assets\/webllm-[^/]+\.js$/,
+            urlPattern: /\/assets\/webllm(?:\.worker)?-[^/]+\.js$/,
             handler: 'CacheFirst',
             options: { cacheName: 'webllm-engine' },
           },
@@ -85,15 +85,32 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // Keep Vite's discovery inside the application. The cloned reference
+    // repositories under ref/ have independent dependency graphs.
+    entries: ['index.html'],
+  },
   server: {
     proxy: { '/api': 'http://127.0.0.1:3001' },
+    headers: {
+      'Origin-Agent-Cluster': '?1',
+      'Permissions-Policy': 'tools=(self)',
+    },
   },
   preview: {
     proxy: { '/api': 'http://127.0.0.1:3001' },
+    headers: {
+      'Origin-Agent-Cluster': '?1',
+      'Permissions-Policy': 'tools=(self)',
+    },
   },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
+    // Reference repositories and UX/research labs are evidence, not part of
+    // this application's test graph. In particular, ref/neko-core carries its
+    // own Vitest suites and dependency assumptions.
+    exclude: ['**/node_modules/**', '**/dist/**', 'ref/**', 'lab/**', 'labs/**'],
     alias: {
       // The virtual module only exists inside the Vite plugin pipeline.
       'virtual:pwa-register/react': fileURLToPath(

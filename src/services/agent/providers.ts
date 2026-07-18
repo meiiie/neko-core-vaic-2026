@@ -1,6 +1,14 @@
-import type { AgentChatMessage, AgentCompletion, AgentProvider, AgentToolCall } from './loop';
+import type {
+  AgentChatMessage,
+  AgentCompletion,
+  AgentProvider,
+  AgentProviderRuntime,
+  AgentToolCall,
+} from './loop';
+import { parseCapsule } from './context-manager';
 import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
+import { routeRuleQuestion } from './rule-router';
 
 export { parseJsonToolEnvelope } from './protocol';
 
@@ -14,24 +22,83 @@ export { parseJsonToolEnvelope } from './protocol';
  *   "a new endpoint is a data edit, not a code change".
  */
 
-function lastUser(messages: readonly AgentChatMessage[]): string {
-  return [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-}
-
 function lastToolResult(
   messages: readonly AgentChatMessage[],
 ): { name: string; payload: string } | null {
-  const message = [...messages].reverse().find((m) => m.role === 'tool');
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  const message = [...messages.slice(lastUser + 1)].reverse().find((m) => m.role === 'tool');
   return message ? { name: message.toolName ?? '', payload: message.content } : null;
 }
 
-function stripDiacritics(value: string): string {
+function previousToolResult(
+  messages: readonly AgentChatMessage[],
+): { name: string; payload: string } | null {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  const message = [...messages.slice(0, lastUser)].reverse().find((item) => item.role === 'tool');
+  if (message) return { name: message.toolName ?? '', payload: message.content };
+  const capsule = messages.map(parseCapsule).find((value) => value !== null);
+  const evidence = capsule?.evidence.at(-1);
+  return evidence ? { name: evidence.toolName, payload: evidence.payload } : null;
+}
+
+function normalized(value: string): string {
   return value
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/đ/g, 'd')
     .replace(/Đ/g, 'D')
     .toLowerCase();
+}
+
+function explicitlyRequestsAssignment(messages: readonly AgentChatMessage[]): boolean {
+  const latest = [...messages].reverse().find((message) => message.role === 'user')?.content ?? '';
+  return /\b(giao|tao|phan)\b[^.?!]{0,40}\b(bai|bai tap|de)\b/.test(normalized(latest));
+}
+
+function assignmentCallFromProposal(payload: string): AgentToolCall | null {
+  try {
+    const result = JSON.parse(payload) as {
+      ok?: boolean;
+      data?: { tenBai?: unknown; questionIds?: unknown };
+    };
+    if (
+      result.ok !== true ||
+      typeof result.data?.tenBai !== 'string' ||
+      !Array.isArray(result.data.questionIds) ||
+      !result.data.questionIds.every((id) => typeof id === 'string')
+    ) {
+      return null;
+    }
+    return {
+      name: 'giao_bai',
+      args: {
+        title: result.data.tenBai,
+        question_ids: result.data.questionIds,
+        due_at: null,
+        allow_retake: false,
+        shuffle_answers: true,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function hasEvidenceAfterLatestUser(messages: readonly AgentChatMessage[]): boolean {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  if (lastUser < 0) return false;
+  if (messages.slice(lastUser + 1).some((message) => message.role === 'tool')) return true;
+  const latest = messages[lastUser]?.content.trim() ?? '';
+  if (!/^(vì sao|tại sao|giải thích thêm)\??$/i.test(latest)) return false;
+  return messages.some((message) => (parseCapsule(message)?.evidence.length ?? 0) > 0);
+}
+
+function isAbortError(error: unknown, signal?: AbortSignal): boolean {
+  return (
+    signal?.aborted === true ||
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
 }
 
 export class RuleBasedProvider implements AgentProvider {
@@ -42,42 +109,68 @@ export class RuleBasedProvider implements AgentProvider {
     messages: readonly AgentChatMessage[],
     _tools: readonly AgentTool[],
   ): Promise<AgentCompletion> {
-    const asked = stripDiacritics(lastUser(messages));
     const observed = lastToolResult(messages);
 
     // Second pass: a tool already ran — compose the answer from its payload.
     if (observed) {
+      if (observed.name === 'de_xuat_bai_tap' && explicitlyRequestsAssignment(messages)) {
+        const call = assignmentCallFromProposal(observed.payload);
+        if (call) return { content: null, toolCalls: [call] };
+      }
       return { content: composeAnswer(observed.name, observed.payload), toolCalls: [] };
     }
 
-    // First pass: route the question to exactly one tool.
-    const calls: AgentToolCall[] = [];
-    const learner = ['an', 'binh', 'chi', 'minh'].find((id) =>
-      new RegExp(`\\b(ban\\s+)?${id}\\b`).test(asked),
-    );
-    const kcMatch = asked.match(/\bk(0?[1-9]|10)\b/);
-    if (learner && /chan doan|hoc sinh|dang o dau|the nao|tinh hinh/.test(asked)) {
-      calls.push({ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: learner } });
-    } else if (kcMatch) {
-      const number = kcMatch[1].padStart(2, '0');
-      calls.push({ name: 'giai_thich_kien_thuc', args: { kc: `K${number}` } });
-    } else if (/bai (duoc )?giao|bai tap|da nop|tien do/.test(asked)) {
-      calls.push({ name: 'bai_duoc_giao', args: {} });
-    } else if (/lop|tong quan|nhom|uu tien|lo hong|day lai/.test(asked)) {
-      calls.push({ name: 'tong_quan_lop', args: {} });
-    } else if (learner) {
-      calls.push({ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: learner } });
+    const latestQuestion = [...messages]
+      .reverse()
+      .find((message) => message.role === 'user')?.content;
+    if (latestQuestion && /^(vì sao|tại sao|giải thích thêm)\??$/i.test(latestQuestion.trim())) {
+      const previous = previousToolResult(messages);
+      if (previous)
+        return { content: composeAnswer(previous.name, previous.payload), toolCalls: [] };
     }
 
-    if (calls.length === 0) {
-      return {
-        content:
-          'Tôi trả lời được các câu về: tổng quan lớp / chẩn đoán của An, Bình, Chi, Minh / ' +
-          'vị trí một kiến thức (K01–K10) / bài đã giao. Ví dụ: "Chẩn đoán của bạn An?".',
-        toolCalls: [],
-      };
+    return routeRuleQuestion(messages);
+  }
+}
+
+export class DeterministicFirstProvider implements AgentProvider {
+  readonly id: string;
+  readonly label: string;
+  readonly contextWindow?: number;
+
+  constructor(
+    private readonly primary: AgentProvider,
+    private readonly rules: RuleBasedProvider = new RuleBasedProvider(),
+  ) {
+    this.id = primary.id;
+    this.label = primary.label;
+    this.contextWindow = primary.contextWindow;
+  }
+
+  async complete(
+    messages: readonly AgentChatMessage[],
+    tools: readonly AgentTool[],
+    signal?: AbortSignal,
+    onDelta?: (text: string) => void,
+    runtime?: AgentProviderRuntime,
+  ): Promise<AgentCompletion> {
+    if (!hasEvidenceAfterLatestUser(messages)) {
+      return this.rules.complete(messages, tools);
     }
-    return { content: null, toolCalls: calls };
+    const continuation = await this.rules.complete(messages, tools);
+    if (continuation.toolCalls.length > 0) return continuation;
+    try {
+      const completion = await this.primary.complete(messages, tools, signal, onDelta, runtime);
+      return { ...completion, modelId: completion.modelId ?? this.primary.id };
+    } catch (error) {
+      if (isAbortError(error, signal)) throw error;
+      const completion = await this.rules.complete(messages, tools);
+      return { ...completion, modelId: this.primary.id, fallback: true };
+    }
+  }
+
+  dispose(): Promise<void> | void {
+    return this.primary.dispose?.();
   }
 }
 
@@ -125,6 +218,19 @@ export function composeAnswer(toolName: string, payload: string): string {
         const d = result.data as { ten: string; soCau: number; daNop: string }[];
         if (d.length === 0) return 'Chưa có bài nào được giao cho lớp.';
         return `Có ${d.length} bài đã giao: ${d.map((a) => `"${a.ten}" (${a.soCau} câu, đã nộp ${a.daNop})`).join('; ')}.`;
+      }
+      case 'de_xuat_bai_tap': {
+        const d = result.data as {
+          tenBai: string;
+          kienThuc: { ten: string };
+          cauHoi: unknown[];
+          thoiLuongDuKienPhut: number;
+        };
+        return `Đề xuất "${d.tenBai}" gồm ${d.cauHoi.length} câu về ${d.kienThuc.ten}, khoảng ${d.thoiLuongDuKienPhut} phút. Đây mới là bản xem trước, chưa giao cho lớp.`;
+      }
+      case 'giao_bai': {
+        const d = result.data as { tenBai: string; soCau: number; lop: string };
+        return `Đã giao "${d.tenBai}" gồm ${d.soCau} câu cho lớp ${d.lop}.`;
       }
       default:
         return payload;
@@ -181,8 +287,12 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     onDelta?: (text: string) => void,
   ): Promise<AgentCompletion> {
     const stream = Boolean(onDelta);
+    const exposeDeltas = hasEvidenceAfterLatestUser(messages);
     const toolMenu = tools
-      .map((tool) => `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.parameters)}`)
+      .map(
+        (tool) =>
+          `- ${tool.name}: ${tool.description} args: ${JSON.stringify(tool.inputJsonSchema)}`,
+      )
       .join('\n');
     const executedTools = new Set(
       messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
@@ -216,15 +326,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: {
-            type: 'object',
-            properties: Object.fromEntries(
-              Object.entries(tool.parameters).map(([key, description]) => [
-                key,
-                { type: 'string', description },
-              ]),
-            ),
-          },
+          parameters: tool.inputJsonSchema,
         },
       })),
     };
@@ -247,12 +349,15 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
 
     let content: string | null;
     let rawCalls: OpenAiToolCallShape[];
+    let usage: AgentCompletion['usage'];
 
     if (stream) {
       // NekoCore parseStream, miniaturised: accumulate content deltas and
       // index-keyed tool-call argument fragments.
       const acc = new Map<number, { name: string; argString: string }>();
       let text = '';
+      let pendingVisibleText = '';
+      let visibilityDecided = false;
       for await (const data of sseData(response)) {
         let chunk: {
           choices?: {
@@ -261,6 +366,11 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
               tool_calls?: ({ index?: number } & OpenAiToolCallShape)[];
             };
           }[];
+          usage?: {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            prompt_tokens_details?: { cached_tokens?: number };
+          };
         };
         try {
           chunk = JSON.parse(data);
@@ -268,9 +378,33 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
           continue;
         }
         const delta = chunk.choices?.[0]?.delta;
+        if (
+          Number.isFinite(chunk.usage?.prompt_tokens) &&
+          Number.isFinite(chunk.usage?.completion_tokens)
+        ) {
+          usage = {
+            inputTokens: chunk.usage?.prompt_tokens ?? 0,
+            outputTokens: chunk.usage?.completion_tokens ?? 0,
+            ...(Number.isFinite(chunk.usage?.prompt_tokens_details?.cached_tokens)
+              ? { cachedInputTokens: chunk.usage?.prompt_tokens_details?.cached_tokens ?? 0 }
+              : {}),
+          };
+        }
         if (delta?.content) {
           text += delta.content;
-          onDelta?.(delta.content);
+          if (exposeDeltas) {
+            if (visibilityDecided) {
+              onDelta?.(delta.content);
+            } else {
+              pendingVisibleText += delta.content;
+              const first = pendingVisibleText.trimStart().charAt(0);
+              if (first && first !== '{' && first !== '`') {
+                visibilityDecided = true;
+                onDelta?.(pendingVisibleText);
+                pendingVisibleText = '';
+              }
+            }
+          }
         }
         for (const call of delta?.tool_calls ?? []) {
           const index = call.index ?? 0;
@@ -287,10 +421,27 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     } else {
       const body = (await response.json()) as {
         choices?: { message?: { content?: string | null; tool_calls?: OpenAiToolCallShape[] } }[];
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
+        };
       };
       const message = body.choices?.[0]?.message;
       content = message?.content ?? null;
       rawCalls = message?.tool_calls ?? [];
+      if (
+        Number.isFinite(body.usage?.prompt_tokens) &&
+        Number.isFinite(body.usage?.completion_tokens)
+      ) {
+        usage = {
+          inputTokens: body.usage?.prompt_tokens ?? 0,
+          outputTokens: body.usage?.completion_tokens ?? 0,
+          ...(Number.isFinite(body.usage?.prompt_tokens_details?.cached_tokens)
+            ? { cachedInputTokens: body.usage?.prompt_tokens_details?.cached_tokens ?? 0 }
+            : {}),
+        };
+      }
     }
 
     const toolCalls: AgentToolCall[] = rawCalls.flatMap((call) => {
@@ -298,7 +449,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
       if (!name) return [];
       try {
         return [
-          { name, args: JSON.parse(call.function?.arguments || '{}') as Record<string, string> },
+          { name, args: JSON.parse(call.function?.arguments || '{}') as Record<string, unknown> },
         ];
       } catch {
         return [{ name, args: {} }];
@@ -309,7 +460,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     if (toolCalls.length === 0) {
       const envelope = parseJsonToolEnvelope(content);
       if (envelope && !executedTools.has(envelope.name)) {
-        return { content: null, toolCalls: [envelope] };
+        return { content: null, toolCalls: [envelope], usage };
       }
       if (envelope && content) {
         // Already-executed tool re-emitted: strip the JSON block and keep any
@@ -318,23 +469,30 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
           .replace(/```json[\s\S]*?```/g, '')
           .replace(/\{[\s\S]*\}/, '')
           .trim();
-        return { content: stripped || null, toolCalls: [] };
+        return { content: stripped || null, toolCalls: [], usage };
       }
     }
-    return { content, toolCalls };
+    return { content, toolCalls, usage };
   }
 }
 
 /** Provider profiles — data, not code. */
 import { WebLlmAgentProvider } from './webllm-provider';
+import { ChatGptAgentProvider } from './chatgpt-provider';
+
+export const INTERNAL_RULE_PROVIDER = new RuleBasedProvider();
+export const CHATGPT_PROVIDER = new ChatGptAgentProvider();
 
 export const AGENT_PROVIDERS: readonly AgentProvider[] = [
-  new RuleBasedProvider(),
-  new OpenAiCompatAgentProvider(
-    'local',
-    'Model cục bộ (Ollama — ví dụ Gemma)',
-    'http://localhost:11434/v1',
-    'gemma3:4b',
+  new DeterministicFirstProvider(
+    new OpenAiCompatAgentProvider(
+      'local',
+      'Local · Ollama',
+      'http://localhost:11434/v1',
+      'gemma3:4b',
+    ),
+    INTERNAL_RULE_PROVIDER,
   ),
-  new WebLlmAgentProvider(),
+  new DeterministicFirstProvider(new WebLlmAgentProvider(), INTERNAL_RULE_PROVIDER),
+  CHATGPT_PROVIDER,
 ];

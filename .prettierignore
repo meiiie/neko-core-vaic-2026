@@ -2,6 +2,9 @@ node_modules/
 dist/
 dev-dist/
 coverage/
+ref/
+lab/
+labs/
 package-lock.json
 docs/
 AI_COLLABORATION_LOG.csv

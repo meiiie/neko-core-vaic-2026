@@ -70,6 +70,20 @@ export function AppLayout() {
   }, []);
 
   useEffect(() => {
+    if (account?.role !== 'TEACHER') return;
+    let cancelled = false;
+    let unregister: () => void = () => undefined;
+    void import('../services/agent/webmcp').then(({ registerNekoPathWebMcpTools }) => {
+      if (cancelled) return;
+      unregister = registerNekoPathWebMcpTools();
+    });
+    return () => {
+      cancelled = true;
+      unregister();
+    };
+  }, [account?.role]);
+
+  useEffect(() => {
     if (!window.matchMedia) return;
     const media = window.matchMedia(MOBILE_NAVIGATION_QUERY);
     const updateViewport = () => {
@@ -156,8 +170,8 @@ export function AppLayout() {
   const home = account.role === 'STUDENT' ? '/student' : '/teacher';
   const closedMobileTabIndex = isMobile && !mobileOpen ? -1 : undefined;
 
-  function exitWorkspace() {
-    signOut();
+  async function exitWorkspace() {
+    await signOut();
     navigate('/login', { replace: true });
   }
 
@@ -252,7 +266,7 @@ export function AppLayout() {
                 type="button"
                 aria-label="Đổi hồ sơ"
                 tabIndex={closedMobileTabIndex}
-                onClick={exitWorkspace}
+                onClick={() => void exitWorkspace()}
               >
                 Đổi<span className="sidebar-account-action-detail"> hồ sơ</span>
               </button>

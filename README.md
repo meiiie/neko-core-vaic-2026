@@ -74,12 +74,13 @@ publishes under their own name, distributed to student devices for offline readi
 assignment creation and monitoring — all computed from the same deterministic domain core the
 student surfaces use.
 
-**Neko assistant** — an agentic console docked on the right, built on one provider port with
-three interchangeable brains: a deterministic rule agent (always available, offline), a local
-Ollama model, and Gemma running fully in-browser via WebLLM with a consented on-device download.
-The harness mirrors the NekoCore loop: bounded tool-call steps, parallel read-only fan-out,
-stuck-loop detection, and a grounding guard that replaces drifting numbers with deterministic
-composition.
+**Neko assistant** — a persistent, evidence-first console docked on the right. Its canonical
+memory compacts under estimated token pressure rather than expiring after a fixed number of turns.
+The same strict provider port supports the deterministic offline rule agent, local Ollama, Gemma 3
+running in-browser through WebLLM, server-side OpenAI Responses, and optional local/self-hosted
+ChatGPT managed login through the official Codex App Server protocol. Bounded tool steps, strict
+runtime schemas, stuck-loop detection and a grounding guard replace unsupported claims with
+deterministic evidence.
 
 ## Architecture
 
@@ -213,6 +214,8 @@ labs/           Image-generation lab with asset register and review rubric
 | [OPERATIONAL_MVP.md](docs/OPERATIONAL_MVP.md) | Role-based MVP scope |
 | [EVALUATION.md](docs/EVALUATION.md) | Evaluation status and reproducibility |
 | [EXECUTIVE_CONCLUSION_EXECUTION.md](docs/EXECUTIVE_CONCLUSION_EXECUTION.md) | Evidence-aware adaptive core rationale |
+| [Teacher AI harness v2](docs/superpowers/specs/2026-07-18-neko-teacher-ai-harness-v2-design.md) | Agent memory, provider and security design |
+| [Agentic vertical slice](docs/superpowers/plans/2026-07-18-neko-agentic-vertical-slice.md) | Implementation and verification record |
 | [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md) | Production topology and verification |
 | [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Submission video script with claim discipline |
 | [PROBLEM_FIT_AUDIT.md](docs/PROBLEM_FIT_AUDIT.md) | Requirement-by-requirement technical audit with measurements |
@@ -244,6 +247,7 @@ sử học theo tài khoản nên đổi thiết bị vẫn khôi phục đượ
 cần mạng. Lát cắt Toán 7 được biên soạn theo định hướng GDPT 2018 nhưng còn chờ giáo viên được
 nêu tên duyệt chính thức. Đăng nhập trình diễn bằng cách chọn tên trong danh sách lớp, không cần
 gõ mật khẩu và không được xem là ranh giới định danh bảo mật cho triển khai trường học thật.
+Neko ghi nhớ theo phiên và nén theo ngân sách token, không tự xóa ngữ cảnh sau một số lượt cố định.
 
 ## License
 
