@@ -145,6 +145,16 @@ describe('NekoPath API', () => {
     expect(verdict.correct).toBe(false);
     expect(verdict.note).toContain('so sánh cộng');
     expect(verdict.hints[0]).toContain('nhân mấy');
+    expect(verdict.event).toMatchObject({
+      learnerId: 'user-student-an',
+      itemId: questionId,
+      kind: 'ASSIGNMENT_ANSWER',
+    });
+    expect(JSON.parse(verdict.event.payload)).toMatchObject({
+      choiceId: 'b',
+      correct: false,
+      methodValidity: 'UNKNOWN',
+    });
 
     // The teacher's assignment list now shows one submitted learner.
     const progress = await app.inject({ method: 'GET', url: '/api/assignments', cookies: teacher });
@@ -203,6 +213,32 @@ describe('NekoPath API', () => {
     const secondBody = second.json() as { accepted: number; conflictIds: string[] };
     expect(secondBody.accepted).toBe(0);
     expect(secondBody.conflictIds).toEqual([]);
+    await app.close();
+  });
+
+  it('returns structured misconception evidence for an assigned authored bank item', async () => {
+    const app = await makeApp();
+    const student = await loginCookie(app, STUDENT_EMAIL);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/assignments/assignment-seed-k02/answers',
+      cookies: student,
+      payload: { questionId: 'bank-K02-CHECK-1', choiceId: 'b' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const result = response.json() as GradeShape;
+    expect(result.event).toMatchObject({
+      learnerId: 'user-student-an',
+      itemId: 'bank-K02-CHECK-1',
+      kind: 'ASSIGNMENT_ANSWER',
+    });
+    expect(JSON.parse(result.event.payload)).toMatchObject({
+      choiceId: 'b',
+      correct: false,
+      methodValidity: 'INVALID',
+      misconceptionId: 'ADDITIVE_EQUIVALENCE',
+    });
     await app.close();
   });
 
@@ -320,4 +356,13 @@ interface GradeShape {
   correct: boolean;
   note: string;
   hints: string[];
+  event: {
+    id: string;
+    learnerId: string;
+    itemId: string;
+    sequence: number;
+    occurredAt: string;
+    kind: string;
+    payload: string;
+  };
 }

@@ -118,6 +118,34 @@ function seededMaxSequence(context: StudentDiagnosisContext): number {
   return seededEvents(context).reduce((max, event) => Math.max(max, event.sequence), 0);
 }
 
+export interface ConfirmedAssignmentEvent {
+  readonly id: string;
+  readonly learnerId: string;
+  readonly itemId: string;
+  readonly sequence: number;
+  readonly occurredAt: string;
+  readonly kind: 'ASSIGNMENT_ANSWER';
+  readonly payload: string;
+}
+
+/** Re-sequence a server-confirmed answer after the local seeded walkthrough. */
+export function buildConfirmedAssignmentRecord(
+  context: StudentDiagnosisContext,
+  event: ConfirmedAssignmentEvent,
+  existingLocalCount: number,
+): LearnerEventRecord | null {
+  if (event.learnerId !== context.learnerId || event.kind !== 'ASSIGNMENT_ANSWER') return null;
+  return {
+    id: event.id,
+    learnerId: context.learnerId,
+    itemId: event.itemId,
+    sequence: seededMaxSequence(context) + existingLocalCount + 1,
+    occurredAt: event.occurredAt,
+    kind: event.kind,
+    payload: event.payload,
+  };
+}
+
 /** Build the Dexie record for a locally answered hero question. */
 export function buildLocalAnswerRecord(
   context: StudentDiagnosisContext,
@@ -153,7 +181,9 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
   const events: LearnerEvent[] = [];
   for (const record of records) {
     const payload = parsePayload(record.payload);
-    const item = HERO_ITEMS.find((candidate) => candidate.id === record.itemId);
+    const item = HERO_ITEMS.find(
+      (candidate) => candidate.id === record.itemId || `bank-${candidate.id}` === record.itemId,
+    );
     if (!payload || !item) continue;
     const misconceptionId =
       item.misconceptionIds?.includes(payload.misconceptionId ?? '') &&
@@ -163,7 +193,7 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
     events.push({
       id: record.id,
       learnerId: record.learnerId,
-      itemId: record.itemId,
+      itemId: item.id,
       sequence: record.sequence,
       occurredAt: record.occurredAt,
       correct: payload.correct,

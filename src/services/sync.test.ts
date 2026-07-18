@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NekoPathDb, type LearnerEventRecord } from '../storage/db';
 import { appendEvent } from '../storage/event-repository';
 import { duePendingOutbox, queueOutbox } from '../storage/outbox-repository';
-import { flushOutbox, recordAnswer } from './sync';
+import { flushOutbox, recordAnswer, recordConfirmedAnswer } from './sync';
 import { bindBrowserProfile, markBrowserSignedOut } from './profile-binding';
 
 function makeDb(): NekoPathDb {
@@ -198,6 +198,20 @@ describe('outbox sync bridge', () => {
     expect(await recordAnswer(makeEvent('evt-atomic', 99), database)).toBe('DUPLICATE_IGNORED');
     expect(await database.events.count()).toBe(1);
     expect(await database.outbox.count()).toBe(1);
+    await database.delete();
+  });
+
+  it('stores a server-confirmed assignment answer without queueing it again', async () => {
+    const database = makeDb();
+    const event = { ...makeEvent('evt-confirmed', 8), kind: 'ASSIGNMENT_ANSWER' };
+
+    expect(await recordConfirmedAnswer(event, database)).toBe('APPENDED');
+    expect(await database.events.get(event.id)).toEqual(event);
+    expect(await database.outbox.count()).toBe(0);
+    expect(await database.meta.get('lastSyncedAt')).toBeTruthy();
+
+    expect(await recordConfirmedAnswer(event, database)).toBe('DUPLICATE_IGNORED');
+    expect(await database.events.count()).toBe(1);
     await database.delete();
   });
 });

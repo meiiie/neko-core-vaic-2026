@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { learnerEventSchema } from '../../storage/event-repository';
 import {
   buildHeroClassDashboard,
+  buildConfirmedAssignmentRecord,
   buildLocalAnswerRecord,
   diagnoseHero,
   isHeroLearnerId,
@@ -92,6 +93,58 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
       expect.objectContaining({ id: heroRecord.id, learnerId: 'an' }),
     ]);
     expect(toDomainEvents([heroRecord])[0].learnerId).toBe('user-student-an');
+  });
+
+  it('turns a confirmed bank answer into canonical local diagnosis evidence', () => {
+    const context = { learnerId: 'user-student-an', simulationProfileId: 'an' } as const;
+    const record = buildConfirmedAssignmentRecord(
+      context,
+      {
+        id: 'evt-assignment-1',
+        learnerId: context.learnerId,
+        itemId: 'bank-K02-CHECK-1',
+        sequence: 1,
+        occurredAt: '2026-07-18T09:00:00.000Z',
+        kind: 'ASSIGNMENT_ANSWER',
+        payload: JSON.stringify({
+          choiceId: 'b',
+          correct: false,
+          methodValidity: 'INVALID',
+          misconceptionId: 'ADDITIVE_EQUIVALENCE',
+        }),
+      },
+      0,
+    );
+
+    expect(record).toMatchObject({
+      learnerId: context.learnerId,
+      itemId: 'bank-K02-CHECK-1',
+      sequence: 8,
+    });
+    expect(toDomainEvents(record ? [record] : [])).toEqual([
+      expect.objectContaining({
+        itemId: 'K02-CHECK-1',
+        misconceptionId: 'ADDITIVE_EQUIVALENCE',
+      }),
+    ]);
+  });
+
+  it('rejects a confirmed assignment event owned by another account', () => {
+    expect(
+      buildConfirmedAssignmentRecord(
+        { learnerId: 'user-student-an', simulationProfileId: 'an' },
+        {
+          id: 'evt-wrong-owner',
+          learnerId: 'user-student-chi',
+          itemId: 'bank-K02-CHECK-1',
+          sequence: 1,
+          occurredAt: '2026-07-18T09:00:00.000Z',
+          kind: 'ASSIGNMENT_ANSWER',
+          payload: '{"choiceId":"a","correct":true}',
+        },
+        0,
+      ),
+    ).toBeNull();
   });
 
   it('persists structured misconception evidence from an authored distractor', () => {
