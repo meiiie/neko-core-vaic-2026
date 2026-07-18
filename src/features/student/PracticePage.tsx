@@ -7,12 +7,12 @@ import {
   questionForItem,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
+import { nextPracticeQuestion } from '../../app/adapters/practice-selection';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
-import { lessonForKc, practiceQuestionsForKc, type PracticeQuestion } from '../../content';
+import { lessonForKc, type PracticeQuestion } from '../../content';
 import { resolveTutorLlm, type TutorLlmResult } from '../../services/llm';
 import { recordAnswer } from '../../services/sync';
-import type { LearnerEventRecord } from '../../storage/db';
 
 type Phase = 'answering' | 'feedback';
 
@@ -22,22 +22,6 @@ interface FeedbackState {
   /** The question that was answered — frozen so live re-diagnosis cannot swap
    * the visible question while its feedback is still on screen. */
   readonly question: PracticeQuestion | null;
-}
-
-/** Pick the practice question of this KC with the fewest recorded attempts. */
-function nextQuestion(
-  kcId: string,
-  records: readonly LearnerEventRecord[],
-): PracticeQuestion | undefined {
-  const questions = practiceQuestionsForKc(kcId);
-  if (questions.length === 0) return undefined;
-  const attempts = new Map<string, number>();
-  for (const record of records) {
-    attempts.set(record.itemId, (attempts.get(record.itemId) ?? 0) + 1);
-  }
-  return [...questions].sort(
-    (a, b) => (attempts.get(a.itemId) ?? 0) - (attempts.get(b.itemId) ?? 0),
-  )[0];
 }
 
 export function PracticePage() {
@@ -104,7 +88,7 @@ export function PracticePage() {
 
   // During feedback the answered question stays frozen on screen; the live
   // re-diagnosed "next" question only takes over after Tiếp tục/Thử lại.
-  const upNext = rootKcId ? nextQuestion(rootKcId, localRecords) : undefined;
+  const upNext = rootKcId ? nextPracticeQuestion(rootKcId, localRecords) : undefined;
   const question = phase === 'feedback' && feedback?.question ? feedback.question : upNext;
   const transferQuestion =
     result.status === 'FAST_PATH' && result.nextItemId

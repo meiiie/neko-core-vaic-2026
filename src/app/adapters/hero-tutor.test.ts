@@ -4,6 +4,7 @@ import {
   buildHeroClassDashboard,
   buildConfirmedAssignmentRecord,
   buildHydratedEventRecords,
+  canonicalHeroItemId,
   buildLocalAnswerRecord,
   diagnoseHero,
   isHeroLearnerId,
@@ -227,5 +228,11 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     expect(isHeroLearnerId('an')).toBe(true);
     expect(isHeroLearnerId('unknown')).toBe(false);
     expect(isHeroLearnerId(undefined)).toBe(false);
+  });
+
+  it('canonicalizes only known direct and teacher-bank item IDs', () => {
+    expect(canonicalHeroItemId('K02-CHECK-1')).toBe('K02-CHECK-1');
+    expect(canonicalHeroItemId('bank-K02-CHECK-1')).toBe('K02-CHECK-1');
+    expect(canonicalHeroItemId('bank-unknown')).toBeUndefined();
   });
 });

@@ -57,6 +57,13 @@ export function questionForItem(itemId: string): HeroQuestion | undefined {
   return HERO_QUESTIONS.find((question) => question.itemId === itemId);
 }
 
+/** Resolve a persisted direct or teacher-bank ID to a known diagnosis item. */
+export function canonicalHeroItemId(itemId: string): string | undefined {
+  return HERO_ITEMS.find(
+    (candidate) => candidate.id === itemId || `bank-${candidate.id}` === itemId,
+  )?.id;
+}
+
 /** Payload stored in the local Dexie event record for a hero answer. */
 interface HeroAnswerPayload {
   choiceId: string;
@@ -200,9 +207,8 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
   const events: LearnerEvent[] = [];
   for (const record of records) {
     const payload = parsePayload(record.payload);
-    const item = HERO_ITEMS.find(
-      (candidate) => candidate.id === record.itemId || `bank-${candidate.id}` === record.itemId,
-    );
+    const canonicalItemId = canonicalHeroItemId(record.itemId);
+    const item = HERO_ITEMS.find((candidate) => candidate.id === canonicalItemId);
     if (!payload || !item) continue;
     const misconceptionId =
       item.misconceptionIds?.includes(payload.misconceptionId ?? '') &&
