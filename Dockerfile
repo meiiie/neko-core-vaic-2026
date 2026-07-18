@@ -21,8 +21,10 @@ WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
-COPY --from=build /app/src/content ./src/content
-COPY --from=build /app/src/domain ./src/domain
+# Ship ALL of src: the server imports across src/content, src/domain and
+# src/storage, and a hand-maintained allowlist already crash-looped
+# production once (18/07) when a new cross-import landed.
+COPY --from=build /app/src ./src
 COPY package.json ./
 RUN mkdir -p server/data && chown -R node:node /app
 USER node

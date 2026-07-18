@@ -17,6 +17,13 @@ compose=(sudo docker compose -f ops/compose.yml)
 
 sudo install -d -m 0700 "$backup_dir"
 
+# A recovery deploy must never be blocked by the broken container it is
+# about to replace: skip the snapshot loudly when the app cannot exec.
+if ! "${compose[@]}" exec -T app node -e "process.exit(0)" >/dev/null 2>&1; then
+  echo "backup.sh: app container not running — skipping pre-deploy snapshot (recovery deploy)" >&2
+  exit 0
+fi
+
 cleanup() {
   "${compose[@]}" exec -T app rm -f \
     "$container_path" "${container_path}-wal" "${container_path}-shm" \
