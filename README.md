@@ -119,6 +119,29 @@ Design decisions that matter:
 - **System font stack.** Zero download on 2G and native Vietnamese diacritic shaping on every
   platform.
 
+### Where the AI actually is
+
+NekoPath's core AI is not a chatbot. It is a **probabilistic learner model plus a
+graph-constrained decision engine**, running entirely on the device:
+
+1. A Bayesian Knowledge Tracing–style learner model (versioned slip/guess/learn parameters,
+   deterministic over the canonicalized event log) updates mastery estimates after every answer.
+2. A diagnostic probe selector picks the next question by expected information gain, under a
+   bounded question budget.
+3. A root-cause engine searches the reviewed prerequisite graph for the earliest actionable,
+   evidence-supported gap — and returns `NEEDS_MORE_EVIDENCE` rather than guess when evidence
+   is insufficient or contradictory.
+4. A path planner emits the minimal valid remediation path (fewest skills needing work on a
+   valid route, never skipping an unmet prerequisite).
+5. A teacher-intelligence layer aggregates transparent priorities
+   (`affected learners × blocked downstream skills`) and class-wide gaps with explicit
+   denominators.
+
+The optional language model (rule agent, local Ollama, or in-browser Gemma via WebLLM) only
+narrates results this pipeline has already computed. It never decides answer keys, mastery,
+root causes, learning paths, or priorities, and a grounding guard replaces any drifting output
+with a deterministic fallback.
+
 ## Getting started
 
 Prerequisites: Node.js `24.18.0` (LTS, see `.nvmrc`), npm 11.
@@ -178,6 +201,7 @@ labs/           Image-generation lab with asset register and review rubric
 | [Teacher AI harness v2](docs/superpowers/specs/2026-07-18-neko-teacher-ai-harness-v2-design.md) | Agent memory, provider and security design |
 | [Agentic vertical slice](docs/superpowers/plans/2026-07-18-neko-agentic-vertical-slice.md) | Implementation and verification record |
 | [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md) | Production topology and verification |
+| [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Submission video script with claim discipline |
 | [ops/RUNBOOK.md](ops/RUNBOOK.md) | Operations: deploy, accounts, recovery |
 
 ## Team and AI collaboration

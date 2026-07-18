@@ -98,7 +98,8 @@ export type DiagnosisReasonCode =
   | 'TARGET_AND_PREREQUISITES_MASTERED'
   | 'TARGET_OUTSIDE_GRAPH'
   | 'NO_ACTIONABLE_ROOT'
-  | 'NO_VALID_PATH';
+  | 'NO_VALID_PATH'
+  | 'TEACHER_OVERRIDE_APPLIED';
 
 export interface DiagnosisResult {
   readonly status: DiagnosisStatus;
@@ -123,6 +124,15 @@ export interface DiagnosisInput {
   readonly items: readonly Item[];
   readonly events: readonly LearnerEvent[];
   readonly config?: Partial<DomainConfig>;
+}
+
+export type TeacherOverrideDecision = 'SET_ROOT' | 'NEEDS_MORE_EVIDENCE';
+
+export interface TeacherDiagnosisOverride {
+  readonly learnerId: string;
+  readonly targetKcId: string;
+  readonly decision: TeacherOverrideDecision;
+  readonly rootKcId?: string;
 }
 
 export interface PathPlan {

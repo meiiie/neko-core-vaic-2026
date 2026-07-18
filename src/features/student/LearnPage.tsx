@@ -60,7 +60,7 @@ export function LearnPage() {
     <div className="assessment-page">
       <header className="assessment-header">
         <div>
-          <p className="eyebrow">Toán 7 • Chủ đề tỉ lệ thức</p>
+          <p className="eyebrow">Toán 7 · Chủ đề tỉ lệ thức</p>
           <h1>Bài kiểm tra nền tảng</h1>
           <p>Hệ thống chọn câu tiếp theo từ câu trả lời trước; tổng số câu có thể thay đổi.</p>
         </div>

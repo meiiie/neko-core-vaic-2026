@@ -297,7 +297,7 @@ export function TeacherAssignmentsPage() {
                 <div>
                   <strong>{assignment.title}</strong>
                   <span>
-                    {assignment.questionCount} câu • khoảng {assignment.questionCount * 3} phút •{' '}
+                    {assignment.questionCount} câu · khoảng {assignment.questionCount * 3} phút •{' '}
                     {assignment.kcIds.map(topicLabel).join(', ')}
                   </span>
                 </div>

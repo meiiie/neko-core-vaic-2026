@@ -1,4 +1,5 @@
 import {
+  applyTeacherOverride,
   allocateTeacherAttention,
   detectClassWideGaps,
   diagnose,
@@ -7,6 +8,7 @@ import {
   type DiagnosisResult,
   type LearnerEvent,
   type TeacherAttentionPlan,
+  type TeacherDiagnosisOverride,
   type TeacherGroup,
 } from '../domain';
 import { eventsFor, HERO_DEMO_CONFIG, HERO_EVENTS, HERO_GRAPH, HERO_ITEMS } from './hero-demo';
@@ -77,21 +79,45 @@ export const HERO_CLASS_LEARNERS: readonly HeroClassLearner[] = PROFILE_COUNTS.f
 
 export function buildHeroClassDashboard(
   learners: readonly HeroClassLearner[] = HERO_CLASS_LEARNERS,
+  observedEvents: readonly LearnerEvent[] = [],
+  overrides: readonly TeacherDiagnosisOverride[] = [],
 ): HeroClassDashboard {
-  const diagnoses = learners.map((learner) =>
-    diagnose({
+  const representativeByProfile = new Map<HeroSimulationProfileId, string>();
+  for (const learner of learners) {
+    if (!representativeByProfile.has(learner.simulationProfileId)) {
+      representativeByProfile.set(learner.simulationProfileId, learner.id);
+    }
+  }
+
+  const effectiveLearners = learners.map((learner): HeroClassLearner => {
+    if (representativeByProfile.get(learner.simulationProfileId) !== learner.id) return learner;
+    const profileEvents = observedEvents
+      .filter((event) => event.learnerId === learner.simulationProfileId)
+      .map((event) => ({ ...event, learnerId: learner.id }));
+    return profileEvents.length > 0
+      ? { ...learner, events: [...learner.events, ...profileEvents] }
+      : learner;
+  });
+
+  const diagnoses = effectiveLearners.map((learner) => {
+    const diagnosis = diagnose({
       learnerId: learner.id,
       targetKcId: 'K10',
       graph: HERO_GRAPH,
       items: HERO_ITEMS,
       events: learner.events,
       config: HERO_DEMO_CONFIG,
-    }),
-  );
+    });
+    const override = overrides.find(
+      (candidate) =>
+        candidate.learnerId === learner.id && candidate.targetKcId === diagnosis.targetKcId,
+    );
+    return override ? applyTeacherOverride(HERO_GRAPH, diagnosis, override) : diagnosis;
+  });
   const groups = groupForTeacher(HERO_GRAPH, diagnoses);
 
   return {
-    learners,
+    learners: effectiveLearners,
     diagnoses,
     groups,
     classWideGaps: detectClassWideGaps(groups, learners.length),

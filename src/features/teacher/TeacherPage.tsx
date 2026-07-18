@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { buildHeroClassDashboard, kcName } from '../../app/adapters/hero-tutor';
-import { useSyncStatus } from '../../services/sync';
+import { kcName } from '../../app/adapters/hero-tutor';
+import { useSession } from '../../app/session';
+import { greetingVi, todayVi } from '../../app/vietnamese-time';
 import { TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
+import { useTeacherDashboard } from './useTeacherDashboard';
 
 interface MetricCardProps {
   readonly id: string;
@@ -40,8 +41,8 @@ function MetricCard({ id, label, value, supportingText, hint, emphasis }: Metric
 }
 
 export function TeacherPage() {
-  const dashboard = useMemo(() => buildHeroClassDashboard(), []);
-  const syncStatus = useSyncStatus();
+  const { account } = useSession();
+  const { dashboard } = useTeacherDashboard();
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
   const topGroup = groups[0];
   const gap = dashboard.classWideGaps[0];
@@ -50,34 +51,20 @@ export function TeacherPage() {
   const needsMoreQuestions =
     groups.find((group) => group.status === 'QUICK_CHECK')?.totalLearnerCount ?? 0;
   const supportGroups = groups.filter((group) => group.priorityScore > 0);
-  const updatedLabel = syncStatus?.lastSyncedAt
-    ? `Cập nhật gần nhất lúc ${new Date(syncStatus.lastSyncedAt).toLocaleTimeString('vi-VN', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })}`
-    : 'Dữ liệu mẫu trên thiết bị • cập nhật khi mở trang';
+  const now = new Date();
 
   return (
     <div className="page-stack teacher-page">
-      <header className="page-heading page-heading--split teacher-page-heading">
-        <div>
-          <p className="eyebrow">Lớp 7A • Toán</p>
-          <h1>Chào Cô Hà</h1>
-          <p>Những việc nên ưu tiên cho tiết học tiếp theo.</p>
-        </div>
-        <p className="teacher-updated" role="status">
-          {updatedLabel}
+      <header className="page-heading">
+        <h1>
+          {greetingVi(now.getHours())}, {account?.shortName}
+        </h1>
+        <p className="page-meta">
+          {todayVi(now)} · Toán 7 · Lớp 7A · {classSize} học sinh
         </p>
       </header>
 
       <section className="metric-grid metric-grid--teacher" aria-label="Tình hình lớp học">
-        <MetricCard
-          id="class-size"
-          label="Số học sinh"
-          value={classSize}
-          supportingText="trong lớp 7A"
-          hint="Tổng số hồ sơ học sinh trong lớp mẫu đang được tổng hợp."
-        />
         <MetricCard
           id="evaluated"
           label="Đã đánh giá"
@@ -173,8 +160,8 @@ export function TeacherPage() {
                 <span>
                   <strong>{teacherActionLabel(allocation.actionId)}</strong>
                   <small>
-                    {allocation.minutes} phút • {allocation.attentionValue} điểm hành động
-                    {group ? ` • ${group.totalLearnerCount} học sinh` : ''}
+                    {allocation.minutes} phút · {allocation.attentionValue} điểm hành động
+                    {group ? ` · ${group.totalLearnerCount} học sinh` : ''}
                   </small>
                 </span>
                 <span aria-hidden="true">→</span>

@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import type { TeacherDiagnosisOverride } from '../domain';
 
 /**
  * Dexie/IndexedDB schema v1 (docs/IMPLEMENTATION_MASTER_PLAN.md §8).
@@ -27,11 +28,9 @@ export interface LearnerEventRecord {
   payload: string;
 }
 
-export interface OverrideRecord {
+export interface OverrideRecord extends TeacherDiagnosisOverride {
   id: string;
-  learnerId: string;
-  targetKcId: string;
-  decision: string;
+  reason: string;
   updatedAt: string;
 }
 

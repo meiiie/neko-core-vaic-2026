@@ -12,6 +12,7 @@ import {
   type PathPlan,
   type TeacherAttentionItem,
   type TeacherAttentionPlan,
+  type TeacherDiagnosisOverride,
   type TeacherGroup,
 } from './model';
 
@@ -647,6 +648,55 @@ export function diagnose(input: DiagnosisInput): DiagnosisResult {
     reasonCodes: budgetAvailable
       ? ['INSUFFICIENT_DIRECT_EVIDENCE', 'NO_ACTIONABLE_ROOT']
       : ['INSUFFICIENT_DIRECT_EVIDENCE', 'DIAGNOSTIC_BUDGET_EXHAUSTED'],
+  };
+}
+
+/** Apply an explicit human decision without mutating or fabricating learner evidence. */
+export function applyTeacherOverride(
+  graph: CurriculumGraph,
+  diagnosis: DiagnosisResult,
+  override: TeacherDiagnosisOverride,
+): DiagnosisResult {
+  topologicalOrder(graph);
+  if (override.learnerId !== diagnosis.learnerId) {
+    throw new Error('Teacher override learner does not match diagnosis');
+  }
+  if (override.targetKcId !== diagnosis.targetKcId) {
+    throw new Error('Teacher override target does not match diagnosis');
+  }
+
+  const common = {
+    learnerId: diagnosis.learnerId,
+    targetKcId: diagnosis.targetKcId,
+    evidenceEventIds: diagnosis.evidenceEventIds,
+    reasonCodes: ['TEACHER_OVERRIDE_APPLIED'] as const,
+    misconceptionHypotheses: diagnosis.misconceptionHypotheses,
+    contentVersion: diagnosis.contentVersion,
+    algorithmVersion: diagnosis.algorithmVersion,
+  };
+
+  if (override.decision === 'NEEDS_MORE_EVIDENCE') {
+    return {
+      ...common,
+      status: 'NEEDS_MORE_EVIDENCE',
+      disposition: 'TEACHER_REVIEW',
+      competingKcIds: diagnosis.competingKcIds,
+      pathKcIds: [],
+    };
+  }
+
+  if (!override.rootKcId) throw new Error('SET_ROOT override requires rootKcId');
+  const pathKcIds = shortestPath(graph, override.rootKcId, diagnosis.targetKcId);
+  if (pathKcIds.length === 0) {
+    throw new Error('Teacher override root needs a valid path to the target');
+  }
+  return {
+    ...common,
+    status: 'DIAGNOSED',
+    disposition: 'AUTO_REMEDIATE',
+    rootKcId: override.rootKcId,
+    competingKcIds: [],
+    pathKcIds,
   };
 }
 

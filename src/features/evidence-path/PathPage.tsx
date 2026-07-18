@@ -28,7 +28,7 @@ export function PathPage() {
     <div className="page-stack">
       <header className="page-heading page-heading--split">
         <div>
-          <p className="eyebrow">Hồ sơ học tập • Toán 7</p>
+          <p className="eyebrow">Hồ sơ học tập · Toán 7</p>
           <h1>Lộ trình của {account?.shortName}</h1>
           <p>Cập nhật từ các câu trả lời đã lưu trên thiết bị này.</p>
         </div>
