@@ -193,8 +193,8 @@ export function SystemPage() {
             <p className="eyebrow">Trợ lý AI trên thiết bị</p>
             <h2>{WEBLLM_MODEL_LABEL}</h2>
             <p>
-              Tải MỘT LẦN khi có mạng tốt; sau đó Neko trả lời bằng model chạy ngay trong trình
-              duyệt, hoàn toàn không cần mạng. Dùng lệnh <code>/model web</code> trong Neko.
+              Tải một lần khi có mạng tốt; sau khi tải đủ, Neko chạy model trong Web Worker và có
+              thể dùng ngoại tuyến. Chọn “Gemma trong trình duyệt” ở cuối bảng Neko.
             </p>
             {model.phase === 'checking' ? <p>Đang kiểm tra…</p> : null}
             {model.phase === 'unsupported' ? (
@@ -205,7 +205,7 @@ export function SystemPage() {
             ) : null}
             {model.phase === 'not-downloaded' ? (
               <button className="button-primary" type="button" onClick={() => void downloadModel()}>
-                Tải model (~1.6GB, một lần)
+                Tải model (~600MB, một lần)
               </button>
             ) : null}
             {model.phase === 'downloading' ? (
