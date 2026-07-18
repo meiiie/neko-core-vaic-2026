@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installApiStub } from '../../test/api-stub';
+import { installApiStub, TEACHER_DASHBOARD_FIXTURE } from '../../test/api-stub';
 import {
   AGENT_SYSTEM_PROMPT,
   runAgent,
@@ -48,6 +48,25 @@ describe('agent tools (deterministic facts)', () => {
   it('rejects unknown learners and unknown KCs honestly', async () => {
     expect((await toolByName('chan_doan_hoc_sinh')!.run({ hoc_sinh: 'x' })).ok).toBe(false);
     expect((await toolByName('giai_thich_kien_thuc')!.run({ kc: 'K99' })).ok).toBe(false);
+  });
+
+  it('prefers an exact name token over an earlier substring match', async () => {
+    installApiStub('co.ha@nekopath.edu.vn', {
+      ...TEACHER_DASHBOARD_FIXTURE,
+      rosterCount: 3,
+      learners: [
+        { id: 'user-student-anh', displayLabel: 'Lê Diệu Anh', eventCount: 0 },
+        ...TEACHER_DASHBOARD_FIXTURE.learners,
+      ],
+    });
+
+    const result = await toolByName('chan_doan_hoc_sinh')!.run({ hoc_sinh: 'an' });
+
+    expect(result.ok).toBe(true);
+    expect(result.data).toMatchObject({
+      hocSinh: 'Trần Ngọc An',
+      kienThucGoc: 'Phân số bằng nhau',
+    });
   });
 });
 
@@ -300,6 +319,19 @@ describe('JSON tool envelope fallback (models without native tools, e.g. Gemma)'
     );
     expect(
       parseJsonToolEnvelope('Đây là JSON:\n{"tool":"tong_quan_lop","args":{}}\nxong.'),
+    ).toEqual({ name: 'tong_quan_lop', args: {} });
+    expect(
+      parseJsonToolEnvelope(
+        'Bỏ qua {"status":"draft"}; dùng {"tool":"tong_quan_lop","args":{"ghi_chu":"dấu } trong chuỗi"}}.',
+      ),
+    ).toEqual({
+      name: 'tong_quan_lop',
+      args: { ghi_chu: 'dấu } trong chuỗi' },
+    });
+    expect(
+      parseJsonToolEnvelope(
+        '{"tool":"tong_quan_lop","args":{}} {"tool":"giai_thich_kien_thuc","args":{"kc":"K02"}}',
+      ),
     ).toEqual({ name: 'tong_quan_lop', args: {} });
     expect(parseJsonToolEnvelope('Câu trả lời thường, không JSON.')).toBeNull();
   });

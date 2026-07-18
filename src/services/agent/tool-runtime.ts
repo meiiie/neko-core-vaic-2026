@@ -62,30 +62,61 @@ async function executeOne(
   }
 
   const timeout = new AbortController();
-  const timeoutId = globalThis.setTimeout(() => timeout.abort('tool timeout'), tool.timeoutMs);
-  const abortFromParent = () => timeout.abort(signal?.reason ?? 'aborted');
-  signal?.addEventListener('abort', abortFromParent, { once: true });
+  type Outcome =
+    | { kind: 'result'; value: AgentToolResult }
+    | { kind: 'error'; error: unknown }
+    | { kind: 'interrupted'; code: 'TOOL_ABORTED' | 'TOOL_TIMEOUT' };
+  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let abortFromParent: (() => void) | undefined;
   try {
-    const result = await tool.run(parsedArgs, {
-      signal: timeout.signal,
+    const run = Promise.resolve()
+      .then(() => tool.run(parsedArgs, { signal: timeout.signal }))
+      .then<Outcome, Outcome>(
+        (value) => ({ kind: 'result', value }),
+        (error: unknown) => ({ kind: 'error', error }),
+      );
+    const interrupted = new Promise<Outcome>((resolve) => {
+      timeoutId = globalThis.setTimeout(() => {
+        timeout.abort('tool timeout');
+        resolve({ kind: 'interrupted', code: 'TOOL_TIMEOUT' });
+      }, tool.timeoutMs);
+      abortFromParent = () => {
+        timeout.abort(signal?.reason ?? 'aborted');
+        resolve({ kind: 'interrupted', code: 'TOOL_ABORTED' });
+      };
+      signal?.addEventListener('abort', abortFromParent, { once: true });
+      if (signal?.aborted) abortFromParent();
     });
+    const outcome = await Promise.race([run, interrupted]);
+    if (outcome.kind === 'interrupted') {
+      return fail(
+        outcome.code === 'TOOL_ABORTED'
+          ? 'Lệnh công cụ đã bị hủy.'
+          : 'Công cụ vượt quá thời gian cho phép.',
+        outcome.code,
+      );
+    }
+    if (outcome.kind === 'error') {
+      if (timeout.signal.aborted) {
+        return fail(
+          signal?.aborted ? 'Lệnh công cụ đã bị hủy.' : 'Công cụ vượt quá thời gian cho phép.',
+          signal?.aborted ? 'TOOL_ABORTED' : 'TOOL_TIMEOUT',
+        );
+      }
+      return fail(
+        outcome.error instanceof Error ? outcome.error.message : 'Công cụ gặp lỗi.',
+        'TOOL_ERROR',
+      );
+    }
     return {
-      ...result,
+      ...outcome.value,
       name: call.name,
       args: parsedArgs,
       durationMs: performance.now() - startedAt,
     };
-  } catch (error) {
-    if (timeout.signal.aborted) {
-      return fail(
-        signal?.aborted ? 'Lệnh công cụ đã bị hủy.' : 'Công cụ vượt quá thời gian cho phép.',
-        signal?.aborted ? 'TOOL_ABORTED' : 'TOOL_TIMEOUT',
-      );
-    }
-    return fail(error instanceof Error ? error.message : 'Công cụ gặp lỗi.', 'TOOL_ERROR');
   } finally {
-    globalThis.clearTimeout(timeoutId);
-    signal?.removeEventListener('abort', abortFromParent);
+    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+    if (abortFromParent) signal?.removeEventListener('abort', abortFromParent);
   }
 }
 

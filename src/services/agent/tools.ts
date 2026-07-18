@@ -67,6 +67,28 @@ const READ_ONLY_TOOL = {
   timeoutMs: 8_000,
 } as const;
 
+function normalizedLearnerQuery(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLocaleLowerCase('vi-VN')
+    .replace(/đ/g, 'd')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function learnerMatchScore(id: string, displayLabel: string, rawQuery: string): number {
+  const query = normalizedLearnerQuery(rawQuery);
+  const normalizedId = normalizedLearnerQuery(id);
+  const normalizedLabel = normalizedLearnerQuery(displayLabel);
+  if (!query) return 0;
+  if (normalizedId === query) return 100;
+  if (normalizedLabel === query) return 90;
+  if (normalizedLabel.split(' ').includes(query)) return 80;
+  if (normalizedLabel.includes(query)) return 40;
+  return 0;
+}
+
 const tongQuanLop: AgentTool = {
   name: 'tong_quan_lop',
   description: 'Tổng quan lớp 7A: các nhóm can thiệp, ưu tiên, lỗ hổng toàn lớp.',
@@ -152,18 +174,30 @@ const chanDoanHocSinh: AgentTool = {
   },
   ...READ_ONLY_TOOL,
   async run(args) {
-    const query = String(args.hoc_sinh ?? '')
-      .toLocaleLowerCase('vi-VN')
-      .trim();
+    const query = String(args.hoc_sinh ?? '').trim();
     if (!query) return { ok: false, error: 'Cần nhập tên hoặc ID học sinh.' };
     try {
       const dashboard = await fetchTeacherDashboard();
-      const learner = dashboard.learners.find(
-        (candidate) =>
-          candidate.id.toLocaleLowerCase('vi-VN') === query ||
-          candidate.displayLabel.toLocaleLowerCase('vi-VN').includes(query),
-      );
-      if (!learner) return { ok: false, error: 'Không tìm thấy học sinh trong lớp.' };
+      const ranked = dashboard.learners
+        .map((learner) => ({
+          learner,
+          score: learnerMatchScore(learner.id, learner.displayLabel, query),
+        }))
+        .filter((match) => match.score > 0)
+        .sort(
+          (left, right) =>
+            right.score - left.score ||
+            left.learner.displayLabel.localeCompare(right.learner.displayLabel, 'vi-VN'),
+        );
+      const best = ranked[0];
+      if (!best) return { ok: false, error: 'Không tìm thấy học sinh trong lớp.' };
+      if (ranked[1]?.score === best.score) {
+        return {
+          ok: false,
+          error: `Có nhiều học sinh khớp "${query}". Hãy nhập họ tên đầy đủ.`,
+        };
+      }
+      const learner = best.learner;
       const group = dashboard.groups.find((candidate) => candidate.learnerIds.includes(learner.id));
       return {
         ok: true,
@@ -187,8 +221,9 @@ const chanDoanHocSinh: AgentTool = {
         },
       };
     } catch {
+      const normalizedQuery = normalizedLearnerQuery(query);
       const learnerId = ['an', 'binh', 'chi', 'minh'].find(
-        (candidate) => query === candidate || query.endsWith(`-${candidate}`),
+        (candidate) => normalizedQuery === candidate || normalizedQuery.endsWith(`-${candidate}`),
       );
       if (!learnerId || !isHeroLearnerId(learnerId)) {
         return { ok: false, error: 'Không đọc được dữ liệu học sinh từ máy chủ.' };

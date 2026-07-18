@@ -38,6 +38,20 @@ jobs:
         run: npm run test
       - name: Deterministic eval suite
         run: npm run eval
+      - name: Fastify boot smoke (Node runtime)
+        shell: bash
+        run: |
+          npm run server > /tmp/nekopath-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/api/healthz >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/nekopath-server.log
+          exit 1
       - name: Production build (PWA artifacts)
         run: npm run build
 

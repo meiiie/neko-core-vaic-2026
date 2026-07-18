@@ -70,4 +70,24 @@ describe('AgentSessionStore scope isolation', () => {
       await store.load({ accountId: 'teacher-2', role: 'teacher', classId: '7A' }, 'rule'),
     ).not.toBeNull();
   });
+
+  it('rejects malformed persisted snapshots instead of trusting a JSON cast', async () => {
+    const database = new NekoPathDb(`nekopath-agent-${crypto.randomUUID()}`);
+    databases.push(database);
+    const store = new AgentSessionStore(database);
+    await store.save(snapshot('teacher-1', '7A'), 'rule');
+    const record = await database.agentSessions.toCollection().first();
+    expect(record).toBeDefined();
+    await database.agentSessions.put({
+      ...record!,
+      payload: JSON.stringify({
+        ...snapshot('teacher-1', '7A'),
+        messages: 'not-an-array',
+      }),
+    });
+
+    await expect(
+      store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7A' }, 'rule'),
+    ).resolves.toBeNull();
+  });
 });

@@ -94,4 +94,31 @@ describe('strict agent tool runtime', () => {
     expect(approved[0]).toMatchObject({ ok: true, data: { id: 'assignment-1' } });
     expect(run).toHaveBeenCalledTimes(1);
   });
+
+  it('returns after the deadline even when an executor ignores the abort signal', async () => {
+    const never = vi.fn(() => new Promise<never>(() => undefined));
+    const tool = { ...learnerTool(never), timeoutMs: 5 };
+
+    const startedAt = performance.now();
+    const results = await executeToolCalls([{ name: 'learner', args: { learner: 'an' } }], [tool]);
+
+    expect(results[0]).toMatchObject({ ok: false, errorCode: 'TOOL_TIMEOUT' });
+    expect(performance.now() - startedAt).toBeLessThan(250);
+  });
+
+  it('returns an abort result even when an executor ignores the parent signal', async () => {
+    const never = vi.fn(() => new Promise<never>(() => undefined));
+    const controller = new AbortController();
+    const running = executeToolCalls(
+      [{ name: 'learner', args: { learner: 'an' } }],
+      [learnerTool(never)],
+      controller.signal,
+    );
+
+    controller.abort('test');
+
+    await expect(running).resolves.toEqual([
+      expect.objectContaining({ ok: false, errorCode: 'TOOL_ABORTED' }),
+    ]);
+  });
 });
