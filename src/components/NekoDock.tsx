@@ -125,6 +125,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [busyElapsed, setBusyElapsed] = useState(0);
   const [controllerReady, setControllerReady] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [activity, setActivity] = useState<string | null>(null);
@@ -140,6 +141,7 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const stoppedByUserRef = useRef(false);
   const bufferedTextRef = useRef('');
   const frameRef = useRef<number | null>(null);
+  const turnStartedAtRef = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const store = useMemo(() => new AgentSessionStore(db), []);
@@ -169,6 +171,16 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       behavior: busy || reduceMotion ? 'auto' : 'smooth',
     });
   }, [busy, messages, streamText]);
+
+  useEffect(() => {
+    if (!busy) return;
+    const update = () =>
+      setBusyElapsed(
+        Math.max(0, Math.floor((performance.now() - turnStartedAtRef.current) / 1_000)),
+      );
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   useEffect(() => {
     setWebLlmProgressListener(({ progress }) => {
@@ -316,10 +328,19 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     const telemetry = new GenerationTelemetry();
     stoppedByUserRef.current = false;
     bufferedTextRef.current = '';
+    turnStartedAtRef.current = performance.now();
+    setBusyElapsed(0);
     setMessages((previous) => [...previous, { id: nextId(), role: 'user', text: question }]);
     setBusy(true);
     setStreamText('');
-    setActivity('Đang chuẩn bị…');
+    const selectedChatGptModel = chatGpt.models?.find(
+      (model) => model.model === chatGptModel,
+    )?.displayName;
+    setActivity(
+      providerId === 'chatgpt'
+        ? `Đang kết nối ${selectedChatGptModel ?? 'ChatGPT'}…`
+        : 'Đang khởi động mô hình…',
+    );
     const trace: TraceLine[] = [];
     const beforeCompactions = controller.snapshot().compactionCount;
     const onTrace = (event: AgentTraceEvent) => {
@@ -486,7 +507,10 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
         {busy ? (
           <div className="neko-msg neko-msg--assistant neko-msg--live">
-            <p>{streamText || activity || 'Đang kiểm tra dữ liệu lớp…'}</p>
+            <p>
+              {streamText ||
+                `${activity || 'Đang kiểm tra dữ liệu lớp…'}${busyElapsed > 0 ? ` · ${busyElapsed}s` : ''}`}
+            </p>
           </div>
         ) : null}
         {!busy && activity ? (

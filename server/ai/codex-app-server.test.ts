@@ -12,11 +12,13 @@ interface WireMessage {
 class FakeTransport implements CodexTransport {
   readonly writes: WireMessage[] = [];
   private onMessage: ((message: unknown) => void) | null = null;
+  private onError: ((error: Error) => void) | null = null;
 
   constructor(private readonly finishTurns = true) {}
 
-  start(onMessage: (message: unknown) => void): void {
+  start(onMessage: (message: unknown) => void, onError?: (error: Error) => void): void {
     this.onMessage = onMessage;
+    this.onError = onError ?? null;
   }
 
   send(message: unknown): void {
@@ -104,6 +106,14 @@ class FakeTransport implements CodexTransport {
   }
 
   stop(): void {}
+
+  emit(method: string, params: unknown): void {
+    this.notify(method, params);
+  }
+
+  fail(error: Error): void {
+    this.onError?.(error);
+  }
 
   private reply(id: number, result: unknown): void {
     this.onMessage?.({ id, result });
@@ -249,6 +259,52 @@ describe('Codex App Server managed ChatGPT client', () => {
 
     await expect(completion).rejects.toMatchObject({ name: 'AbortError' });
     expect(transport.writes.some((message) => message.method === 'turn/interrupt')).toBe(true);
+    client.dispose();
+  });
+
+  it('rejects a fatal App Server notification instead of leaving the UI waiting', async () => {
+    const transport = new FakeTransport(false);
+    const client = new CodexAppServerClient(transport, { cwd: 'C:\\isolated-empty' });
+    const completion = client.complete('yo');
+
+    await vi.waitFor(() => {
+      expect(transport.writes.some((message) => message.method === 'turn/start')).toBe(true);
+    });
+    transport.emit('error', {
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      willRetry: false,
+      error: { message: 'Upstream model failed' },
+    });
+
+    await expect(completion).rejects.toThrow('Upstream model failed');
+    client.dispose();
+  });
+
+  it('interrupts a turn after a bounded period with no App Server activity', async () => {
+    const transport = new FakeTransport(false);
+    const client = new CodexAppServerClient(transport, {
+      cwd: 'C:\\isolated-empty',
+      turnIdleTimeoutMs: 25,
+    });
+    const completion = client.complete('yo');
+
+    await expect(completion).rejects.toThrow('không gửi tín hiệu');
+    expect(transport.writes.some((message) => message.method === 'turn/interrupt')).toBe(true);
+    client.dispose();
+  });
+
+  it('rejects pending turns when the App Server process closes', async () => {
+    const transport = new FakeTransport(false);
+    const client = new CodexAppServerClient(transport, { cwd: 'C:\\isolated-empty' });
+    const completion = client.complete('yo');
+
+    await vi.waitFor(() => {
+      expect(transport.writes.some((message) => message.method === 'turn/start')).toBe(true);
+    });
+    transport.fail(new Error('Codex App Server closed'));
+
+    await expect(completion).rejects.toThrow('Codex App Server closed');
     client.dispose();
   });
 });

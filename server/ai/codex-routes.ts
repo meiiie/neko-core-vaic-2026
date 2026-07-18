@@ -99,6 +99,10 @@ export function registerCodexRoutes(
     reply.raw.flushHeaders?.();
     reply.raw.once('close', abort);
     reply.raw.write(sseEvent('meta', { provider: 'chatgpt' }));
+    const heartbeat = setInterval(() => {
+      if (!controller.signal.aborted && !reply.raw.destroyed) reply.raw.write(': keepalive\n\n');
+    }, 10_000);
+    heartbeat.unref?.();
     try {
       const result = await manager.complete(
         teacher.id,
@@ -123,6 +127,7 @@ export function registerCodexRoutes(
         );
       }
     } finally {
+      clearInterval(heartbeat);
       finished = true;
       reply.raw.removeListener('close', abort);
       if (!reply.raw.destroyed) reply.raw.end();
