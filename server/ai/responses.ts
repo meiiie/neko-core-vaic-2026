@@ -58,10 +58,7 @@ function retryable(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
-async function callOpenAi(
-  options: ResponsesRouteOptions,
-  body: unknown,
-): Promise<Response> {
+async function callOpenAi(options: ResponsesRouteOptions, body: unknown): Promise<Response> {
   let response: Response | null = null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     response = await options.fetchImpl('https://api.openai.com/v1/responses', {
@@ -118,7 +115,9 @@ export function registerResponsesRoutes(
       });
     } catch (error) {
       const code = error instanceof DOMException && error.name === 'TimeoutError' ? 504 : 502;
-      return reply.code(code).send({ error: code === 504 ? 'PROVIDER_TIMEOUT' : 'PROVIDER_UNAVAILABLE' });
+      return reply
+        .code(code)
+        .send({ error: code === 504 ? 'PROVIDER_TIMEOUT' : 'PROVIDER_UNAVAILABLE' });
     }
 
     if (!upstream.ok || !upstream.body) {

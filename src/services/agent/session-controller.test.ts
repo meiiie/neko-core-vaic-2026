@@ -1,7 +1,10 @@
+import 'fake-indexeddb/auto';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AgentProvider } from './loop';
 import { AgentSessionController } from './session-controller';
+import { RuleBasedProvider } from './providers';
+import { AGENT_TOOLS } from './tools';
 import type { AgentTool } from './tools';
 
 const factTool: AgentTool = {
@@ -59,6 +62,19 @@ function contextualProvider(): AgentProvider {
 }
 
 describe('AgentSessionController memory', () => {
+  it('lets the real offline rule provider answer a contextual follow-up', async () => {
+    const session = new AgentSessionController({
+      provider: new RuleBasedProvider(),
+      tools: AGENT_TOOLS,
+      scope: { accountId: 'teacher-1', role: 'teacher', classId: '7A' },
+    });
+
+    await session.run('Chẩn đoán An thế nào?');
+    const followUp = await session.run('Vì sao?');
+
+    expect(followUp.text).toContain('Phân số bằng nhau');
+  });
+
   it('keeps grounded context for a follow-up', async () => {
     const session = new AgentSessionController({
       provider: contextualProvider(),
@@ -100,6 +116,63 @@ describe('AgentSessionController memory', () => {
     expect(snapshot.messages.some((message) => message.content.includes('số 15'))).toBe(true);
   });
 
+  it('lets the offline rule provider retrieve evidence from a compacted capsule', async () => {
+    const session = new AgentSessionController({
+      provider: new RuleBasedProvider(),
+      tools: AGENT_TOOLS,
+      scope: { accountId: 'teacher-1', role: 'teacher', classId: '7A' },
+      contextPolicy: {
+        maxInputTokens: 300,
+        compactAtRatio: 0.55,
+        outputReserveTokens: 40,
+        recentTurns: 2,
+      },
+    });
+    await session.run('Chẩn đoán An thế nào?');
+    for (let turn = 0; turn < 12; turn += 1) {
+      await session.run(`Ghi chú ngắn cho lượt ${turn}.`);
+    }
+    expect(session.snapshot().compactionCount).toBeGreaterThan(1);
+
+    const followUp = await session.run('Vì sao?');
+
+    expect(followUp.text).toContain('Phân số bằng nhau');
+  });
+
+  it('rejects an invented number in a follow-up and renders prior evidence deterministically', async () => {
+    const provider: AgentProvider = {
+      id: 'lying-follow-up',
+      label: 'lying-follow-up',
+      async complete(messages) {
+        const last = messages.at(-1);
+        if (last?.role === 'tool') {
+          return { content: 'Đã nhận bằng chứng.', toolCalls: [] };
+        }
+        const question = [...messages]
+          .reverse()
+          .find((message) => message.role === 'user')?.content;
+        if (question?.includes('Chẩn đoán')) {
+          return {
+            content: null,
+            toolCalls: [{ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: 'an' } }],
+          };
+        }
+        return { content: 'Vì có 999 bằng chứng về Phân số bằng nhau.', toolCalls: [] };
+      },
+    };
+    const session = new AgentSessionController({
+      provider,
+      tools: AGENT_TOOLS,
+      scope: { accountId: 'teacher-1', role: 'teacher', classId: '7A' },
+    });
+    await session.run('Chẩn đoán An thế nào?');
+
+    const followUp = await session.run('Vì sao?');
+
+    expect(followUp.text).toContain('Phân số bằng nhau');
+    expect(followUp.text).not.toContain('999');
+  });
+
   it('aborts the active provider and disposes it exactly once', async () => {
     const dispose = vi.fn();
     const provider: AgentProvider = {
@@ -125,5 +198,26 @@ describe('AgentSessionController memory', () => {
 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(session.snapshot().messages.some((message) => message.content === 'Đợi')).toBe(false);
+  });
+
+  it('resets canonical memory without disposing the reusable provider', async () => {
+    const dispose = vi.fn();
+    const provider = contextualProvider();
+    provider.dispose = dispose;
+    const session = new AgentSessionController({
+      provider,
+      tools: [factTool],
+      scope: { accountId: 'teacher-1', role: 'teacher', classId: '7A' },
+    });
+    await session.run('Chẩn đoán An thế nào?');
+
+    session.reset();
+
+    const snapshot = session.snapshot();
+    expect(snapshot.turnCount).toBe(0);
+    expect(snapshot.compactionCount).toBe(0);
+    expect(snapshot.capsule).toBeNull();
+    expect(snapshot.messages).toHaveLength(1);
+    expect(dispose).not.toHaveBeenCalled();
   });
 });

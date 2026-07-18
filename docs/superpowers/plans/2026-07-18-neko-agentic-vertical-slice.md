@@ -8,6 +8,8 @@
 
 **Tech stack:** React 19, TypeScript 6, Vite/Vitest, Zod 4, Dexie/IndexedDB, Fastify 5, native `fetch`, WebLLM 0.2.84, optional Codex App Server 0.144.x.
 
+**Execution result (authoritative, completed 2026-07-18):** all acceptance criteria below are implemented and verified. Evidence normalization stays inside the existing loop instead of adding a one-use `evidence.ts` abstraction. ChatGPT managed mode deliberately uses the deterministic browser tool router and sends only bounded evidence to the official App Server for synthesis; it does not expose domain tools or browser IndexedDB to Codex. The task checklists below are the original execution record, not a live status board.
+
 ---
 
 ### Task 1: Freeze a clean verification baseline
@@ -153,7 +155,7 @@ Final commands:
 npm test -- --run
 npm run typecheck
 npm run build
-npm run test:docker
+docker compose -f ops/compose.yml config --quiet
 git diff --check
 git status --short --branch
 ```

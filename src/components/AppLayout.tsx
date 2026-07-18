@@ -150,8 +150,8 @@ export function AppLayout() {
   const home = account.role === 'STUDENT' ? '/student' : '/teacher';
   const closedMobileTabIndex = isMobile && !mobileOpen ? -1 : undefined;
 
-  function exitWorkspace() {
-    signOut();
+  async function exitWorkspace() {
+    await signOut();
     navigate('/login', { replace: true });
   }
 
@@ -246,7 +246,7 @@ export function AppLayout() {
             type="button"
             aria-label="Đổi tài khoản"
             tabIndex={closedMobileTabIndex}
-            onClick={exitWorkspace}
+            onClick={() => void exitWorkspace()}
           >
             Đổi
           </button>

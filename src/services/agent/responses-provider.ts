@@ -1,9 +1,4 @@
-import type {
-  AgentChatMessage,
-  AgentCompletion,
-  AgentProvider,
-  AgentUsage,
-} from './loop';
+import type { AgentChatMessage, AgentCompletion, AgentProvider, AgentUsage } from './loop';
 import type { AgentToolCall } from './protocol';
 import type { AgentTool } from './tools';
 
@@ -15,7 +10,9 @@ type ResponsesInput =
 function toInput(messages: readonly AgentChatMessage[]): ResponsesInput[] {
   return messages.flatMap((message): ResponsesInput[] => {
     if (message.role === 'tool' && message.toolCallId) {
-      return [{ type: 'function_call_output', call_id: message.toolCallId, output: message.content }];
+      return [
+        { type: 'function_call_output', call_id: message.toolCallId, output: message.content },
+      ];
     }
     if (message.role === 'assistant' && message.toolName && message.toolCallId) {
       return [

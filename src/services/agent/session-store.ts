@@ -22,10 +22,7 @@ export class AgentSessionStore {
     });
   }
 
-  async load(
-    scope: AgentSessionScope,
-    providerId: string,
-  ): Promise<AgentSessionSnapshot | null> {
+  async load(scope: AgentSessionScope, providerId: string): Promise<AgentSessionSnapshot | null> {
     const record = await this.database.agentSessions.get(sessionId(scope, providerId));
     if (!record) return null;
     if (

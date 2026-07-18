@@ -41,16 +41,18 @@ describe('AgentSessionStore scope isolation', () => {
     const store = createStore();
     await store.save(snapshot('teacher-1', '7A'), 'rule');
 
-    expect(await store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7A' }, 'rule'))
-      .toMatchObject({ turnCount: 14, compactionCount: 3 });
+    expect(
+      await store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7A' }, 'rule'),
+    ).toMatchObject({ turnCount: 14, compactionCount: 3 });
     expect(
       await store.load({ accountId: 'teacher-2', role: 'teacher', classId: '7A' }, 'rule'),
     ).toBeNull();
     expect(
       await store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7B' }, 'rule'),
     ).toBeNull();
-    expect(await store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7A' }, 'web'))
-      .toBeNull();
+    expect(
+      await store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7A' }, 'web'),
+    ).toBeNull();
   });
 
   it('clears every provider session for one account without touching another account', async () => {
@@ -61,9 +63,11 @@ describe('AgentSessionStore scope isolation', () => {
 
     await store.clearAccount('teacher-1');
 
-    expect(await store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7A' }, 'rule'))
-      .toBeNull();
-    expect(await store.load({ accountId: 'teacher-2', role: 'teacher', classId: '7A' }, 'rule'))
-      .not.toBeNull();
+    expect(
+      await store.load({ accountId: 'teacher-1', role: 'teacher', classId: '7A' }, 'rule'),
+    ).toBeNull();
+    expect(
+      await store.load({ accountId: 'teacher-2', role: 'teacher', classId: '7A' }, 'rule'),
+    ).not.toBeNull();
   });
 });

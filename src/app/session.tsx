@@ -7,6 +7,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { disposeAgentSessions } from '../services/agent/agent-lifecycle';
+import { AgentSessionStore } from '../services/agent/session-store';
+import { db } from '../storage/db';
 
 /**
  * Real API-backed session (HttpOnly cookie, server-side session store).
@@ -58,7 +61,7 @@ export interface SessionState {
   readonly signIn: (username: string, password: string) => Promise<string | null>;
   /** Server-less entry (static/recovery deploy): local synthetic profiles only. */
   readonly enterLocalMode: (profileId: string) => void;
-  readonly signOut: () => void;
+  readonly signOut: () => Promise<void>;
 }
 
 /** Built-in profiles for the no-server recovery mode. Synthetic, like the seed. */
@@ -197,13 +200,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     writeCache(profile);
   }, []);
 
-  const signOut = useCallback(() => {
+  const signOut = useCallback(async () => {
+    const accountId = account?.id;
+    if (accountId) {
+      await disposeAgentSessions(accountId);
+      await new AgentSessionStore(db).clearAccount(accountId).catch(() => undefined);
+    }
     setAccount(null);
     writeCache(null);
-    void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {
       // Cookie clearing is best-effort offline; the local state is already gone.
     });
-  }, []);
+  }, [account?.id]);
 
   const value = useMemo<SessionState>(
     () => ({ account, ready, signIn, enterLocalMode, signOut }),

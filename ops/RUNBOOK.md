@@ -13,7 +13,49 @@ Canonical URL: `https://nekopath.holilihu.online`
 - HTTPS origin: `https://nekopath-origin.34-142-197-144.sslip.io`
 - recovery Pages URL: `https://nekopath-vaic.pages.dev`
 
-Do not copy API keys or local `.env` files to this host. The current release runs the deterministic core and mock LLM profile; external inference is admitted only through a server-side secret after its own evaluation gate.
+Do not copy local `.env` files to this host. External inference is admitted only through reviewed,
+server-side secrets. No provider key, ChatGPT token, or Codex account directory may be sent to the
+browser, stored in SQLite, committed to Git, or printed in application logs.
+
+## Teacher AI providers
+
+The canonical Neko session belongs to NekoPath, not to an inference provider. It is isolated by
+account, role, class and provider in IndexedDB. Compaction starts only when the estimated token
+budget approaches the configured input reserve; there is no fixed-turn expiry or "10-turn reset".
+Each compacted capsule preserves the original task, confirmed constraints/corrections, evidence
+references and recent complete turns.
+
+| Provider  | Configuration                                                                            | Data boundary                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `rule`    | None; production-safe default                                                            | Deterministic, local evidence only                                                                 |
+| `webllm`  | Teacher explicitly downloads Gemma 3 in the browser                                      | Model and cache stay in that browser                                                               |
+| `openai`  | Server secret `OPENAI_API_KEY`; optional `NEKOPATH_OPENAI_MODEL` (default `gpt-5.6-sol`) | Browser calls `/api/ai/responses`; the API key never leaves the server                             |
+| `chatgpt` | Local/self-host only: `NEKOPATH_CODEX_APP_SERVER_ENABLED=1`                              | Official Codex App Server owns the managed-account credentials in a per-NekoPath-account directory |
+
+The public deployment must leave `NEKOPATH_CODEX_APP_SERVER_ENABLED` unset unless its operator has
+completed a separate multi-user threat review. This provider starts the pinned `@openai/codex`
+package using its public JSONL App Server protocol; it does not scrape ChatGPT or call private web
+endpoints. Optional operator settings are:
+
+```bash
+export NEKOPATH_CODEX_APP_SERVER_ENABLED=1
+export NEKOPATH_CODEX_DATA=/var/lib/nekopath/codex-accounts
+export NEKOPATH_CODEX_MODEL=gpt-5.6-sol
+# Only for a reviewed non-default installation:
+# export NEKOPATH_CODEX_BIN=/absolute/path/to/codex
+```
+
+Run the protocol and account-status smoke test without starting a login:
+
+```bash
+npm run ai:codex:smoke
+```
+
+Expected output contains `"appServer":"ok"`. A teacher starts the device-code flow from the Neko
+dock and completes it on the verification URL. Signing out aborts active generations, disposes all
+provider runtimes, clears that account's local agent checkpoints and asks App Server to log out
+before the NekoPath session cookie is destroyed. Never paste a device code, access token or API key
+into a support ticket.
 
 ## Connect and inspect
 

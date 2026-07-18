@@ -50,12 +50,12 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
-        // The 6MB WebLLM engine chunk is teacher-only: keep it OUT of the
+        // The 6MB WebLLM engine and worker chunks are teacher-only: keep them OUT of the
         // precache every student pays for, but cache it on first use so the
         // in-browser Gemma brain works offline afterwards (with its weights,
         // which WebLLM itself caches). Still no /api response caching.
         globIgnores: [
-          '**/webllm-*.js',
+          '**/webllm*.js',
           '**/nekopath-share-v1.png',
           '**/nekopath-mark-v1.png',
           '**/icons/icon-192.png',
@@ -67,7 +67,7 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//, /^\/healthz/],
         runtimeCaching: [
           {
-            urlPattern: /\/assets\/webllm-[^/]+\.js$/,
+            urlPattern: /\/assets\/webllm(?:\.worker)?-[^/]+\.js$/,
             handler: 'CacheFirst',
             options: { cacheName: 'webllm-engine' },
           },

@@ -37,11 +37,7 @@ interface WebLlmEngine {
 
 interface WebLlmModule {
   readonly prebuiltAppConfig: { readonly model_list: readonly unknown[] };
-  CreateWebWorkerMLCEngine(
-    worker: Worker,
-    modelId: string,
-    config: object,
-  ): Promise<WebLlmEngine>;
+  CreateWebWorkerMLCEngine(worker: Worker, modelId: string, config: object): Promise<WebLlmEngine>;
   hasModelInCache(modelId: string, config: object): Promise<boolean>;
   deleteModelAllInfoInCache(modelId: string, config: object): Promise<void>;
 }

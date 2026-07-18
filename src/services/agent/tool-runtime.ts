@@ -2,11 +2,7 @@ import type { AgentToolCall } from './protocol';
 import type { AgentTool, AgentToolResult } from './tools';
 
 export type ToolRuntimeErrorCode =
-  | 'TOOL_NOT_ALLOWED'
-  | 'INVALID_TOOL_ARGS'
-  | 'TOOL_ABORTED'
-  | 'TOOL_TIMEOUT'
-  | 'TOOL_ERROR';
+  'TOOL_NOT_ALLOWED' | 'INVALID_TOOL_ARGS' | 'TOOL_ABORTED' | 'TOOL_TIMEOUT' | 'TOOL_ERROR';
 
 export interface ToolExecutionResult extends AgentToolResult {
   readonly name: string;
@@ -30,7 +26,8 @@ async function executeOne(
     durationMs: performance.now() - startedAt,
   });
 
-  if (!tool) return fail(`Công cụ ${call.name} không nằm trong allowlist của phiên.`, 'TOOL_NOT_ALLOWED');
+  if (!tool)
+    return fail(`Công cụ ${call.name} không nằm trong allowlist của phiên.`, 'TOOL_NOT_ALLOWED');
   const parsed = tool.inputSchema.safeParse(call.args);
   if (!parsed.success) return fail('Tham số công cụ không đúng schema.', 'INVALID_TOOL_ARGS');
   if (signal?.aborted) return fail('Lệnh công cụ đã bị hủy.', 'TOOL_ABORTED');

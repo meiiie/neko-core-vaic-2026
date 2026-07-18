@@ -1,6 +1,8 @@
 import type { AgentChatMessage, AgentCompletion, AgentProvider, AgentToolCall } from './loop';
+import { parseCapsule } from './context-manager';
 import { parseJsonToolEnvelope } from './protocol';
 import type { AgentTool } from './tools';
+import { routeRuleQuestion } from './rule-router';
 
 export { parseJsonToolEnvelope } from './protocol';
 
@@ -14,24 +16,23 @@ export { parseJsonToolEnvelope } from './protocol';
  *   "a new endpoint is a data edit, not a code change".
  */
 
-function lastUser(messages: readonly AgentChatMessage[]): string {
-  return [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-}
-
 function lastToolResult(
   messages: readonly AgentChatMessage[],
 ): { name: string; payload: string } | null {
-  const message = [...messages].reverse().find((m) => m.role === 'tool');
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  const message = [...messages.slice(lastUser + 1)].reverse().find((m) => m.role === 'tool');
   return message ? { name: message.toolName ?? '', payload: message.content } : null;
 }
 
-function stripDiacritics(value: string): string {
-  return value
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toLowerCase();
+function previousToolResult(
+  messages: readonly AgentChatMessage[],
+): { name: string; payload: string } | null {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  const message = [...messages.slice(0, lastUser)].reverse().find((item) => item.role === 'tool');
+  if (message) return { name: message.toolName ?? '', payload: message.content };
+  const capsule = messages.map(parseCapsule).find((value) => value !== null);
+  const evidence = capsule?.evidence.at(-1);
+  return evidence ? { name: evidence.toolName, payload: evidence.payload } : null;
 }
 
 export class RuleBasedProvider implements AgentProvider {
@@ -42,7 +43,6 @@ export class RuleBasedProvider implements AgentProvider {
     messages: readonly AgentChatMessage[],
     _tools: readonly AgentTool[],
   ): Promise<AgentCompletion> {
-    const asked = stripDiacritics(lastUser(messages));
     const observed = lastToolResult(messages);
 
     // Second pass: a tool already ran — compose the answer from its payload.
@@ -50,34 +50,16 @@ export class RuleBasedProvider implements AgentProvider {
       return { content: composeAnswer(observed.name, observed.payload), toolCalls: [] };
     }
 
-    // First pass: route the question to exactly one tool.
-    const calls: AgentToolCall[] = [];
-    const learner = ['an', 'binh', 'chi', 'minh'].find((id) =>
-      new RegExp(`\\b(ban\\s+)?${id}\\b`).test(asked),
-    );
-    const kcMatch = asked.match(/\bk(0?[1-9]|10)\b/);
-    if (learner && /chan doan|hoc sinh|dang o dau|the nao|tinh hinh/.test(asked)) {
-      calls.push({ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: learner } });
-    } else if (kcMatch) {
-      const number = kcMatch[1].padStart(2, '0');
-      calls.push({ name: 'giai_thich_kien_thuc', args: { kc: `K${number}` } });
-    } else if (/bai (duoc )?giao|bai tap|da nop|tien do/.test(asked)) {
-      calls.push({ name: 'bai_duoc_giao', args: {} });
-    } else if (/lop|tong quan|nhom|uu tien|lo hong|day lai/.test(asked)) {
-      calls.push({ name: 'tong_quan_lop', args: {} });
-    } else if (learner) {
-      calls.push({ name: 'chan_doan_hoc_sinh', args: { hoc_sinh: learner } });
+    const latestQuestion = [...messages]
+      .reverse()
+      .find((message) => message.role === 'user')?.content;
+    if (latestQuestion && /^(vì sao|tại sao|giải thích thêm)\??$/i.test(latestQuestion.trim())) {
+      const previous = previousToolResult(messages);
+      if (previous)
+        return { content: composeAnswer(previous.name, previous.payload), toolCalls: [] };
     }
 
-    if (calls.length === 0) {
-      return {
-        content:
-          'Tôi trả lời được các câu về: tổng quan lớp / chẩn đoán của An, Bình, Chi, Minh / ' +
-          'vị trí một kiến thức (K01–K10) / bài đã giao. Ví dụ: "Chẩn đoán của bạn An?".',
-        toolCalls: [],
-      };
-    }
-    return { content: null, toolCalls: calls };
+    return routeRuleQuestion(messages);
   }
 }
 
@@ -322,6 +304,8 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
 
 /** Provider profiles — data, not code. */
 import { WebLlmAgentProvider } from './webllm-provider';
+import { ResponsesAgentProvider } from './responses-provider';
+import { ChatGptAgentProvider } from './chatgpt-provider';
 
 export const AGENT_PROVIDERS: readonly AgentProvider[] = [
   new RuleBasedProvider(),
@@ -332,4 +316,6 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     'gemma3:4b',
   ),
   new WebLlmAgentProvider(),
+  new ResponsesAgentProvider(),
+  new ChatGptAgentProvider(),
 ];

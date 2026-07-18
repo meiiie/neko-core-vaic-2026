@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
+import type { CodexManagerPort } from './ai/codex-routes.ts';
 import { buildApp, type AppOptions } from './app.ts';
 import { openDb } from './db.ts';
 import { DEMO_PASSWORD, seed } from './seed.ts';
@@ -28,7 +29,11 @@ describe('NekoPath API', () => {
   it('reports provider availability without exposing secrets', async () => {
     const app = await makeApp({ openAiApiKey: '' });
     const teacher = await loginCookie(app, 'co.ha');
-    const response = await app.inject({ method: 'GET', url: '/api/ai/providers', cookies: teacher });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/ai/providers',
+      cookies: teacher,
+    });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
@@ -41,12 +46,13 @@ describe('NekoPath API', () => {
   });
 
   it('keeps Responses teacher-only and forwards a strict server-owned request', async () => {
-    const upstream = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(
-        'data: {"type":"response.output_text.delta","delta":"Đã rõ"}\n\n' +
-          'data: {"type":"response.completed","response":{"usage":{"input_tokens":4,"output_tokens":2}}}\n\n',
-        { status: 200, headers: { 'content-type': 'text/event-stream' } },
-      ),
+    const upstream = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(
+          'data: {"type":"response.output_text.delta","delta":"Đã rõ"}\n\n' +
+            'data: {"type":"response.completed","response":{"usage":{"input_tokens":4,"output_tokens":2}}}\n\n',
+          { status: 200, headers: { 'content-type': 'text/event-stream' } },
+        ),
     );
     const app = await makeApp({
       openAiApiKey: 'server-secret',
@@ -91,6 +97,70 @@ describe('NekoPath API', () => {
       stream: true,
       input: payload.input,
     });
+    await app.close();
+  });
+
+  it('exposes managed ChatGPT only to teachers and disposes it on NekoPath logout', async () => {
+    const logout = vi.fn(async () => undefined);
+    const manager: CodexManagerPort = {
+      isEnabled: () => true,
+      status: async () => ({
+        account: { type: 'chatgpt', email: 'teacher@example.test', planType: 'plus' },
+        requiresOpenaiAuth: true,
+      }),
+      startLogin: async () => ({
+        loginId: 'login-1',
+        verificationUrl: 'https://auth.openai.com/codex/device',
+        userCode: 'ABCD-1234',
+      }),
+      complete: async () => 'Chỉ dựa trên bằng chứng.',
+      logout,
+      disposeAll: vi.fn(),
+    };
+    const app = await makeApp({ codexManager: manager });
+    const teacher = await loginCookie(app, 'co.ha');
+    const student = await loginCookie(app, 'an.tn');
+
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/ai/chatgpt/status',
+          cookies: student,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/ai/chatgpt/status',
+          cookies: teacher,
+        })
+      ).json(),
+    ).toMatchObject({ available: true, authenticated: true, planType: 'plus' });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/ai/chatgpt/login',
+          cookies: teacher,
+        })
+      ).json(),
+    ).toMatchObject({ userCode: 'ABCD-1234' });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/ai/chatgpt/complete',
+          cookies: teacher,
+          payload: { prompt: 'Bằng chứng.' },
+        })
+      ).json(),
+    ).toEqual({ content: 'Chỉ dựa trên bằng chứng.' });
+
+    await app.inject({ method: 'POST', url: '/api/auth/logout', cookies: teacher });
+    expect(logout).toHaveBeenCalledWith('user-teacher-ha');
     await app.close();
   });
 

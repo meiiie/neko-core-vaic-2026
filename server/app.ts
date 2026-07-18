@@ -2,7 +2,10 @@ import fastifyCookie from '@fastify/cookie';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { resolve } from 'node:path';
 import { z } from 'zod';
+import { CodexAccountManager } from './ai/codex-account-manager.ts';
+import { registerCodexRoutes, type CodexManagerPort } from './ai/codex-routes.ts';
 import { registerResponsesRoutes } from './ai/responses.ts';
 import { createSession, destroySession, userForSession, verifyPassword } from './auth.ts';
 import { CLASS_7A_ID } from './seed.ts';
@@ -99,7 +102,7 @@ export interface AppOptions {
   readonly fetchImpl?: typeof fetch;
   readonly openAiApiKey?: string;
   readonly openAiModel?: string;
-  readonly chatGptAvailable?: () => boolean;
+  readonly codexManager?: CodexManagerPort;
 }
 
 export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyInstance {
@@ -129,13 +132,24 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     return user;
   }
 
+  const codexManager =
+    options.codexManager ??
+    new CodexAccountManager({
+      enabled: process.env.NEKOPATH_CODEX_APP_SERVER_ENABLED === '1',
+      rootDir: resolve(process.env.NEKOPATH_CODEX_DATA ?? 'server/data/codex-accounts'),
+      codexBin: process.env.NEKOPATH_CODEX_BIN,
+      model: process.env.NEKOPATH_CODEX_MODEL,
+    });
+
   registerResponsesRoutes(app, {
     apiKey: options.openAiApiKey ?? process.env.OPENAI_API_KEY ?? '',
     model: options.openAiModel ?? process.env.NEKOPATH_OPENAI_MODEL ?? 'gpt-5.6-sol',
     fetchImpl: options.fetchImpl ?? fetch,
     requireTeacher,
-    chatGptAvailable: options.chatGptAvailable,
+    chatGptAvailable: () => codexManager.isEnabled(),
   });
+  registerCodexRoutes(app, codexManager, requireTeacher);
+  app.addHook('onClose', async () => codexManager.disposeAll());
 
   app.get('/api/healthz', () => ({ status: 'ok', time: new Date().toISOString() }));
 
@@ -171,9 +185,13 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     return { user };
   });
 
-  app.post('/api/auth/logout', (request, reply) => {
+  app.post('/api/auth/logout', async (request, reply) => {
     const sid = request.cookies[SESSION_COOKIE];
-    if (sid) destroySession(db, sid);
+    if (sid) {
+      const user = userForSession(db, sid);
+      if (user?.role === 'TEACHER') await codexManager.logout(user.id).catch(() => undefined);
+      destroySession(db, sid);
+    }
     void reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return { ok: true };
   });

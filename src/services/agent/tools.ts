@@ -114,7 +114,9 @@ const chanDoanHocSinh: AgentTool = {
   },
   ...READ_ONLY_TOOL,
   async run(args) {
-    const learnerId = String(args.hoc_sinh ?? '').toLowerCase().trim();
+    const learnerId = String(args.hoc_sinh ?? '')
+      .toLowerCase()
+      .trim();
     if (!isHeroLearnerId(learnerId)) {
       return { ok: false, error: 'Chỉ có bốn hồ sơ demo: an, binh, chi, minh.' };
     }
@@ -149,7 +151,9 @@ const giaiThichKienThuc: AgentTool = {
   },
   ...READ_ONLY_TOOL,
   async run(args) {
-    const kcId = String(args.kc ?? '').toUpperCase().trim();
+    const kcId = String(args.kc ?? '')
+      .toUpperCase()
+      .trim();
     const node = HERO_GRAPH.nodes.find((candidate) => candidate.id === kcId);
     if (!node) {
       return {

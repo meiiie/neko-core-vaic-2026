@@ -17,7 +17,11 @@ describe('official Responses API browser adapter', () => {
         {
           type: 'response.completed',
           response: {
-            usage: { input_tokens: 12, output_tokens: 3, input_tokens_details: { cached_tokens: 4 } },
+            usage: {
+              input_tokens: 12,
+              output_tokens: 3,
+              input_tokens_details: { cached_tokens: 4 },
+            },
           },
         },
       ]),
@@ -62,8 +66,6 @@ describe('official Responses API browser adapter', () => {
 
     const result = await provider.complete([{ role: 'user', content: 'An?' }], []);
 
-    expect(result.toolCalls).toEqual([
-      { id: 'call_1', name: 'fact', args: { learner: 'an' } },
-    ]);
+    expect(result.toolCalls).toEqual([{ id: 'call_1', name: 'fact', args: { learner: 'an' } }]);
   });
 });

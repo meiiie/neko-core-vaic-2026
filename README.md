@@ -21,6 +21,8 @@ path instead of repeating the same fixed lesson sequence.
 - [Brand system and asset governance](docs/BRAND_SYSTEM.md)
 - [SEO and share audit](docs/SEO_AND_SHARE_AUDIT.md)
 - [Evaluation status and reproducibility](docs/EVALUATION.md)
+- [Teacher AI harness v2 design](docs/superpowers/specs/2026-07-18-neko-teacher-ai-harness-v2-design.md)
+- [Agentic vertical-slice implementation plan](docs/superpowers/plans/2026-07-18-neko-agentic-vertical-slice.md)
 - [AI collaboration log](AI_COLLABORATION_LOG.csv)
 
 The official problem text is intentionally short. Anything not stated there is an internal
@@ -30,13 +32,21 @@ statement.
 
 ## Current status
 
-The local-first PWA now opens through a one-click role entry and provides separate student and
-teacher workspaces with persistent sidebar navigation. The student can complete an adaptive
-check-in and inspect the resulting path; the teacher can inspect the class-wide gap and ranked
-intervention groups. These surfaces use the deterministic domain runtime and local IndexedDB, not
-hard-coded screen outcomes. The account and class records are sample evaluation data, not real
-authentication or learner PII. Named curriculum review and six independently owned held-out labels
-remain explicit next gates; no real-learning or whole-curriculum result is claimed.
+The local-first PWA provides authenticated student and teacher workspaces with persistent sidebar
+navigation. The student can complete an adaptive check-in and inspect the resulting path; the
+teacher can inspect the class-wide gap and ranked intervention groups. These surfaces use the
+deterministic domain runtime and local IndexedDB, not hard-coded screen outcomes.
+
+The teacher Neko dock now runs through a persistent, evidence-first agent controller. Its canonical
+memory is compacted by estimated token pressure, never by a fixed message or turn count. It supports
+the deterministic rule provider, opt-in in-browser Gemma 3 through WebLLM, a server-side OpenAI
+Responses provider, and an optional local/self-hosted ChatGPT managed-account provider through the
+official Codex App Server protocol. Exact configuration and trust boundaries are documented in the
+[production runbook](ops/RUNBOOK.md).
+
+The account and class records remain sample evaluation data, not learner PII. Named curriculum
+review and six independently owned held-out labels remain explicit next gates; no real-learning,
+whole-curriculum, or SOTA result is claimed.
 
 ## Non-negotiables
 

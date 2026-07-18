@@ -1,4 +1,5 @@
 import { composeAnswer } from './providers';
+import { parseCapsule } from './context-manager';
 import type { AgentToolCall } from './protocol';
 import { executeToolCalls } from './tool-runtime';
 import type { AgentTool } from './tools';
@@ -62,7 +63,9 @@ export const AGENT_SYSTEM_PROMPT =
 
 function callKey(call: AgentToolCall): string {
   return `${call.name}:${JSON.stringify(
-    Object.fromEntries(Object.entries(call.args).sort(([left], [right]) => left.localeCompare(right))),
+    Object.fromEntries(
+      Object.entries(call.args).sort(([left], [right]) => left.localeCompare(right)),
+    ),
   )}`;
 }
 
@@ -87,6 +90,20 @@ function composeCollectedEvidence(toolLog: readonly { name: string; payload: str
   return [...new Set(parts)].join('\n');
 }
 
+function contextualEvidence(
+  question: string,
+  history: readonly AgentChatMessage[],
+): { name: string; payload: string }[] {
+  if (!/^(vì sao|tại sao|giải thích thêm)\??$/i.test(question.trim())) return [];
+  const latestTool = [...history].reverse().find((message) => message.role === 'tool');
+  if (latestTool) {
+    return [{ name: latestTool.toolName ?? '', payload: latestTool.content }];
+  }
+  const capsule = history.map(parseCapsule).find((value) => value !== null);
+  const evidence = capsule?.evidence.at(-1);
+  return evidence ? [{ name: evidence.toolName, payload: evidence.payload }] : [];
+}
+
 export async function runAgentTurn(
   question: string,
   provider: AgentProvider,
@@ -99,7 +116,7 @@ export async function runAgentTurn(
   if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
   const messages: AgentChatMessage[] = [...history, { role: 'user', content: question }];
   const seenCalls = new Set<string>();
-  const toolLog: { name: string; payload: string }[] = [];
+  const toolLog: { name: string; payload: string }[] = contextualEvidence(question, history);
   let inputTokens = 0;
   let outputTokens = 0;
   let cachedInputTokens = 0;
@@ -114,7 +131,13 @@ export async function runAgentTurn(
     if (completion.toolCalls.length === 0) {
       let answer =
         completion.content?.trim() || 'Tôi chưa có đủ dữ kiện từ công cụ để trả lời câu này.';
-      if (!isGrounded(answer, question, toolLog.map((entry) => entry.payload))) {
+      if (
+        !isGrounded(
+          answer,
+          question,
+          toolLog.map((entry) => entry.payload),
+        )
+      ) {
         onTrace({
           kind: 'note',
           text: 'Câu trả lời của model lệch dữ kiện công cụ — thay bằng bản tổng hợp deterministic.',

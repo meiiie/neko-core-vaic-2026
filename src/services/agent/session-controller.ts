@@ -124,6 +124,17 @@ export class AgentSessionController {
     this.activeAbort?.abort(reason);
   }
 
+  reset(): void {
+    if (this.disposed) throw new Error('Agent session đã đóng.');
+    this.abort('reset');
+    this.messages = [{ role: 'system', content: AGENT_SYSTEM_PROMPT }];
+    this.originalTask = '';
+    this.constraints = [];
+    this.turns = 0;
+    this.usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+    this.context.reset();
+  }
+
   snapshot(): AgentSessionSnapshot {
     return {
       scope: this.options.scope,
@@ -133,6 +144,30 @@ export class AgentSessionController {
       turnCount: this.turns,
       usage: this.usage,
     };
+  }
+
+  restore(snapshot: AgentSessionSnapshot): void {
+    if (this.activeAbort) throw new Error('Không thể restore khi một lượt đang chạy.');
+    if (
+      snapshot.scope.accountId !== this.options.scope.accountId ||
+      snapshot.scope.role !== this.options.scope.role ||
+      snapshot.scope.classId !== this.options.scope.classId
+    ) {
+      throw new Error('Session snapshot không khớp account/class scope.');
+    }
+    const system = snapshot.messages.find((message) => message.role === 'system');
+    if (!system || system.content !== AGENT_SYSTEM_PROMPT) {
+      throw new Error('Session snapshot không còn system contract hợp lệ.');
+    }
+    this.messages = [...snapshot.messages];
+    this.originalTask =
+      snapshot.capsule?.originalTask ??
+      snapshot.messages.find((message) => message.role === 'user')?.content ??
+      '';
+    this.constraints = [...(snapshot.capsule?.constraints ?? [])];
+    this.turns = snapshot.turnCount;
+    this.usage = snapshot.usage;
+    this.context.restore(snapshot.capsule);
   }
 
   async dispose(): Promise<void> {

@@ -52,8 +52,13 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))];
 }
 
-function recentTail(messages: readonly AgentChatMessage[], recentTurns: number): AgentChatMessage[] {
-  const userIndexes = messages.flatMap((message, index) => (message.role === 'user' ? [index] : []));
+function recentTail(
+  messages: readonly AgentChatMessage[],
+  recentTurns: number,
+): AgentChatMessage[] {
+  const userIndexes = messages.flatMap((message, index) =>
+    message.role === 'user' ? [index] : [],
+  );
   const start = userIndexes[Math.max(0, userIndexes.length - Math.max(1, recentTurns))];
   return start === undefined ? [] : messages.slice(start);
 }
@@ -70,6 +75,16 @@ export class ContextManager {
 
   get currentCapsule(): ContextCapsule | null {
     return this.capsule;
+  }
+
+  restore(capsule: ContextCapsule | null): void {
+    this.capsule = capsule;
+    this.count = capsule?.compactionCount ?? 0;
+  }
+
+  reset(): void {
+    this.capsule = null;
+    this.count = 0;
   }
 
   compactIfNeeded(
