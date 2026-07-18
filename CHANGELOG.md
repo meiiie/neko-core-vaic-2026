@@ -5,6 +5,21 @@ All notable changes to NekoPath are documented here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (0.x during the VAIC 2026
 hackathon window).
 
+## [0.6.1] — 2026-07-18
+
+### Changed
+
+- Teacher surfaces adopt the quiet presentation system: computed greeting and date
+  header (previously hard-coded), section labels in sentence case app-wide instead of
+  all-caps letterspacing (40 labels stopped shouting; uppercase Vietnamese also stacks
+  diacritics poorly), two decision-focused metric cards, and typographic middle-dot
+  separators across eight pages.
+
+### Removed
+
+- Redundant "last updated" chips on teacher pages — the sidebar connection status
+  already answers data freshness; the sample-data footnote stays with the data.
+
 ## [0.6.0] — 2026-07-18
 
 ### Added
@@ -95,6 +110,7 @@ hackathon window).
   canonical domain `nekopath.holilihu.online`.
 - CI with SHA-pinned actions and a manual VM deploy workflow; semver tagging.
 
+[0.6.1]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/meiiie/neko-core-vaic-2026/compare/v0.3.0...v0.4.0
