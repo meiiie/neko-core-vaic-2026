@@ -24,6 +24,7 @@
     "@fastify/cookie": "11.1.2",
     "@fastify/static": "10.1.0",
     "@mlc-ai/web-llm": "0.2.84",
+    "@phosphor-icons/react": "2.1.10",
     "dexie": "4.4.4",
     "dexie-react-hooks": "4.4.0",
     "fastify": "5.10.0",
