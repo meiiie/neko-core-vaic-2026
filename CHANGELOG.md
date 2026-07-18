@@ -9,6 +9,12 @@ hackathon window).
 
 ### Added
 
+- An account-scoped assignment-to-diagnosis contract test now proves that identical K10 surface
+  errors can produce K02 and K07 remediation paths, while sparse evidence safely abstains.
+- Teacher group details now trace each learner's decision to server-owned answer evidence before
+  a review assignment is created.
+- Complete paginated server-evidence hydration feeds confirmed assignment answers back into local
+  diagnosis and adaptive practice progress.
 - Confirmed device profiles can reopen without connectivity after one successful online sign-in;
   the same recovery remains available if the directory loads but the network drops during submit.
 - A focused adaptive check-in presents one evidence decision at a time with student-facing copy
