@@ -201,7 +201,7 @@ export function TeacherQuestionsPage() {
           <h1>Soạn và chọn câu hỏi</h1>
           <p>Tìm câu phù hợp, xem trước rồi chọn nhiều câu để tạo bài tập cho lớp.</p>
         </div>
-        <span className="status-label status-label--review">Nội dung mẫu • Bản nháp</span>
+        <span className="status-label status-label--review">Nội dung mẫu · Bản nháp</span>
       </header>
 
       <details className="summary-panel question-create-panel">
@@ -442,7 +442,7 @@ export function TeacherQuestionsPage() {
                     <div>
                       <strong>{question.prompt}</strong>
                       <span>
-                        {kcLabel(question.kcId)} • {DIFFICULTY_LABELS[question.difficulty]} •{' '}
+                        {kcLabel(question.kcId)} · {DIFFICULTY_LABELS[question.difficulty]} •{' '}
                         {question.choices.length} phương án •{' '}
                         {question.reviewState === 'UNREVIEWED' ? 'Bản nháp' : question.reviewState}
                       </span>

@@ -67,7 +67,7 @@ export function AssignmentsPage() {
           <li key={assignment.id}>
             <strong>{assignment.title}</strong>
             <span>
-              {assignment.questionCount} câu • em đã trả lời {assignment.myAnswerCount} lần
+              {assignment.questionCount} câu · em đã trả lời {assignment.myAnswerCount} lần
             </span>
             <Link className="button-primary" to={`/student/assignments/${assignment.id}`}>
               {assignment.myAnswerCount > 0 ? 'Làm tiếp' : 'Bắt đầu làm'}

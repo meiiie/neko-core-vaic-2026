@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { kcName } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH, PRACTICE_QUESTIONS } from '../../content';
-import { useSyncStatus } from '../../services/sync';
 import type { OverrideRecord } from '../../storage/db';
 import { appendTeacherOverride } from '../../storage/override-repository';
 import { priorityBand, TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
@@ -129,7 +128,6 @@ function TeacherOverrideForm({
 
 export function TeacherClassPage() {
   const { dashboard, overrides } = useTeacherDashboard();
-  const syncStatus = useSyncStatus();
   const [searchParams] = useSearchParams();
   const [topic, setTopic] = useState('ALL');
   const [priority, setPriority] = useState('ALL');
@@ -185,22 +183,14 @@ export function TeacherClassPage() {
     URL.revokeObjectURL(url);
   }
 
-  const updatedLabel = syncStatus?.lastSyncedAt
-    ? `Cập nhật lúc ${new Date(syncStatus.lastSyncedAt).toLocaleTimeString('vi-VN', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })}`
-    : 'Dữ liệu mẫu trên thiết bị';
-
   return (
     <div className="page-stack teacher-class-page">
-      <header className="page-heading page-heading--split">
-        <div>
-          <p className="eyebrow">Lớp 7A • 40 học sinh</p>
-          <h1>Nhóm cần hỗ trợ</h1>
-          <p>So sánh các nhóm, xem câu trả lời sai và chọn việc nên làm tiếp theo.</p>
-        </div>
-        <span className="status-label status-label--neutral">{updatedLabel}</span>
+      <header className="page-heading">
+        <h1>Nhóm cần hỗ trợ</h1>
+        <p className="page-meta">
+          Lớp 7A · {dashboard.learners.length} học sinh · So sánh các nhóm, xem câu trả lời sai và
+          chọn việc nên làm tiếp theo.
+        </p>
       </header>
 
       <section className="teacher-filter-bar" aria-label="Lọc nhóm học sinh">

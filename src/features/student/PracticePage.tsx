@@ -279,7 +279,7 @@ export function PracticePage() {
     <div className="assessment-page">
       <header className="assessment-header">
         <div>
-          <p className="eyebrow">Luyện tập • {kcName(rootKcId)}</p>
+          <p className="eyebrow">Luyện tập · {kcName(rootKcId)}</p>
           <h1>Lấp lỗ hổng: {kcName(rootKcId)}</h1>
           <p>
             Trả lời đúng vài câu liên tiếp để chứng minh em đã vững — hệ thống sẽ tự chuyển sang

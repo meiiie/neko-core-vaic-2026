@@ -1,25 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
+import { greetingVi, todayVi } from '../../app/vietnamese-time';
 import { diagnoseHero, kcName, STATUS_LABELS } from '../../app/adapters/hero-tutor';
 import type { DiagnosisStatus } from '../../domain';
 import { listEventsByLearner } from '../../storage/event-repository';
-
-function greetingVi(hour: number): string {
-  if (hour < 11) return 'Chào buổi sáng';
-  if (hour < 13) return 'Chào buổi trưa';
-  if (hour < 18) return 'Chào buổi chiều';
-  return 'Chào buổi tối';
-}
-
-function todayVi(date: Date): string {
-  const formatted = new Intl.DateTimeFormat('vi-VN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(date);
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-}
 
 const STATUS_TONES: Record<DiagnosisStatus, string> = {
   DIAGNOSED: 'status-label--evidence',

@@ -152,14 +152,14 @@ code {
   transform: translateY(0);
 }
 
+/* Section label: quiet sentence case. All-caps letterspaced labels shouted
+   from every card; Vietnamese uppercase also stacks diacritics awkwardly. */
 .eyebrow {
-  margin-bottom: var(--s-2);
-  color: var(--primary);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-  text-transform: uppercase;
+  margin-bottom: var(--s-1);
+  color: var(--muted-strong);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.25rem;
 }
 
 .muted {
@@ -1211,7 +1211,7 @@ details li {
 }
 
 .metric-grid--teacher {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 22rem));
 }
 
 .metric-grid article {
@@ -1245,9 +1245,9 @@ details li {
   color: var(--muted);
 }
 
-.metric-card--attention {
-  border-color: #fedf89 !important;
-  border-left: 0.25rem solid var(--review) !important;
+.metric-grid .metric-card--attention {
+  border-color: #fedf89;
+  border-left: 0.25rem solid var(--review);
 }
 
 .metric-title {
@@ -1304,16 +1304,6 @@ details li {
 .metric-help-wrap:hover .metric-tooltip {
   opacity: 1;
   visibility: visible;
-}
-
-.teacher-page-heading {
-  align-items: flex-end;
-}
-
-.teacher-updated {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.875rem;
 }
 
 .teacher-decision-block {
@@ -2691,10 +2681,6 @@ details li {
 }
 
 @media (max-width: 34rem) {
-  .metric-grid--teacher article:last-child {
-    grid-column: 1 / -1;
-  }
-
   .form-row,
   .assignment-progress-metrics {
     grid-template-columns: 1fr;
