@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { buildHeroClassDashboard, kcName } from '../../app/adapters/hero-tutor';
+import { kcName } from '../../app/adapters/hero-tutor';
 import { useSyncStatus } from '../../services/sync';
 import { TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
+import { useTeacherDashboard } from './useTeacherDashboard';
 
 interface MetricCardProps {
   readonly id: string;
@@ -40,7 +40,7 @@ function MetricCard({ id, label, value, supportingText, hint, emphasis }: Metric
 }
 
 export function TeacherPage() {
-  const dashboard = useMemo(() => buildHeroClassDashboard(), []);
+  const { dashboard } = useTeacherDashboard();
   const syncStatus = useSyncStatus();
   const groups = [...dashboard.groups].sort((a, b) => b.priorityScore - a.priorityScore);
   const topGroup = groups[0];

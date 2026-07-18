@@ -1676,12 +1676,80 @@ details li {
 }
 
 .learner-chip-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
   padding: var(--s-1) var(--s-2);
   border-radius: var(--radius-sm);
   background: var(--primary-soft);
   color: var(--primary);
   font-size: 0.75rem;
   font-weight: 700;
+}
+
+.learner-chip-list small {
+  color: var(--muted-strong);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.teacher-override {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--rule);
+  border-left: 0.25rem solid var(--review);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.teacher-override header p,
+.teacher-override-current {
+  margin: var(--s-1) 0 0;
+  color: var(--muted-strong);
+}
+
+.teacher-override-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.teacher-override-grid label {
+  display: grid;
+  gap: var(--s-1);
+  color: var(--muted-strong);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.teacher-override-grid input,
+.teacher-override-grid select {
+  min-width: 0;
+  min-height: var(--touch-target);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.teacher-override-reason {
+  grid-column: 1 / -1;
+}
+
+.teacher-override-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+
+.teacher-override-actions span {
+  color: var(--muted-strong);
+  font-size: 0.875rem;
 }
 
 /* System and utility */
@@ -2595,7 +2663,8 @@ details li {
 
 @media (max-width: 52rem) {
   .today-panel,
-  .group-detail-grid {
+  .group-detail-grid,
+  .teacher-override-grid {
     grid-template-columns: 1fr;
   }
 

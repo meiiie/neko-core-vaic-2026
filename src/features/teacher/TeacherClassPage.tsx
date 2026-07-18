@@ -1,16 +1,134 @@
-import { useMemo, useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { buildHeroClassDashboard, kcName } from '../../app/adapters/hero-tutor';
+import { kcName } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH, PRACTICE_QUESTIONS } from '../../content';
 import { useSyncStatus } from '../../services/sync';
+import type { OverrideRecord } from '../../storage/db';
+import { appendTeacherOverride } from '../../storage/override-repository';
 import { priorityBand, TEACHER_GROUP_LABELS, teacherActionLabel } from './teacher-presentation';
+import { useTeacherDashboard } from './useTeacherDashboard';
 
 function csvCell(value: string | number): string {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
 
+function TeacherOverrideForm({
+  learnerIds,
+  learnerLabel,
+  overrides,
+}: {
+  readonly learnerIds: readonly string[];
+  readonly learnerLabel: (learnerId: string) => string;
+  readonly overrides: readonly OverrideRecord[];
+}) {
+  const [learnerId, setLearnerId] = useState(learnerIds[0] ?? '');
+  const [decision, setDecision] = useState('');
+  const [reason, setReason] = useState('');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const selectedLearnerId = learnerIds.includes(learnerId) ? learnerId : (learnerIds[0] ?? '');
+  const current = overrides.find(
+    (override) => override.learnerId === selectedLearnerId && override.targetKcId === 'K10',
+  );
+  const selectedDecision =
+    decision ||
+    (current?.decision === 'SET_ROOT' && current.rootKcId
+      ? `ROOT:${current.rootKcId}`
+      : 'NEEDS_MORE_EVIDENCE');
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedLearnerId || reason.trim().length < 8) return;
+    setSaveState('saving');
+    try {
+      const rootKcId = selectedDecision.startsWith('ROOT:') ? selectedDecision.slice(5) : undefined;
+      await appendTeacherOverride({
+        id: `override-${crypto.randomUUID()}`,
+        learnerId: selectedLearnerId,
+        targetKcId: 'K10',
+        decision: rootKcId ? 'SET_ROOT' : 'NEEDS_MORE_EVIDENCE',
+        ...(rootKcId ? { rootKcId } : {}),
+        reason: reason.trim(),
+        updatedAt: new Date().toISOString(),
+      });
+      setReason('');
+      setDecision('');
+      setSaveState('saved');
+    } catch {
+      setSaveState('error');
+    }
+  }
+
+  return (
+    <form className="teacher-override" onSubmit={(event) => void submit(event)}>
+      <header>
+        <h3>Điều chỉnh chẩn đoán</h3>
+        <p>Quyết định của cô được lưu riêng; lịch sử trả lời của học sinh không bị sửa.</p>
+      </header>
+      <div className="teacher-override-grid">
+        <label>
+          Học sinh
+          <select
+            value={selectedLearnerId}
+            onChange={(event) => {
+              setLearnerId(event.target.value);
+              setDecision('');
+              setSaveState('idle');
+            }}
+          >
+            {learnerIds.map((id) => (
+              <option key={id} value={id}>
+                {learnerLabel(id)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Quyết định chuyên môn
+          <select value={selectedDecision} onChange={(event) => setDecision(event.target.value)}>
+            <option value="NEEDS_MORE_EVIDENCE">Cần thêm bằng chứng</option>
+            {HERO_GRAPH.nodes.map((node) => (
+              <option key={node.id} value={`ROOT:${node.id}`}>
+                Chọn gốc: {node.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="teacher-override-reason">
+          Lý do điều chỉnh
+          <input
+            required
+            minLength={8}
+            maxLength={240}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Ví dụ: Đã trao đổi trực tiếp và xem cách làm của em"
+          />
+        </label>
+      </div>
+      {current ? (
+        <p className="teacher-override-current">
+          Quyết định gần nhất:{' '}
+          {current.decision === 'SET_ROOT' ? kcName(current.rootKcId ?? '') : 'Cần thêm bằng chứng'}{' '}
+          — {current.reason}
+        </p>
+      ) : null}
+      <div className="teacher-override-actions">
+        <button className="button-secondary" type="submit" disabled={saveState === 'saving'}>
+          {saveState === 'saving' ? 'Đang lưu…' : 'Lưu điều chỉnh'}
+        </button>
+        {saveState === 'saved' ? (
+          <span role="status">Đã lưu trên thiết bị này và cập nhật lại nhóm.</span>
+        ) : null}
+        {saveState === 'error' ? (
+          <span role="alert">Không lưu được điều chỉnh. Hãy thử lại.</span>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
 export function TeacherClassPage() {
-  const dashboard = useMemo(() => buildHeroClassDashboard(), []);
+  const { dashboard, overrides } = useTeacherDashboard();
   const syncStatus = useSyncStatus();
   const [searchParams] = useSearchParams();
   const [topic, setTopic] = useState('ALL');
@@ -26,6 +144,9 @@ export function TeacherClassPage() {
     if (group.totalLearnerCount < Number(minimumSize)) return false;
     return true;
   });
+  const learnerLabel = (learnerId: string) =>
+    dashboard.learners.find((learner) => learner.id === learnerId)?.displayLabel ??
+    learnerId.toUpperCase();
 
   function wrongQuestionsByLearner(learnerIds: readonly string[]) {
     return dashboard.learners
@@ -50,7 +171,7 @@ export function TeacherClassPage() {
       ['Nhóm', 'Học sinh', 'Đã đánh giá', 'Mức ưu tiên'],
       ...group.learnerIds.map((learnerId) => [
         group.rootKcId ? kcName(group.rootKcId) : TEACHER_GROUP_LABELS[group.status],
-        learnerId.toUpperCase(),
+        learnerLabel(learnerId),
         group.sufficientEvidenceCount > 0 ? 'Có dữ liệu nhóm' : 'Cần đánh giá thêm',
         group.priorityScore > 0 ? 'Cần hỗ trợ trước' : 'Theo dõi',
       ]),
@@ -140,7 +261,12 @@ export function TeacherClassPage() {
                       <h3>Học sinh trong nhóm</h3>
                       <div className="learner-chip-list">
                         {group.learnerIds.map((id) => (
-                          <span key={id}>{id.toUpperCase()}</span>
+                          <span key={id}>
+                            {learnerLabel(id)}
+                            {overrides.some((item) => item.learnerId === id) ? (
+                              <small>Giáo viên đã điều chỉnh</small>
+                            ) : null}
+                          </span>
                         ))}
                       </div>
                     </div>
@@ -150,7 +276,7 @@ export function TeacherClassPage() {
                         <ul className="wrong-question-list learner-mistake-list">
                           {learnerMistakes.map((learner) => (
                             <li key={learner.learnerId}>
-                              <strong>{learner.learnerId.toUpperCase()}</strong>
+                              <strong>{learnerLabel(learner.learnerId)}</strong>
                               <ul>
                                 {learner.questions.map((question) => (
                                   <li key={question.id}>
@@ -172,6 +298,11 @@ export function TeacherClassPage() {
                       theo đúng thứ tự thời gian.
                     </p>
                   ) : null}
+                  <TeacherOverrideForm
+                    learnerIds={group.learnerIds}
+                    learnerLabel={learnerLabel}
+                    overrides={overrides}
+                  />
                 </details>
 
                 <div className="group-actions">

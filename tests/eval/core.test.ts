@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyTeacherOverride,
   allocateTeacherAttention,
   canonicalizeEvents,
   computeMastery,
@@ -293,6 +294,47 @@ describe('hero diagnosis contract', () => {
 });
 
 describe('paths and teacher decisions', () => {
+  it('applies an explicit teacher override without rewriting evidence', () => {
+    const original = heroDiagnosis('an');
+    const overridden = applyTeacherOverride(HERO_GRAPH, original, {
+      learnerId: 'an',
+      targetKcId: 'K10',
+      decision: 'SET_ROOT',
+      rootKcId: 'K07',
+    });
+
+    expect(overridden).toMatchObject({
+      status: 'DIAGNOSED',
+      disposition: 'AUTO_REMEDIATE',
+      rootKcId: 'K07',
+      pathKcIds: ['K07', 'K08', 'K09', 'K10'],
+      reasonCodes: ['TEACHER_OVERRIDE_APPLIED'],
+    });
+    expect(overridden.evidenceEventIds).toEqual(original.evidenceEventIds);
+    expect(HERO_EVENTS.an).toEqual(HERO_EVENTS.an);
+
+    expect(
+      applyTeacherOverride(HERO_GRAPH, original, {
+        learnerId: 'an',
+        targetKcId: 'K10',
+        decision: 'NEEDS_MORE_EVIDENCE',
+      }),
+    ).toMatchObject({
+      status: 'NEEDS_MORE_EVIDENCE',
+      disposition: 'TEACHER_REVIEW',
+      pathKcIds: [],
+      reasonCodes: ['TEACHER_OVERRIDE_APPLIED'],
+    });
+    expect(() =>
+      applyTeacherOverride(HERO_GRAPH, original, {
+        learnerId: 'an',
+        targetKcId: 'K10',
+        decision: 'SET_ROOT',
+        rootKcId: 'K99',
+      }),
+    ).toThrow('valid path');
+  });
+
   it('keeps the underlying graph path while skipping mastered practice nodes', () => {
     const masteredK08 = HERO_EVENTS.minh
       .filter((event) => event.itemId.startsWith('K08-'))

@@ -63,4 +63,42 @@ describe('synthetic 40-learner classroom', () => {
     expect(HERO_ACTION_MINUTES.RUN_QUICK_CHECK).toBeGreaterThan(0);
     expect(HERO_ACTION_MINUTES.REVIEW_DIAGNOSIS).toBeGreaterThan(0);
   });
+
+  it('feeds one observed learner event into one representative class profile', () => {
+    const observed = {
+      id: 'an-local-observed',
+      learnerId: 'an',
+      itemId: 'K02-CHECK-1',
+      sequence: 99,
+      occurredAt: '2026-07-18T10:00:00.000Z',
+      correct: true,
+    } as const;
+    const dashboard = buildHeroClassDashboard(HERO_CLASS_LEARNERS, [observed]);
+
+    expect(
+      dashboard.learners.filter((learner) =>
+        learner.events.some((event) => event.id === observed.id),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('moves only the overridden learner while preserving the event history', () => {
+    const before = buildHeroClassDashboard();
+    const after = buildHeroClassDashboard(
+      HERO_CLASS_LEARNERS,
+      [],
+      [
+        {
+          learnerId: 'hs-01',
+          targetKcId: 'K10',
+          decision: 'SET_ROOT',
+          rootKcId: 'K07',
+        },
+      ],
+    );
+
+    expect(after.groups.find((group) => group.id === 'root:K02')?.totalLearnerCount).toBe(11);
+    expect(after.groups.find((group) => group.id === 'root:K07')?.totalLearnerCount).toBe(11);
+    expect(after.learners[0]?.events).toEqual(before.learners[0]?.events);
+  });
 });

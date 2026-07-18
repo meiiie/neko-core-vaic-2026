@@ -58,6 +58,17 @@ export async function countEvents(database: NekoPathDb = db): Promise<number> {
   return database.events.count();
 }
 
+export async function listAllEvents(database: NekoPathDb = db): Promise<LearnerEventRecord[]> {
+  const rows = await database.events.toArray();
+  return rows.sort(
+    (a, b) =>
+      a.learnerId.localeCompare(b.learnerId) ||
+      a.sequence - b.sequence ||
+      a.occurredAt.localeCompare(b.occurredAt) ||
+      a.id.localeCompare(b.id),
+  );
+}
+
 /**
  * Reset the synthetic demo data. This clears learner events, teacher
  * overrides and the outbox. It never touches anything outside this app's
