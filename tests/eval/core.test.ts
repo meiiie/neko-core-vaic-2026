@@ -122,6 +122,18 @@ describe('graph and event integrity', () => {
 
   it('only marks a misconception pattern supported after two distinct items', () => {
     const events = HERO_EVENTS.an.filter((event) => event.misconceptionId);
+    const firstItemId = events[0]!.itemId;
+    const singleItemHypotheses = inferMisconceptionHypotheses(
+      HERO_GRAPH,
+      HERO_ITEMS,
+      events.filter((event) => event.itemId === firstItemId),
+      2,
+    );
+    expect(singleItemHypotheses[0]).toMatchObject({
+      verificationStatus: 'NEEDS_VERIFICATION',
+      independentItemCount: 1,
+    });
+
     const hypotheses = inferMisconceptionHypotheses(HERO_GRAPH, HERO_ITEMS, events, 2);
 
     expect(hypotheses[0]).toMatchObject({
@@ -153,6 +165,27 @@ describe('hero diagnosis contract', () => {
       disposition: 'AUTO_REMEDIATE',
       rootKcId: 'K07',
       pathKcIds: ['K07', 'K08', 'K09', 'K10'],
+    });
+  });
+
+  it('can remediate a supported KC gap without inventing a named misconception', () => {
+    const eventsWithoutNamedPatterns = HERO_EVENTS.an.map(
+      ({ misconceptionId: _misconceptionId, ...event }) => event,
+    );
+    const result = diagnose({
+      learnerId: 'an',
+      targetKcId: 'K10',
+      graph: HERO_GRAPH,
+      items: HERO_ITEMS,
+      events: eventsWithoutNamedPatterns,
+      config: HERO_DEMO_CONFIG,
+    });
+
+    expect(result).toMatchObject({
+      status: 'DIAGNOSED',
+      disposition: 'AUTO_REMEDIATE',
+      rootKcId: 'K02',
+      misconceptionHypotheses: [],
     });
   });
 

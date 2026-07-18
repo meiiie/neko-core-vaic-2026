@@ -54,6 +54,29 @@ describe('hero-tutor adapter (UI integration over domain runtime)', () => {
     });
   });
 
+  it('infers invalid method evidence for an authored transfer distractor', () => {
+    const record = buildLocalAnswerRecord('minh', 'K10-TRANSFER', 'b', false, 0);
+
+    expect(toDomainEvents([record])[0]).toMatchObject({
+      correct: false,
+      methodValidity: 'INVALID',
+      misconceptionId: 'ADDITIVE_COMPARISON',
+    });
+  });
+
+  it('drops a stale or mismatched misconception ID from local storage', () => {
+    const record = buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'a', true, 0);
+    record.payload = JSON.stringify({
+      choiceId: 'a',
+      correct: true,
+      methodValidity: 'UNKNOWN',
+      misconceptionId: 'RATIO_ORDER_REVERSED',
+    });
+
+    expect(toDomainEvents([record])[0]).not.toHaveProperty('misconceptionId');
+    expect(() => diagnoseHero('chi', [record])).not.toThrow();
+  });
+
   it('skips malformed local payloads instead of guessing', () => {
     const broken = { ...buildLocalAnswerRecord('chi', 'K02-DIAGNOSTIC', 'a', true, 0) };
     broken.payload = 'not-json';

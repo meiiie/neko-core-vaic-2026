@@ -129,7 +129,13 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
   const events: LearnerEvent[] = [];
   for (const record of records) {
     const payload = parsePayload(record.payload);
-    if (!payload) continue;
+    const item = HERO_ITEMS.find((candidate) => candidate.id === record.itemId);
+    if (!payload || !item) continue;
+    const misconceptionId =
+      item.misconceptionIds?.includes(payload.misconceptionId ?? '') &&
+      (!payload.correct || payload.methodValidity === 'INVALID')
+        ? payload.misconceptionId
+        : undefined;
     events.push({
       id: record.id,
       learnerId: record.learnerId,
@@ -138,7 +144,7 @@ export function toDomainEvents(records: readonly LearnerEventRecord[]): LearnerE
       occurredAt: record.occurredAt,
       correct: payload.correct,
       methodValidity: payload.methodValidity,
-      ...(payload.misconceptionId ? { misconceptionId: payload.misconceptionId } : {}),
+      ...(misconceptionId ? { misconceptionId } : {}),
     });
   }
   return events;

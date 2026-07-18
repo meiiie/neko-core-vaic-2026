@@ -32,9 +32,14 @@ export interface HeroClassDashboard {
 export const HERO_TEACHER_BUDGET_MINUTES = 15;
 
 export const HERO_ACTION_MINUTES: Readonly<Record<string, number>> = {
+  RETEACH_K01: 8,
   RETEACH_K02: 10,
   RETEACH_K07: 8,
+  RETEACH_K08: 8,
+  RETEACH_K09: 8,
+  RETEACH_K10: 8,
   RUN_QUICK_CHECK: 2,
+  REVIEW_DIAGNOSIS: 5,
 };
 
 const PROFILE_COUNTS: readonly {

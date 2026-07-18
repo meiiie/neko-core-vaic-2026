@@ -41,6 +41,11 @@ The system rejects a misconception ID not declared by the item. A named pattern 
 from the learner name, demographic data or free text. It is a session-level hypothesis, not a
 permanent trait label.
 
+Root-gap evidence and named-misconception evidence are intentionally separate. Two distinct
+items can support a KC-level practice path even when their distractors do not identify the same
+error pattern. The interface may name a misconception only when the same authored signal repeats
+across two distinct items; otherwise it presents the path at KC level without inventing a label.
+
 ## Current acceptance gates
 
 1. Same visible Grade 7 target still yields K02 for An, K07 for Bình, safe abstention for Chi and
