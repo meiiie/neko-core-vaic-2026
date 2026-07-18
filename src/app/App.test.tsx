@@ -26,6 +26,10 @@ function abortAwarePendingFetch() {
   return vi.fn(
     (_input: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
+        if (init?.signal?.aborted) {
+          reject(init.signal.reason);
+          return;
+        }
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
       }),
   );

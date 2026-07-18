@@ -5,6 +5,10 @@ function abortAwarePendingFetch() {
   return vi.fn(
     (_input: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
+        if (init?.signal?.aborted) {
+          reject(init.signal.reason);
+          return;
+        }
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
       }),
   );
@@ -53,5 +57,19 @@ describe('fetchWithDeadline', () => {
     caller.abort();
 
     await rejection;
+  });
+
+  it('rejects immediately when the caller signal is already aborted', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', abortAwarePendingFetch());
+    const caller = new AbortController();
+    caller.abort();
+
+    await expect(
+      fetchWithDeadline('/cancelled-before-start', {
+        deadlineMs: 3_000,
+        signal: caller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

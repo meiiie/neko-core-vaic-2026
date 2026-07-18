@@ -47,6 +47,10 @@ function abortAwarePendingFetch(onSignal?: (signal: AbortSignal | null | undefin
     (_input: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
         onSignal?.(init?.signal);
+        if (init?.signal?.aborted) {
+          reject(init.signal.reason);
+          return;
+        }
         init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
       }),
   );
