@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { NekoPathDb, type LearnerEventRecord } from './db';
 import { appendEvent, countEvents, listEventsByLearner, resetDemoData } from './event-repository';
+import { appendTeacherOverride, listLatestTeacherOverrides } from './override-repository';
 
 function makeDb(): NekoPathDb {
   return new NekoPathDb(`nekopath-test-${crypto.randomUUID()}`);
@@ -67,7 +68,9 @@ describe('Dexie schema v1', () => {
       id: 'ovr-1',
       learnerId: 'an',
       targetKcId: 'K02',
-      decision: 'CONFIRM_ROOT',
+      decision: 'SET_ROOT',
+      rootKcId: 'K02',
+      reason: 'Giáo viên đã kiểm tra bài làm trực tiếp.',
       updatedAt: '2026-07-17T08:05:00.000Z',
     });
     await database.outbox.add({
@@ -83,5 +86,39 @@ describe('Dexie schema v1', () => {
     expect(await database.overrides.count()).toBe(0);
     expect(await database.outbox.count()).toBe(0);
     expect(await database.meta.get('lastDemoResetAt')).toBeTruthy();
+  });
+
+  it('keeps append-only override history and returns the latest decision', async () => {
+    const database = makeDb();
+    dbs.push(database);
+
+    await appendTeacherOverride(
+      {
+        id: 'ovr-old',
+        learnerId: 'hs-01',
+        targetKcId: 'K10',
+        decision: 'SET_ROOT',
+        rootKcId: 'K02',
+        reason: 'Bằng chứng đầu tiên từ bài làm.',
+        updatedAt: '2026-07-18T08:00:00.000Z',
+      },
+      database,
+    );
+    await appendTeacherOverride(
+      {
+        id: 'ovr-new',
+        learnerId: 'hs-01',
+        targetKcId: 'K10',
+        decision: 'NEEDS_MORE_EVIDENCE',
+        reason: 'Cần hỏi trực tiếp học sinh thêm một câu.',
+        updatedAt: '2026-07-18T09:00:00.000Z',
+      },
+      database,
+    );
+
+    expect(await database.overrides.count()).toBe(2);
+    expect(await listLatestTeacherOverrides(database)).toEqual([
+      expect.objectContaining({ id: 'ovr-new', decision: 'NEEDS_MORE_EVIDENCE' }),
+    ]);
   });
 });

@@ -194,6 +194,7 @@ export const REASON_LABELS: Record<DiagnosisReasonCode, string> = {
   TARGET_OUTSIDE_GRAPH: 'Mục tiêu nằm ngoài đồ thị đã duyệt',
   NO_ACTIONABLE_ROOT: 'Không tìm thấy gốc có thể hành động',
   NO_VALID_PATH: 'Không có lộ trình hợp lệ',
+  TEACHER_OVERRIDE_APPLIED: 'Giáo viên đã điều chỉnh quyết định dựa trên bằng chứng lớp học',
 };
 
 export function actionLabel(actionId: string): string {
