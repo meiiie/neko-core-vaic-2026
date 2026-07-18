@@ -169,10 +169,12 @@ export function LoginPage() {
                 }}
                 onPointerMove={() => setActiveIndex(index)}
               >
-                <span className="auth-option-name">{entry.name}</span>
-                {entry.role === 'TEACHER' ? (
-                  <span className="auth-option-sub">{entry.subtitle}</span>
-                ) : null}
+                <span className="auth-option-text">
+                  <span className="auth-option-name">{entry.name}</span>
+                  {entry.role === 'TEACHER' ? (
+                    <span className="auth-option-sub">{entry.subtitle}</span>
+                  ) : null}
+                </span>
                 {selected === entry.email ? (
                   <span className="auth-option-check" aria-hidden="true">
                     ✓
@@ -237,7 +239,15 @@ export function LoginPage() {
                   onKeyDown={onKeyDown}
                 />
                 <span className="auth-combo-chevron" aria-hidden="true">
-                  ▾
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none">
+                    <path
+                      d="M4 6l4 4 4-4"
+                      stroke="currentColor"
+                      strokeWidth="1.75"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </span>
               </span>
             </label>
