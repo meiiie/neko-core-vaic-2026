@@ -69,7 +69,9 @@ export function LearnPage() {
       <div className="assessment-progress" aria-label={`Tiến độ ${progress}%`}>
         <div>
           <strong>{probeQuestion ? `Câu ${questionNumber}` : 'Hoàn thành'}</strong>
-          <span>{probeQuestion ? `tối đa ${QUESTION_BUDGET} câu` : 'đã đủ bằng chứng'}</span>
+          <span>
+            {probeQuestion ? `tối đa ${QUESTION_BUDGET} câu` : STATUS_LABELS[result.status]}
+          </span>
         </div>
         <div
           className="progress-track"
@@ -177,10 +179,23 @@ export function LearnPage() {
             ✓
           </span>
           <p className="eyebrow">Đã hoàn thành phiên kiểm tra</p>
-          <h2>NekoPath đã có đủ bằng chứng cho bước tiếp theo</h2>
-          <p>
-            Bạn có thể xem kiến thức nền cần củng cố và đường học ngắn nhất đến mục tiêu của lớp.
-          </p>
+          {result.status === 'NEEDS_MORE_EVIDENCE' ? (
+            <>
+              <h2>Đã lưu các câu trả lời — chưa vội kết luận</h2>
+              <p>
+                Bằng chứng hiện chưa đủ để gọi tên một lỗ hổng gốc. NekoPath sẽ hỏi thêm ở phiên sau
+                hoặc chuyển giáo viên xem xét, thay vì gán nhãn sai cho em.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2>NekoPath đã có đủ bằng chứng cho bước tiếp theo</h2>
+              <p>
+                Bạn có thể xem kiến thức nền cần củng cố và đường học ngắn nhất đến mục tiêu của
+                lớp.
+              </p>
+            </>
+          )}
           <Link className="button-primary" to="/student/path">
             Xem lộ trình của tôi
           </Link>
