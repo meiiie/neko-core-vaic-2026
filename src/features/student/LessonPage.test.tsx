@@ -31,7 +31,9 @@ describe('lesson materials (server-owned rows, device mirror for offline)', () =
     expect(screen.getByText('Ý chính cần nhớ')).toBeTruthy();
     expect(screen.getByText('Lỗi thường gặp')).toBeTruthy();
     expect(screen.getByText(/chưa được giáo viên duyệt/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Bắt đầu luyện tập' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Bắt đầu luyện tập' }).getAttribute('href')).toBe(
+      '/student/practice?kc=K02',
+    );
   });
 
   it('offers a retry instead of pretending when the lesson is not on the device', async () => {

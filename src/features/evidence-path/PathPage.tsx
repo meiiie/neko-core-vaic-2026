@@ -12,6 +12,7 @@ import {
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { reviewRecommendation, REVIEW_REASON_LABELS } from '../../app/adapters/review-selection';
+import { derivePathProgress } from '../../app/adapters/path-progression';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { useLessonKcIds } from '../../services/lessons';
 
@@ -34,6 +35,10 @@ export function PathPage() {
   }
 
   const result = diagnoseHero(learnerContext, localRecords);
+  const progress = derivePathProgress(learnerContext, result, localRecords);
+  const displayedPathKcIds = progress?.pathKcIds ?? result.pathKcIds;
+  const continuingKcId =
+    result.status === 'NEEDS_MORE_EVIDENCE' ? progress?.currentKcId : undefined;
   const recordedAnswerCount = toDomainEvents(localRecords).filter(
     (event) => event.learnerId === learnerContext.learnerId,
   ).length;
@@ -60,20 +65,20 @@ export function PathPage() {
         </span>
       </header>
 
-      {result.status === 'NEEDS_MORE_EVIDENCE' ? (
+      {result.status === 'NEEDS_MORE_EVIDENCE' && !continuingKcId ? (
         <section className="decision-panel decision-panel--review">
           <div>
             <p className="eyebrow">Lộ trình đang chờ xác minh</p>
             <h2>
               {recordedAnswerCount > 0
-                ? 'Câu trả lời đã được ghi nhận, nhưng chưa đủ để tìm nguyên nhân gốc'
+                ? 'Câu trả lời đã được ghi nhận, nhưng chưa đủ bằng chứng trực tiếp để mở lộ trình'
                 : 'Chưa đủ dữ liệu để mở lộ trình'}
             </h2>
             {recordedAnswerCount > 0 ? (
               <p role="status">
                 <strong>{recordedAnswerCount} câu trả lời đã được lưu trong hồ sơ.</strong> Dữ liệu
-                học tập không bị mất; lộ trình tạm chưa hiển thị vì số câu hiện có chưa đủ để kết
-                luận nguyên nhân gốc.
+                học tập không bị mất. NekoPath chưa chọn một lỗ hổng gốc vì các câu hiện có chưa đủ
+                bằng chứng trực tiếp cho giả thuyết còn lại.
               </p>
             ) : (
               <p>Hệ thống chưa có câu trả lời trực tiếp phù hợp để đề xuất một lộ trình an toàn.</p>
@@ -91,8 +96,33 @@ export function PathPage() {
               Trả lời câu xác minh để mở lộ trình
             </Link>
           ) : (
-            <p role="status">Đã chuyển vào danh sách để giáo viên xem xét.</p>
+            <div className="decision-panel__action">
+              <p className="eyebrow">Bước tiếp theo</p>
+              <p role="status">
+                <strong>Đã đưa vào danh sách giáo viên xem xét.</strong> NekoPath sẽ không tự mở một
+                lộ trình chưa đủ căn cứ.
+              </p>
+              <Link className="button-secondary" to="/student/assignments">
+                Xem bài được giao trong khi chờ
+              </Link>
+            </div>
           )}
+        </section>
+      ) : null}
+
+      {continuingKcId ? (
+        <section className="decision-panel">
+          <div>
+            <p className="eyebrow">Lộ trình tiếp tục</p>
+            <h2>Bước tiếp theo: {kcName(continuingKcId)}</h2>
+            <p role="status">
+              Bước trước đã được củng cố. NekoPath giữ nguyên đường học đã xác định và chuyển sang
+              kiến thức kế tiếp; đây chưa phải là kết luận về một lỗ hổng gốc mới.
+            </p>
+          </div>
+          <Link className="button-primary" to={`/student/practice?kc=${continuingKcId}`}>
+            Luyện bước tiếp theo
+          </Link>
         </section>
       ) : null}
 
@@ -105,7 +135,10 @@ export function PathPage() {
               NekoPath bỏ qua phần đã vững và chỉ giữ các bước cần thiết để quay lại mục tiêu lớp.
             </p>
           </div>
-          <Link className="button-primary" to="/student/practice">
+          <Link
+            className="button-primary"
+            to={`/student/practice?kc=${progress?.currentKcId ?? result.rootKcId}`}
+          >
             Bắt đầu luyện tập
           </Link>
         </section>
@@ -124,36 +157,56 @@ export function PathPage() {
         </section>
       ) : null}
 
-      {result.pathKcIds.length > 0 ? (
+      {displayedPathKcIds.length > 0 ? (
         <section className="path-panel" aria-labelledby="path-heading">
           <header className="panel-heading">
             <div>
               <p className="eyebrow">Đường học được đề xuất</p>
               <h2 id="path-heading">Từ kiến thức nền đến mục tiêu của lớp</h2>
             </div>
-            <span>{result.pathKcIds.length} bước</span>
+            <span>{displayedPathKcIds.length} bước</span>
           </header>
           <ol className="path-steps">
-            {result.pathKcIds.map((kcId, index) => (
-              <li key={kcId}>
-                <span className="step-index">{String(index + 1).padStart(2, '0')}</span>
-                <span>
-                  <small>
-                    {index === 0
-                      ? 'Bắt đầu ở đây'
-                      : kcId === HERO_TARGET_KC_ID
-                        ? 'Mục tiêu của lớp'
-                        : 'Bước nối tiếp'}
-                  </small>
-                  <strong>{kcName(kcId)}</strong>
-                </span>
-                {lessonKcIds?.has(kcId) ? (
-                  <Link className="step-lesson-link" to={`/student/lesson/${kcId}`}>
-                    Ôn tóm tắt
+            {displayedPathKcIds.map((kcId, index) => {
+              const stepStatus = progress?.steps.find((step) => step.kcId === kcId)?.status;
+              const stepLabel =
+                stepStatus === 'COMPLETED'
+                  ? 'Đã hoàn thành'
+                  : stepStatus === 'CURRENT'
+                    ? 'Đang học'
+                    : kcId === HERO_TARGET_KC_ID
+                      ? 'Mục tiêu của lớp'
+                      : index === 0
+                        ? 'Bắt đầu ở đây'
+                        : 'Chưa mở';
+              const action =
+                stepStatus === 'CURRENT' ? (
+                  <Link className="step-lesson-link" to={`/student/practice?kc=${kcId}`}>
+                    Luyện bước này
                   </Link>
-                ) : null}
-              </li>
-            ))}
+                ) : stepStatus === 'COMPLETED' ? (
+                  <Link
+                    className="step-lesson-link"
+                    to={`/student/practice?kc=${kcId}&mode=review`}
+                  >
+                    Ôn lại
+                  </Link>
+                ) : lessonKcIds?.has(kcId) ? (
+                  <Link className="step-lesson-link" to={`/student/lesson/${kcId}`}>
+                    Xem tóm tắt
+                  </Link>
+                ) : null;
+              return (
+                <li key={kcId} data-status={stepStatus?.toLowerCase()}>
+                  <span className="step-index">{String(index + 1).padStart(2, '0')}</span>
+                  <span>
+                    <small>{stepLabel}</small>
+                    <strong>{kcName(kcId)}</strong>
+                  </span>
+                  {action}
+                </li>
+              );
+            })}
           </ol>
         </section>
       ) : null}

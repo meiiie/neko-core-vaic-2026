@@ -2,43 +2,58 @@ import { describe, expect, it } from 'vitest';
 import type { LearnerEventRecord } from '../../storage/db';
 import { nextPracticeQuestion } from './practice-selection';
 
-function record(itemId: string, id = itemId): LearnerEventRecord {
+function answer(sequence: number, itemId: string, correct: boolean): LearnerEventRecord {
   return {
-    id,
-    learnerId: 'user-student-an',
+    id: `practice-${sequence}`,
+    learnerId: 'learner-practice',
     itemId,
-    sequence: 8,
-    occurredAt: '2026-07-18T08:00:00.000Z',
+    sequence,
+    occurredAt: `2026-07-18T09:${String(sequence).padStart(2, '0')}:00.000Z`,
     kind: 'ANSWER',
-    payload: '{"choiceId":"a","correct":true}',
+    payload: JSON.stringify({ choiceId: correct ? 'a' : 'b', correct, methodValidity: 'UNKNOWN' }),
   };
 }
 
-describe('adaptive practice selection', () => {
-  it('starts with the first deterministic question when there are no attempts', () => {
+describe('practice selection', () => {
+  it('serves distinct questions for the requested KC and stops silent repetition', () => {
     expect(nextPracticeQuestion('K02', [])?.itemId).toBe('K02-CHECK-1');
+
+    const oneCorrect = [answer(1, 'K02-CHECK-1', true)];
+    expect(nextPracticeQuestion('K02', oneCorrect)?.itemId).toBe('K02-CHECK-2');
+
+    const bothCorrect = [...oneCorrect, answer(2, 'bank-K02-CHECK-2', true)];
+    expect(nextPracticeQuestion('K02', bothCorrect)).toBeUndefined();
+    expect(nextPracticeQuestion('K02', bothCorrect, { allowRepeat: true })?.itemId).toBe(
+      'K02-CHECK-1',
+    );
   });
 
-  it('counts an assigned bank answer as an attempt of its canonical item', () => {
-    expect(nextPracticeQuestion('K02', [record('bank-K02-CHECK-1')])?.itemId).toBe('K02-CHECK-2');
+  it('retries a wrong question only after trying the other distinct question', () => {
+    const oneWrong = [answer(1, 'K01-CHECK-1', false)];
+    expect(nextPracticeQuestion('K01', oneWrong)?.itemId).toBe('K01-CHECK-2');
   });
 
-  it('combines direct and bank attempts before choosing the least-practised item', () => {
-    expect(
-      nextPracticeQuestion('K02', [
-        record('K02-CHECK-1', 'direct-1'),
-        record('bank-K02-CHECK-1', 'assigned-1'),
-        record('K02-CHECK-2', 'direct-2'),
-      ])?.itemId,
-    ).toBe('K02-CHECK-2');
+  it('combines direct and bank attempts when an explicit review allows repetition', () => {
+    const attempts = [
+      answer(1, 'K02-CHECK-1', true),
+      answer(2, 'bank-K02-CHECK-1', true),
+      answer(3, 'K02-CHECK-2', true),
+    ];
+    expect(nextPracticeQuestion('K02', attempts, { allowRepeat: true })?.itemId).toBe(
+      'K02-CHECK-2',
+    );
   });
 
-  it('does not count a persisted review schedule as another learner attempt', () => {
-    expect(
-      nextPracticeQuestion('K02', [
-        record('K02-CHECK-1', 'answer-1'),
-        { ...record('K02-CHECK-1', 'review-answer-1'), kind: 'REVIEW_SCHEDULED', sequence: 9 },
-      ])?.itemId,
-    ).toBe('K02-CHECK-2');
+  it('does not count a persisted review schedule as another attempt', () => {
+    const direct = answer(1, 'K02-CHECK-1', true);
+    const review: LearnerEventRecord = {
+      ...direct,
+      id: 'review-practice-1',
+      sequence: 2,
+      kind: 'REVIEW_SCHEDULED',
+      payload:
+        '{"version":"review-schedule-v1","kcId":"K02","sourceEventId":"practice-1","dueAt":"2026-07-21T09:01:00.000Z","intervalDays":3,"reason":"RECOVERY_CHECK"}',
+    };
+    expect(nextPracticeQuestion('K02', [direct, review])?.itemId).toBe('K02-CHECK-2');
   });
 });

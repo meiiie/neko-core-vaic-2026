@@ -1,11 +1,16 @@
 import { practiceQuestionsForKc, type PracticeQuestion } from '../../content';
 import type { LearnerEventRecord } from '../../storage/db';
-import { canonicalHeroItemId } from './hero-tutor';
+import { canonicalHeroItemId, toDomainEvents } from './hero-tutor';
 
-/** Select the least-attempted authored question across direct and bank IDs. */
+export interface PracticeSelectionOptions {
+  readonly allowRepeat?: boolean;
+}
+
+/** Select a distinct unanswered check before offering any explicit review repeat. */
 export function nextPracticeQuestion(
   kcId: string,
   records: readonly LearnerEventRecord[],
+  options: PracticeSelectionOptions = {},
 ): PracticeQuestion | undefined {
   const questions = practiceQuestionsForKc(kcId);
   if (questions.length === 0) return undefined;
@@ -16,7 +21,15 @@ export function nextPracticeQuestion(
     if (!itemId) continue;
     attempts.set(itemId, (attempts.get(itemId) ?? 0) + 1);
   }
-  return [...questions].sort(
+  const correctlyAnswered = new Set(
+    toDomainEvents(records)
+      .filter((event) => event.correct && event.methodValidity !== 'INVALID')
+      .map((event) => event.itemId),
+  );
+  const candidates = options.allowRepeat
+    ? questions
+    : questions.filter((question) => !correctlyAnswered.has(question.itemId));
+  return [...candidates].sort(
     (left, right) =>
       (attempts.get(left.itemId) ?? 0) - (attempts.get(right.itemId) ?? 0) ||
       left.itemId.localeCompare(right.itemId),

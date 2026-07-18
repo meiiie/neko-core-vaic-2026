@@ -109,7 +109,7 @@ describe('continuous student path', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: 'Câu trả lời đã được ghi nhận, nhưng chưa đủ để tìm nguyên nhân gốc',
+        name: 'Câu trả lời đã được ghi nhận, nhưng chưa đủ bằng chứng trực tiếp để mở lộ trình',
       }),
     ).toBeTruthy();
     expect(screen.getByText(/1 câu trả lời đã được lưu trong hồ sơ/)).toBeTruthy();
@@ -119,5 +119,45 @@ describe('continuous student path', () => {
         .getByRole('link', { name: 'Trả lời câu xác minh để mở lộ trình' })
         .getAttribute('href'),
     ).toBe('/student/check-in');
+  });
+
+  it('keeps the prior path moving after direct probes are exhausted', () => {
+    pathState.context = {
+      learnerId: 'user-student-chi',
+      simulationProfileId: 'chi',
+    };
+    pathState.records = [
+      ...storedHeroRecords('chi'),
+      {
+        id: 'answer-k02-diagnostic',
+        learnerId: 'user-student-chi',
+        itemId: 'K02-DIAGNOSTIC',
+        sequence: 100,
+        occurredAt: '2026-07-18T09:00:00.000Z',
+        kind: 'ANSWER',
+        payload: '{"choiceId":"b","correct":false,"methodValidity":"INVALID"}',
+      },
+      {
+        id: 'answer-k07-diagnostic',
+        learnerId: 'user-student-chi',
+        itemId: 'K07-DIAGNOSTIC',
+        sequence: 101,
+        occurredAt: '2026-07-18T09:01:00.000Z',
+        kind: 'ANSWER',
+        payload: '{"choiceId":"b","correct":false,"methodValidity":"INVALID"}',
+      },
+    ];
+
+    render(
+      <MemoryRouter>
+        <PathPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Bước tiếp theo: Phân số bằng nhau' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Luyện bước tiếp theo' }).getAttribute('href')).toBe(
+      '/student/practice?kc=K02',
+    );
+    expect(screen.queryByRole('link', { name: 'Trả lời câu xác minh để mở lộ trình' })).toBeNull();
   });
 });

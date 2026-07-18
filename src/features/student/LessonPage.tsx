@@ -83,7 +83,7 @@ export function LessonPage() {
       <LessonResources kcId={lesson.kcId} />
 
       <div className="lesson-actions">
-        <Link className="button-primary" to="/student/practice">
+        <Link className="button-primary" to={`/student/practice?kc=${lesson.kcId}`}>
           Bắt đầu luyện tập
         </Link>
         <Link className="button-secondary" to="/student/path">

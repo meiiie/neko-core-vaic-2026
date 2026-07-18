@@ -788,6 +788,17 @@ button:disabled,
   max-width: 48rem;
 }
 
+.decision-panel > .decision-panel__action {
+  display: grid;
+  flex: 0 1 24rem;
+  gap: var(--s-3);
+  max-width: 24rem;
+}
+
+.decision-panel__action .button-secondary {
+  justify-self: start;
+}
+
 .decision-panel p:last-child {
   margin-bottom: 0;
 }
@@ -1263,6 +1274,22 @@ details li {
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
   font-weight: 800;
+}
+
+.path-steps li[data-status='current'] .step-index {
+  border-color: var(--evidence);
+  background: var(--evidence-soft);
+  color: var(--evidence);
+}
+
+.path-steps li[data-status='completed'] .step-index {
+  border-color: var(--rule-strong);
+  background: var(--surface-subtle);
+  color: var(--muted-strong);
+}
+
+.path-steps li[data-status='upcoming'] strong {
+  color: var(--muted-strong);
 }
 
 .path-steps small,
@@ -2509,6 +2536,12 @@ details li {
     flex-direction: column;
   }
 
+  .decision-panel > .decision-panel__action {
+    flex-basis: auto;
+    max-width: none;
+    width: 100%;
+  }
+
   .assessment-focus-header {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--s-3);
@@ -2774,6 +2807,15 @@ details li {
 
 .mini-path li[data-current] {
   font-weight: 600;
+}
+
+.mini-path li[data-completed] {
+  color: var(--muted-strong);
+}
+
+.mini-path li[data-completed]::before {
+  border-color: var(--evidence);
+  background: var(--evidence-soft);
 }
 
 /* ---------- Forms (question authoring, assignment picker, login form) ---------- */

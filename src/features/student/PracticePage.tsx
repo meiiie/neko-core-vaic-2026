@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
@@ -11,6 +11,7 @@ import {
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
 import { nextPracticeQuestion } from '../../app/adapters/practice-selection';
 import { reviewRecommendation } from '../../app/adapters/review-selection';
+import { derivePathProgress } from '../../app/adapters/path-progression';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
 import { type PracticeQuestion } from '../../content';
@@ -32,6 +33,7 @@ interface FeedbackState {
 
 export function PracticePage() {
   const { account } = useSession();
+  const [searchParams] = useSearchParams();
   const learnerContext = studentContextForAccount(account);
   const learnerId = learnerContext?.learnerId ?? '';
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
@@ -54,14 +56,33 @@ export function PracticePage() {
     localRecords === undefined || !learnerContext
       ? null
       : diagnoseHero(learnerContext, localRecords);
-  const rootKcId = result?.status === 'DIAGNOSED' ? result.rootKcId : undefined;
-  const rootLesson = useLesson(rootKcId ?? '');
-  const explainKey = rootKcId ? `${learnerId}-${rootKcId}` : null;
+  const progress =
+    result && localRecords && learnerContext
+      ? derivePathProgress(learnerContext, result, localRecords)
+      : undefined;
+  const requestedKcId = searchParams.get('kc') ?? undefined;
+  const requestedStep = requestedKcId
+    ? progress?.steps.find((step) => step.kcId === requestedKcId)
+    : undefined;
+  const lockedRequestedKcId = requestedStep?.status === 'UPCOMING' ? requestedStep.kcId : undefined;
+  const confirmationMode = searchParams.get('mode') === 'confirm';
+  const reviewMode =
+    searchParams.get('mode') === 'review' ||
+    (requestedStep?.status === 'COMPLETED' && !confirmationMode);
+  const activeKcId = lockedRequestedKcId
+    ? undefined
+    : requestedStep
+      ? requestedStep.kcId
+      : (progress?.currentKcId ?? (result?.status === 'DIAGNOSED' ? result.rootKcId : undefined));
+  const activeLesson = useLesson(activeKcId ?? '');
+  const explainedRootKcId =
+    result?.status === 'DIAGNOSED' && result.rootKcId === activeKcId ? activeKcId : undefined;
+  const explainKey = explainedRootKcId ? `${learnerId}-${explainedRootKcId}` : null;
   const explain = explainState && explainState.key === explainKey ? explainState.reply : null;
 
   // "Why am I practicing this" — through the LLM port (mock profile in L1).
   useEffect(() => {
-    if (!explainKey || !rootKcId) return;
+    if (!explainKey || !explainedRootKcId) return;
     let cancelled = false;
     const port = resolveTutorLlm();
     void port
@@ -69,10 +90,10 @@ export function PracticePage() {
         requestId: `${explainKey}-explain`,
         useCase: 'EXPLAIN_DIAGNOSIS',
         locale: 'vi-VN',
-        facts: { status: 'DIAGNOSED', rootKcName: kcName(rootKcId) },
+        facts: { status: 'DIAGNOSED', rootKcName: kcName(explainedRootKcId) },
         allowedCitationIds: [],
         forbiddenStrings: [],
-        fallbackText: `Em cần củng cố "${kcName(rootKcId)}" trước khi quay lại mục tiêu của lớp.`,
+        fallbackText: `Em cần củng cố "${kcName(explainedRootKcId)}" trước khi quay lại mục tiêu của lớp.`,
       })
       .then((reply) => {
         if (!cancelled) setExplainState({ key: explainKey, reply });
@@ -80,7 +101,7 @@ export function PracticePage() {
     return () => {
       cancelled = true;
     };
-  }, [explainKey, rootKcId]);
+  }, [explainKey, explainedRootKcId]);
 
   if (migrationError) {
     return <StudentDataFailure onRetry={retryMigration} />;
@@ -93,7 +114,11 @@ export function PracticePage() {
 
   // During feedback the answered question stays frozen on screen; the live
   // re-diagnosed "next" question only takes over after Tiếp tục/Thử lại.
-  const upNext = rootKcId ? nextPracticeQuestion(rootKcId, localRecords) : undefined;
+  const upNext = activeKcId
+    ? nextPracticeQuestion(activeKcId, localRecords, {
+        allowRepeat: reviewMode || confirmationMode,
+      })
+    : undefined;
   const question = phase === 'feedback' && feedback?.question ? feedback.question : upNext;
   const transferQuestion =
     result.status === 'FAST_PATH' && result.nextItemId
@@ -150,7 +175,25 @@ export function PracticePage() {
 
   // ---------- Completion / no-practice states ----------
 
-  if (result.status === 'NEEDS_MORE_EVIDENCE') {
+  if (lockedRequestedKcId && progress?.currentKcId) {
+    return (
+      <div className="page-stack">
+        <section className="empty-state">
+          <p className="eyebrow">Bước chưa mở</p>
+          <h1>Hoàn thành {kcName(progress.currentKcId)} trước</h1>
+          <p>
+            {kcName(lockedRequestedKcId)} nằm ở bước sau. NekoPath không bỏ qua bước hiện tại vì
+            chưa có bài kiểm tra xác nhận.
+          </p>
+          <Link className="button-primary" to={`/student/practice?kc=${progress.currentKcId}`}>
+            Tiếp tục bước đang học
+          </Link>
+        </section>
+      </div>
+    );
+  }
+
+  if (result.status === 'NEEDS_MORE_EVIDENCE' && !progress?.currentKcId) {
     return (
       <div className="page-stack">
         <header className="page-heading">
@@ -168,7 +211,7 @@ export function PracticePage() {
     );
   }
 
-  if (result.status === 'FAST_PATH' || (!question && !transferQuestion)) {
+  if (result.status === 'FAST_PATH' || progress?.isComplete) {
     return (
       <div className="page-stack">
         <section className="completion-panel">
@@ -261,7 +304,32 @@ export function PracticePage() {
     );
   }
 
-  if (!question || !rootKcId) {
+  if (activeKcId && !question && !transferQuestion) {
+    return (
+      <div className="page-stack">
+        <section className="decision-panel decision-panel--review">
+          <div>
+            <p className="eyebrow">Cần thêm câu kiểm tra</p>
+            <h1>Đã làm hết câu hỏi khác nhau của bước {kcName(activeKcId)}</h1>
+            <p role="status">
+              NekoPath không lặp lại âm thầm một câu đã làm đúng và cũng không coi hết câu hỏi là
+              hoàn thành lộ trình. Giáo viên cần bổ sung hoặc xác nhận thêm bằng chứng cho bước này.
+            </p>
+          </div>
+          <div className="decision-panel__action">
+            <Link className="button-primary" to={`/student/practice?kc=${activeKcId}&mode=confirm`}>
+              Làm một câu xác nhận lại
+            </Link>
+            <Link className="button-secondary" to="/student/path">
+              Về lộ trình
+            </Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (!question || !activeKcId) {
     return (
       <div className="page-stack">
         <header className="page-heading">
@@ -278,7 +346,13 @@ export function PracticePage() {
 
   // ---------- Active practice ----------
 
-  const remainingPath = result.pathKcIds;
+  const remainingSteps =
+    progress?.steps ??
+    result.pathKcIds.map((kcId, index) => ({
+      kcId,
+      status: index === 0 ? ('CURRENT' as const) : ('UPCOMING' as const),
+    }));
+  const remainingCount = remainingSteps.filter((step) => step.status !== 'COMPLETED').length;
   const selectedChoice = question.choices.find((choice) => choice.id === feedback?.choiceId);
   const questionEvents = toDomainEvents(localRecords).filter(
     (event) => event.itemId === question.itemId,
@@ -290,20 +364,36 @@ export function PracticePage() {
     questionEvents.filter((event) => !event.correct).length +
     (feedbackPendingInLiveQuery && feedback && !feedback.correct ? 1 : 0);
   const hintLevel = Math.min(Math.max(incorrectAttemptCount, 1), 3);
+  const isRootRemediation =
+    result.status === 'DIAGNOSED' && result.rootKcId === activeKcId && !reviewMode;
 
   return (
     <div className="assessment-page">
       <header className="assessment-header">
         <div>
-          <p className="eyebrow">Luyện tập · {kcName(rootKcId)}</p>
-          <h1>Lấp lỗ hổng: {kcName(rootKcId)}</h1>
+          <p className="eyebrow">
+            {confirmationMode ? 'Câu xác nhận' : reviewMode ? 'Ôn lại' : 'Luyện tập'} ·{' '}
+            {kcName(activeKcId)}
+          </p>
+          <h1>
+            {confirmationMode
+              ? `Xác nhận bước: ${kcName(activeKcId)}`
+              : reviewMode
+                ? `Ôn lại: ${kcName(activeKcId)}`
+                : isRootRemediation
+                  ? `Lấp lỗ hổng: ${kcName(activeKcId)}`
+                  : `Bước tiếp theo: ${kcName(activeKcId)}`}
+          </h1>
           <p>
-            Trả lời đúng vài câu liên tiếp để chứng minh em đã vững — hệ thống sẽ tự chuyển sang
-            bước tiếp theo.
-            {rootLesson?.lesson ? (
+            {confirmationMode
+              ? 'Câu này được lặp lại có chủ đích vì ngân hàng hiện chưa có câu kiểm tra thứ ba đã duyệt.'
+              : reviewMode
+                ? 'Đây là lượt ôn có chủ đích; câu đã gặp có thể xuất hiện lại.'
+                : 'Mỗi câu hỏi khác nhau chỉ được tính cho đúng bước này. Khi đủ bằng chứng, hệ thống sẽ chuyển sang bước kế tiếp.'}
+            {activeLesson?.lesson ? (
               <>
                 {' '}
-                <Link className="text-link" to={`/student/lesson/${rootKcId}`}>
+                <Link className="text-link" to={`/student/lesson/${activeKcId}`}>
                   Xem tóm tắt kiến thức trước
                 </Link>
               </>
@@ -331,7 +421,11 @@ export function PracticePage() {
               {question.itemId.endsWith('1') ? '01' : '02'}
             </span>
             <div>
-              <p className="eyebrow">Chọn một đáp án rồi bấm Kiểm tra</p>
+              <p className="eyebrow">
+                {questionEvents.length > 0 && !reviewMode
+                  ? 'Thử lại câu từng sai sau khi xem gợi ý'
+                  : 'Chọn một đáp án rồi bấm Kiểm tra'}
+              </p>
               <h2 id="practice-heading">{question.promptVi}</h2>
             </div>
           </header>
@@ -404,9 +498,15 @@ export function PracticePage() {
                   </div>
                 </>
               )}
-              <button className="button-primary" type="button" onClick={continueSession}>
-                {feedback.correct ? 'Tiếp tục' : 'Thử lại'}
-              </button>
+              {feedback.correct && confirmationMode ? (
+                <Link className="button-primary" to="/student/path">
+                  Xem bước tiếp theo
+                </Link>
+              ) : (
+                <button className="button-primary" type="button" onClick={continueSession}>
+                  {feedback.correct ? 'Tiếp tục' : 'Thử lại'}
+                </button>
+              )}
             </section>
           ) : null}
 
@@ -419,11 +519,15 @@ export function PracticePage() {
 
         <aside className="assessment-context" aria-labelledby="practice-context">
           <p className="eyebrow">Đường đến mục tiêu</p>
-          <h2 id="practice-context">Còn {remainingPath.length} bước</h2>
+          <h2 id="practice-context">Còn {remainingCount} bước</h2>
           <ol className="mini-path">
-            {remainingPath.map((kcId, index) => (
-              <li key={kcId} data-current={index === 0 || undefined}>
-                {kcName(kcId)}
+            {remainingSteps.map((step) => (
+              <li
+                key={step.kcId}
+                data-current={step.status === 'CURRENT' || undefined}
+                data-completed={step.status === 'COMPLETED' || undefined}
+              >
+                {kcName(step.kcId)}
               </li>
             ))}
           </ol>
