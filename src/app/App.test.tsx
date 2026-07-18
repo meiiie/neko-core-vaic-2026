@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installApiStub } from '../test/api-stub';
+import { db } from '../storage/db';
 import { App } from './App';
 
 function installMobileViewport() {
@@ -223,6 +224,45 @@ describe('NekoPath MVP entry and shell (class-roll dropdown auth, stubbed transp
 
     expect(screen.getByRole('combobox', { name: 'Chọn tên của bạn' })).toBeTruthy();
     expect(directoryAttempts).toBe(2);
+  });
+
+  it('keeps the adaptive check-in focused and uses student-facing language', async () => {
+    installApiStub('chi@nekopath.edu.vn');
+    await db.events.clear();
+    await db.outbox.clear();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/student/check-in']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Bài kiểm tra nền tảng' }),
+    ).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Điều hướng chính' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Thoát bài' })).toBeTruthy();
+    expect(screen.getByText('Tiến trình đánh giá')).toBeTruthy();
+    expect(screen.queryByText(/tối đa 3 câu/i)).toBeNull();
+    expect(screen.queryByText('Chọn một đáp án')).toBeNull();
+    expect(screen.queryByText('Cần thêm bằng chứng')).toBeNull();
+    expect(screen.queryByText('Đang phân biệt')).toBeNull();
+    expect(screen.getByText('Kỹ năng đang đánh giá')).toBeTruthy();
+    expect(screen.getByText('Hệ thống cần thêm câu trả lời để đánh giá chính xác.')).toBeTruthy();
+    expect(screen.getByText('Chọn một đáp án để tiếp tục')).toBeTruthy();
+    expect(screen.getByText('Vì sao?')).toBeTruthy();
+
+    const primary = screen.getByRole('button', { name: 'Xác nhận và tiếp tục' });
+    expect((primary as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('radio', { name: /3:5/ }));
+    expect((primary as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText('Chọn một đáp án để tiếp tục')).toBeNull();
+
+    await user.click(primary);
+    expect(
+      await screen.findByText('Đã lưu. Hệ thống sẽ chọn câu tiếp theo phù hợp với kết quả của em.'),
+    ).toBeTruthy();
   });
 
   it('keeps mobile drawer focus and exit behavior continuous', async () => {
