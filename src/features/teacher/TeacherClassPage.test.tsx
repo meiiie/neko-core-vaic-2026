@@ -2,9 +2,9 @@ import 'fake-indexeddb/auto';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { db } from '../../storage/db';
-import { TeacherClassPage } from './TeacherClassPage';
+import { TeacherGroupDetailPage } from './TeacherGroupDetailPage';
 
 describe('teacher diagnosis override', () => {
   afterEach(async () => {
@@ -14,14 +14,14 @@ describe('teacher diagnosis override', () => {
   it('persists a reasoned local decision and updates the derived groups', async () => {
     const user = userEvent.setup();
     render(
-      <MemoryRouter>
-        <TeacherClassPage />
+      <MemoryRouter initialEntries={['/teacher/class/root%3AK02']}>
+        <Routes>
+          <Route path="/teacher/class/:groupId" element={<TeacherGroupDetailPage />} />
+        </Routes>
       </MemoryRouter>,
     );
 
-    const details = (await screen.findAllByText('Xem chi tiết'))[0];
-    await user.click(details);
-    const heading = screen.getAllByRole('heading', { name: 'Sửa kết quả của học sinh' })[0];
+    const heading = await screen.findByRole('heading', { name: 'Sửa kết quả của học sinh' });
     const form = heading.closest('form');
     expect(form).toBeTruthy();
     const controls = within(form!);
