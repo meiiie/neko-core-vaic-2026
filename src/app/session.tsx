@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { fetchWithDeadline } from '../services/fetch-with-deadline';
+import { bindBrowserProfile, markBrowserSignedOut } from '../services/profile-binding';
 
 /**
  * Real API-backed session (HttpOnly cookie, server-side session store).
@@ -159,6 +160,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (response.ok) {
           const body = (await response.json()) as { user: ApiUser };
           const next = toAccount(body.user);
+          bindBrowserProfile(next.id);
           setAccount(next);
           writeCache(next);
           if (body.user.email) {
@@ -167,17 +169,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             );
           }
         } else if (response.status === 401) {
+          markBrowserSignedOut();
           setAccount(null);
           writeCache(null);
         } else {
           // Server unhealthy (5xx / proxy error): behave like offline and
           // keep the cached identity so local-first work can continue.
-          setAccount(readCache());
+          const cached = readCache();
+          if (cached) bindBrowserProfile(cached.id);
+          setAccount(cached);
         }
       } catch {
         // Network unreachable: fall back to the cached identity so the
         // local-first core keeps working offline.
-        if (!cancelled) setAccount(readCache());
+        if (!cancelled) {
+          const cached = readCache();
+          if (cached) bindBrowserProfile(cached.id);
+          setAccount(cached);
+        }
       } finally {
         if (!cancelled) setReady(true);
       }
@@ -204,6 +213,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       const body = (await response.json()) as { user: ApiUser };
       const next = toAccount(body.user);
+      bindBrowserProfile(next.id);
       setAccount(next);
       writeCache(next);
       setDeviceProfiles((current) =>
@@ -225,6 +235,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         (candidate) => candidate.email.toLocaleLowerCase('vi') === normalizedEmail,
       );
       if (!profile) return false;
+      bindBrowserProfile(profile.id);
       setAccount(profile);
       writeCache(profile);
       return true;
@@ -233,6 +244,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
+    markBrowserSignedOut();
     setAccount(null);
     writeCache(null);
     void fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {

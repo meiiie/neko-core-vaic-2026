@@ -23,14 +23,23 @@ can contact an identity provider.
 | User switches profile while offline | Show and open only profiles previously confirmed on this device | No arbitrary roster entry |
 | New device or unconfirmed profile, network lost | Explain that one connection is required and offer retry | Never invent an offline credential |
 | Server explicitly returns `401` | Clear the active cached identity and return to the selector | An authoritative response beats cache |
+| Network returns after an offline profile switch | Verify `/api/auth/me`; sync only if the server session matches the selected profile | Mismatches remain queued and every protected API returns `409` |
 
 ## Stored data
 
 - `nekopath.session-cache.v1`: the current sanitized identity for bounded offline restore;
-- `nekopath.device-profiles.v1`: sanitized profiles confirmed by a successful session or login;
+- `nekopath.device-profiles.v1`: profiles confirmed by a successful session or login, containing
+  only `email`, local `id`, `name`, `initials`, `shortName`, `role`, `subtitle` and the optional
+  local `learnerId`;
 - IndexedDB: learner events, overrides and outbox records, already keyed by learner/domain IDs;
 - HttpOnly cookie: owned by the browser/server session boundary and unavailable to application
   JavaScript.
+
+The browser also writes `nekopath_profile`, a readable cookie containing only the selected local
+user ID. It is not a credential and can never grant access. The server uses it solely as a negative
+guard: if it differs from the user behind the HttpOnly session, every protected endpoint rejects
+the request. Before an outbox batch is sent, the client additionally verifies `/api/auth/me` and
+filters the batch to the returned learner profile.
 
 No password, password hash, bearer token, session ID or cached auth API response is written to
 LocalStorage, IndexedDB or Cache Storage.
@@ -91,3 +100,5 @@ References:
 3. Verify that a server `401` clears the active identity.
 4. Verify offline hard reload and local event writes still work.
 5. Verify reconnect sync remains idempotent and `/api/**` is absent from Workbox runtime caching.
+6. Switch from An to Chi while offline, restore connectivity with An's old cookie, and verify no
+   Chi event is posted or stored under An; the outbox row must remain pending until Chi signs in.

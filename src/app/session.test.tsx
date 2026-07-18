@@ -64,7 +64,10 @@ function abortAwarePendingFetch(onSignal?: (signal: AbortSignal | null | undefin
 }
 
 describe('API-backed session', () => {
-  beforeEach(() => window.localStorage.clear());
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.cookie = 'nekopath_profile=; Path=/; Max-Age=0';
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -105,9 +108,11 @@ describe('API-backed session', () => {
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('none'));
     expect(window.localStorage.getItem('nekopath.session-cache.v1')).toBeNull();
     expect(screen.getByTestId('device-profiles').textContent).toBe('1');
+    expect(document.cookie).toContain('nekopath_profile=signed-out');
 
     screen.getByRole('button', { name: 'resume-an' }).click();
     await waitFor(() => expect(screen.getByTestId('who').textContent).toBe('STUDENT:An'));
+    expect(document.cookie).toContain('nekopath_profile=user-student-an');
   });
 
   it('never resumes an account that was not confirmed on this device', async () => {
