@@ -55,14 +55,16 @@ hackathon window).
 ### Fixed
 
 - Edge worker no longer allows HTML transformation (analytics injection prevented).
-- Deployed build provenance preserved (`GITHUB_SHA` reported by `/api/healthz`).
+- Deployed build provenance preserved (`GITHUB_SHA` shown on the in-product version surface;
+  `/api/healthz` remains a minimal liveness endpoint).
 
 ## [0.2.0] — 2026-07-17
 
 ### Added
 
 - Deterministic root-gap domain core: diagnosis, teacher grouping, mastery with
-  abstention (`NEEDS_MORE_EVIDENCE`), versioned GDPT 2018 (Toán 7) curriculum graph.
+  abstention (`NEEDS_MORE_EVIDENCE`), versioned but teacher-unreviewed GDPT 2018 (Toán 7)
+  curriculum graph draft.
 - Real backend: Fastify 5 + `node:sqlite`, scrypt credentials, HttpOnly session
   cookies, question authoring and assignment endpoints, seeded Class 7A records.
 - Local-first sync: Dexie/IndexedDB event store with an idempotent outbox bridge.
