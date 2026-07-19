@@ -85,6 +85,35 @@ export function kcIdForItem(itemId: string): string | undefined {
   return HERO_ITEMS.find((item) => item.id === canonicalItemId)?.kcIds[0];
 }
 
+/**
+ * Resolve a practice-question itemId (including the anti-guessing guided
+ * variants like `-CHECK-1b`, which are NOT part of HERO_ITEMS) to its KC. These
+ * variants widen the guided streak pool but never feed domain diagnosis, so
+ * they live only in PRACTICE_QUESTIONS.
+ */
+export function kcIdForPracticeItem(itemId: string): string | undefined {
+  const canonical = canonicalHeroItemId(itemId);
+  if (canonical) return kcIdForItem(canonical);
+  const question = PRACTICE_QUESTIONS.find(
+    (candidate) => candidate.itemId === itemId || `bank-${candidate.itemId}` === itemId,
+  );
+  return question?.kcId;
+}
+
+/**
+ * Canonicalize a practice-question itemId for streak bookkeeping. Falls back to
+ * the raw id (without a leading `bank-`) so distinct guided variants stay
+ * distinct even when they are not in HERO_ITEMS.
+ */
+export function canonicalPracticeItemId(itemId: string): string | undefined {
+  const canonical = canonicalHeroItemId(itemId);
+  if (canonical) return canonical;
+  const question = PRACTICE_QUESTIONS.find(
+    (candidate) => candidate.itemId === itemId || `bank-${candidate.itemId}` === itemId,
+  );
+  return question?.itemId;
+}
+
 /** Payload stored in the local Dexie event record for a hero answer. */
 interface HeroAnswerPayload {
   choiceId: string;

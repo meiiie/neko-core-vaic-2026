@@ -4,13 +4,13 @@ import { deriveStudentLearningPlan } from '../../app/adapters/student-learning-p
 import {
   buildLocalAnswerRecord,
   diagnoseHero,
-  kcIdForItem,
+  kcIdForPracticeItem,
   kcName,
   questionForItem,
   toDomainEvents,
 } from '../../app/adapters/hero-tutor';
 import { studentContextForAccount, useStudentEvents } from '../../app/adapters/student-context';
-import { practiceQuestionForPhase } from '../../app/adapters/practice-selection';
+import { guidedStreakState, practiceQuestionForPhase } from '../../app/adapters/practice-selection';
 import { reviewRecommendation } from '../../app/adapters/review-selection';
 import { useSession } from '../../app/session';
 import { StudentDataFailure } from '../../components/StudentDataFailure';
@@ -43,6 +43,10 @@ export function PracticePage() {
     key: string;
     reply: TutorLlmResult;
   } | null>(null);
+  // The review nudge is non-blocking: the learner can dismiss it and keep
+  // practising. We track the KC it was dismissed for so re-entering the same
+  // step does not re-show it within the same session.
+  const [dismissedNudgeKc, setDismissedNudgeKc] = useState<string | null>(null);
   const savingRef = useRef(false);
 
   const {
@@ -107,11 +111,15 @@ export function PracticePage() {
 
   // During feedback the answered question stays frozen on screen; the live
   // re-diagnosed "next" question only takes over after Tiếp tục/Thử lại.
+  const guidedStreak =
+    rootKcId && currentStep?.phase === 'GUIDED_PRACTICE'
+      ? guidedStreakState(rootKcId, localRecords)
+      : null;
   const upNext =
     rootKcId &&
     currentStep &&
     (currentStep.phase === 'GUIDED_PRACTICE' || currentStep.phase === 'POST_CHECK')
-      ? practiceQuestionForPhase(rootKcId, currentStep.phase)
+      ? practiceQuestionForPhase(rootKcId, currentStep.phase, localRecords)
       : undefined;
   const question = phase === 'feedback' && feedback?.question ? feedback.question : upNext;
   const transferQuestion =
@@ -160,7 +168,7 @@ export function PracticePage() {
               kind: answerKind,
             },
       );
-      const kcId = kcIdForItem(record.itemId);
+      const kcId = kcIdForPracticeItem(record.itemId);
       if (!kcId) throw new Error('UNKNOWN_REVIEW_KC');
       const reviewRecord = buildReviewScheduleRecord(record, kcId, localRecords);
       await recordAnswerWithReview(record, reviewRecord);
@@ -355,7 +363,11 @@ export function PracticePage() {
           <p>
             {currentStep?.phase === 'POST_CHECK'
               ? 'Câu này không có gợi ý. Trả lời đúng mới hoàn thành bước và chuyển tiếp.'
-              : 'Em có thể dùng gợi ý. Làm đúng câu luyện sẽ mở một câu kiểm tra lại độc lập.'}
+              : guidedStreak
+                ? guidedStreak.threshold.mode === 'CONSECUTIVE'
+                  ? `Trả lời đúng ${guidedStreak.threshold.required} câu liên tiếp để mở câu kiểm tra lại độc lập. Em đang đúng ${guidedStreak.consecutiveCorrect}/${guidedStreak.threshold.required} câu.`
+                  : `Trả lời đúng ít nhất ${guidedStreak.threshold.required}/${guidedStreak.poolSize} câu khác nhau, và ${guidedStreak.threshold.finalStreakRequired} câu cuối phải đúng liên tiếp. Em đã đúng ${guidedStreak.distinctCorrectCount}/${guidedStreak.threshold.required} câu và đang đúng ${guidedStreak.consecutiveCorrect}/${guidedStreak.threshold.finalStreakRequired} liên tiếp.`
+                : 'Em có thể dùng gợi ý. Làm đúng câu luyện sẽ mở một câu kiểm tra lại độc lập.'}
             {rootLesson?.lesson ? (
               <>
                 {' '}
@@ -380,11 +392,39 @@ export function PracticePage() {
         </aside>
       ) : null}
 
+      {guidedStreak?.needsReviewNudge === true &&
+      currentStep?.phase === 'GUIDED_PRACTICE' &&
+      rootKcId &&
+      dismissedNudgeKc !== rootKcId ? (
+        <aside
+          className="coach-note"
+          aria-label="Đề nghị xem lại tóm tắt"
+          data-testid="review-nudge"
+        >
+          <p>
+            Em vừa trả lời sai vài lần liên tiếp. Đọc lại tóm tắt sẽ giúp em hiểu
+            rõ hơn trước khi luyện tiếp — nhưng em vẫn có thể luyện ngay nếu muốn.
+          </p>
+          <div className="question-actions">
+            <Link className="button-secondary" to={`/student/lesson/${rootKcId}`}>
+              Xem lại tóm tắt
+            </Link>
+            <button
+              className="button-primary"
+              type="button"
+              onClick={() => setDismissedNudgeKc(rootKcId)}
+            >
+              Luyện tiếp
+            </button>
+          </div>
+        </aside>
+      ) : null}
+
       <div className="assessment-layout">
         <section className="question-panel" aria-labelledby="practice-heading">
           <header>
             <span className="question-number" aria-hidden="true">
-              {question.itemId.endsWith('1') ? '01' : '02'}
+              {currentStep?.phase === 'POST_CHECK' ? '02' : '01'}
             </span>
             <div>
               <p className="eyebrow">Chọn một đáp án rồi bấm Kiểm tra</p>
@@ -460,6 +500,14 @@ export function PracticePage() {
                     <div className="hint-ladder">
                       <p className="eyebrow">Gợi ý {hintLevel}/3</p>
                       <p>{question.hints[hintLevel - 1]}</p>
+                      {incorrectAttemptCount >= 2 && rootLesson?.lesson ? (
+                        <p>
+                          {' '}
+                          <Link className="text-link" to={`/student/lesson/${rootKcId}`}>
+                            Em đang sai nhiều — xem lại tóm tắt 2 phút
+                          </Link>
+                        </p>
+                      ) : null}
                     </div>
                   )}
                 </>

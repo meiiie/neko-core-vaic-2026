@@ -465,14 +465,16 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
-  it('logs in, seeds 41 class members and 12 bank questions', async () => {
+  it('logs in, seeds 41 class members and the bank question set', async () => {
     const app = await makeApp();
     const cookies = await loginCookie(app, TEACHER_EMAIL);
     const roster = await app.inject({ method: 'GET', url: '/api/class/roster', cookies });
     expect(roster.statusCode).toBe(200);
     expect((roster.json() as { students: unknown[] }).students).toHaveLength(40);
     const questions = await app.inject({ method: 'GET', url: '/api/questions', cookies });
-    expect((questions.json() as { questions: unknown[] }).questions).toHaveLength(12);
+    // 12 authored items + 12 guided-practice variants (-CHECK-1b, -CHECK-1c)
+    // added to widen the anti-guessing accuracy + final-streak pool.
+    expect((questions.json() as { questions: unknown[] }).questions).toHaveLength(24);
     await app.close();
   });
 
@@ -628,7 +630,12 @@ describe('NekoPath API', () => {
       reviewLearnerRate: 1,
       wrongAnswerRate: 0.5,
       recommendedKcIds: ['K02'],
-      recommendedQuestionIds: ['bank-K02-CHECK-1', 'bank-K02-CHECK-2'],
+      recommendedQuestionIds: [
+        'bank-K02-CHECK-1',
+        'bank-K02-CHECK-1b',
+        'bank-K02-CHECK-1c',
+        'bank-K02-CHECK-2',
+      ],
     });
     expect(group?.wrongQuestions[0]?.answers[0]).toMatchObject({
       learnerName: 'Trần Ngọc An',

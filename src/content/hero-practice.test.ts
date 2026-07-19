@@ -5,12 +5,21 @@ import { HERO_MISCONCEPTIONS } from './hero-misconceptions';
 import { PRACTICE_QUESTIONS, practiceQuestionsForKc } from './hero-practice';
 
 describe('Practice question bank', () => {
-  it('binds every question to an existing item of the same KC', () => {
+  it('binds every diagnosis-bound question to an existing item of the same KC, and keeps guided variants practice-only', () => {
     const itemsById = new Map(HERO_ITEMS.map((item) => [item.id, item]));
     for (const question of PRACTICE_QUESTIONS) {
       const item = itemsById.get(question.itemId);
-      expect(item, `missing item for ${question.itemId}`).toBeTruthy();
-      expect(item?.kcIds).toContain(question.kcId);
+      if (item) {
+        // Diagnosis-bound questions (the primary -CHECK-1 and the post-check
+        // -CHECK-2) must match an item of the same KC.
+        expect(item.kcIds).toContain(question.kcId);
+      } else {
+        // Guided variants (e.g. -CHECK-1b) widen the anti-guessing streak pool
+        // but are intentionally not diagnosis items, so they must still bind to
+        // the same KC via their itemId and share the -CHECK-1 numeric template.
+        expect(question.itemId).toMatch(/^K\d{2}-CHECK-1[a-z]?$/);
+        expect(question.kcId).toBe(question.itemId.slice(0, 3));
+      }
     }
   });
 
@@ -23,19 +32,24 @@ describe('Practice question bank', () => {
     }
   });
 
-  it('tags every wrong choice with a misconception and note, never the correct one', () => {
+  it('tags every wrong choice with a defined misconception and note, never the correct one', () => {
     const definitions = new Set(HERO_MISCONCEPTIONS.map((definition) => definition.id));
     const itemsById = new Map(HERO_ITEMS.map((item) => [item.id, item]));
     for (const question of PRACTICE_QUESTIONS) {
       const correct = question.choices.find((choice) => choice.id === question.correctChoiceId);
       expect(correct, question.itemId).toBeTruthy();
       expect(correct?.misconceptionTag).toBeUndefined();
+      const itemMisconceptionIds = itemsById.get(question.itemId)?.misconceptionIds ?? [];
       for (const choice of question.choices) {
         if (choice.id === question.correctChoiceId) continue;
         expect(choice.misconceptionTag, `${question.itemId}/${choice.id}`).toBeTruthy();
         expect(choice.noteVi, `${question.itemId}/${choice.id}`).toBeTruthy();
         expect(definitions.has(choice.misconceptionTag!), choice.misconceptionTag).toBe(true);
-        expect(itemsById.get(question.itemId)?.misconceptionIds).toContain(choice.misconceptionTag);
+        // Guided variants reuse authored misconceptions; only the primary
+        // diagnosis items declare the misconceptionId list on the domain Item.
+        if (itemMisconceptionIds.length > 0) {
+          expect(itemMisconceptionIds).toContain(choice.misconceptionTag);
+        }
       }
     }
   });
