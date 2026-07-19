@@ -68,8 +68,16 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: /\/assets\/webllm(?:\.worker)?-[^/]+\.js$/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'webllm-engine' },
+            // NetworkFirst, not CacheFirst: a poisoned first response (SPA
+            // fallback served during a deploy window) would otherwise satisfy
+            // every module import forever and silently kill Gemma on that
+            // device. Network self-heals; the cache still serves offline.
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'webllm-engine',
+              cacheableResponse: { statuses: [200] },
+              expiration: { maxEntries: 4 },
+            },
           },
         ],
         cleanupOutdatedCaches: true,

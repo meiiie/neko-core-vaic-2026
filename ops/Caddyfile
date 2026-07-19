@@ -18,7 +18,10 @@ nekopath-origin.34-142-197-144.sslip.io {
 	header {
 		# connect-src allows Hugging Face + GitHub raw for the ONE-TIME WebLLM
 		# Gemma weight download (cached after; inference is fully offline).
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; font-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		# 'wasm-unsafe-eval' admits WebAssembly ONLY (not JS eval): WebLLM
+		# compiles the Gemma runtime to wasm inside its worker, and without
+		# this token Chrome kills the on-device model at CSP level.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; font-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
