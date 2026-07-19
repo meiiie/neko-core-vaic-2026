@@ -167,7 +167,17 @@ export class DeterministicFirstProvider implements AgentProvider {
         return { ...completion, modelId: completion.modelId ?? this.primary.id };
       } catch (error) {
         if (isAbortError(error, signal)) throw error;
-        return { ...routed, modelId: this.primary.id, fallback: true };
+        // An honest transient notice beats re-serving the capability menu:
+        // the teacher asked a real question and the model — not the router —
+        // is what failed here.
+        return {
+          content:
+            'Mô hình AI tạm thời không phản hồi được. Cô thử lại câu này sau ít giây, ' +
+            'hoặc đổi Nguồn AI trong Tùy chọn AI.',
+          toolCalls: [],
+          modelId: this.primary.id,
+          fallback: true,
+        };
       }
     }
     const continuation = await this.rules.complete(messages, tools);
@@ -323,9 +333,16 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
       messages: [
         // JSON envelope instruction covers models without native tools.
         { role: 'system', content: `${JSON_TOOL_INSTRUCTION}\n${toolMenu}` },
+        // Tool results ride as user-content blocks (the WebLLM pattern): the
+        // OpenAI `tool` role requires a tool_call_id we do not thread, and
+        // NVIDIA/GLM rejects the whole request with 400 without it — which
+        // silently killed every evidence-bearing turn until 19/07.
         ...messages.map((message) =>
           message.role === 'tool'
-            ? { role: 'tool' as const, content: message.content, name: message.toolName }
+            ? {
+                role: 'user' as const,
+                content: `[Kết quả công cụ ${message.toolName ?? 'không rõ'}]: ${message.content}`,
+              }
             : { role: message.role, content: message.content },
         ),
         // Small local models tend to re-emit the envelope after observing a

@@ -270,7 +270,7 @@ describe('deterministic-first model routing', () => {
     expect(result.fallback).toBe(false);
   });
 
-  it('keeps the honest help text when the model cannot serve an unrouted question', async () => {
+  it('reports an honest transient failure when the model cannot serve an unrouted question', async () => {
     const failing: AgentProvider = {
       id: 'model',
       label: 'Model',
@@ -285,7 +285,7 @@ describe('deterministic-first model routing', () => {
       [{ role: 'system', content: AGENT_SYSTEM_PROMPT }],
     );
     expect(result.fallback).toBe(true);
-    expect(result.text).toContain('Tôi trả lời được các câu về');
+    expect(result.text).toContain('tạm thời không phản hồi được');
   });
 
   it('falls back only after evidence and never converts abort into fallback', async () => {
