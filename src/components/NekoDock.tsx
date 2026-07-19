@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useSession } from '../app/session';
 import { registerAgentSession } from '../services/agent/agent-lifecycle';
 import {
+  completeChatGptLogin,
   readChatGptStatus,
   startChatGptLogin,
   type ChatGptBrowserLogin,
@@ -192,6 +193,8 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   });
   const [chatGptModel, setChatGptModel] = useState('');
   const [browserLogin, setBrowserLogin] = useState<ChatGptBrowserLogin | null>(null);
+  const [callbackUrl, setCallbackUrl] = useState('');
+  const [completingLogin, setCompletingLogin] = useState(false);
   const [mobileModal, setMobileModal] = useState(false);
   const controllerRef = useRef<AgentSessionController | null>(null);
   const turnGenerationRef = useRef(0);
@@ -912,6 +915,45 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
               onClick={() => void refreshChatGpt()}
             >
               Kiểm tra đăng nhập
+            </button>
+          </div>
+          <p className="neko-login-hint">
+            Sau khi đăng nhập, trình duyệt sẽ mở một trang <strong>localhost báo lỗi</strong> — đó
+            là bước cuối bình thường. Hãy sao chép địa chỉ của trang đó và dán vào đây:
+          </p>
+          <div className="neko-login-complete">
+            <input
+              value={callbackUrl}
+              placeholder="http://localhost:1455/auth/callback?code=…"
+              aria-label="Địa chỉ trang localhost sau đăng nhập"
+              onChange={(event) => setCallbackUrl(event.target.value)}
+            />
+            <button
+              type="button"
+              className="button-primary"
+              disabled={completingLogin || !callbackUrl.includes('/auth/callback')}
+              onClick={() => {
+                setCompletingLogin(true);
+                void completeChatGptLogin(callbackUrl.trim())
+                  .then(async (result) => {
+                    setCallbackUrl('');
+                    if (result.authenticated) {
+                      await refreshChatGpt();
+                    } else {
+                      setActivity(
+                        'Máy chủ chưa xác nhận được đăng nhập. Thử đăng nhập lại từ đầu.',
+                      );
+                    }
+                  })
+                  .catch(() => {
+                    setActivity(
+                      'Địa chỉ dán vào không được chấp nhận (mã có thể đã hết hạn). Bấm "Mở lại trang đăng nhập" và thử lại.',
+                    );
+                  })
+                  .finally(() => setCompletingLogin(false));
+              }}
+            >
+              {completingLogin ? 'Đang xác nhận…' : 'Hoàn tất đăng nhập'}
             </button>
           </div>
         </div>

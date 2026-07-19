@@ -16,6 +16,7 @@ export interface CodexManagerPort {
   status(accountId: string): Promise<CodexAccountResult>;
   models(accountId: string): Promise<readonly CodexModelInfo[]>;
   startLogin(accountId: string): Promise<CodexBrowserLogin>;
+  completeLogin(accountId: string, search: string): Promise<void>;
   complete(
     accountId: string,
     prompt: string,
@@ -114,6 +115,44 @@ export function registerCodexRoutes(
     } catch {
       return reply.code(503).send({ error: 'CODEX_APP_SERVER_UNAVAILABLE' });
     }
+  });
+
+  // The App Server's OAuth callback listener lives on 127.0.0.1:1455 inside
+  // this container, unreachable from any real browser. The teacher pastes the
+  // localhost URL their browser dead-ended on; we forward code+state to the
+  // local listener, which finishes the pending login. Only the query string
+  // travels — and only to the loopback listener, never to a remote host.
+  app.post('/api/ai/chatgpt/login/complete', async (request, reply) => {
+    const teacher = requireTeacher(request, reply);
+    if (!teacher) return;
+    if (!manager.isEnabled()) return reply.code(503).send({ error: 'CHATGPT_NOT_ENABLED' });
+    const parsed = z
+      .object({ callbackUrl: z.string().min(20).max(4_000) })
+      .strict()
+      .safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'INVALID_CALLBACK' });
+    let url: URL;
+    try {
+      url = new URL(parsed.data.callbackUrl);
+    } catch {
+      return reply.code(400).send({ error: 'INVALID_CALLBACK' });
+    }
+    if (
+      !['localhost', '127.0.0.1'].includes(url.hostname) ||
+      url.port !== '1455' ||
+      url.pathname !== '/auth/callback' ||
+      !url.searchParams.get('code') ||
+      !url.searchParams.get('state')
+    ) {
+      return reply.code(400).send({ error: 'INVALID_CALLBACK' });
+    }
+    try {
+      await manager.completeLogin(teacher.id, url.search);
+    } catch {
+      return reply.code(502).send({ error: 'LOGIN_CALLBACK_REJECTED' });
+    }
+    const state = await manager.status(teacher.id).catch(() => null);
+    return { authenticated: state?.account?.type === 'chatgpt' };
   });
 
   app.post('/api/ai/chatgpt/tool-result', async (request, reply) => {

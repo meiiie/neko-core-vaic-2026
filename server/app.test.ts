@@ -147,6 +147,7 @@ describe('NekoPath API', () => {
     const logout = vi.fn(async () => undefined);
     const manager: CodexManagerPort = {
       isEnabled: () => true,
+      completeLogin: async () => undefined,
       status: async () => ({
         account: { type: 'chatgpt', email: 'teacher@example.test', planType: 'plus' },
         requiresOpenaiAuth: true,
@@ -238,6 +239,7 @@ describe('NekoPath API', () => {
     let release: (() => void) | undefined;
     const manager: CodexManagerPort = {
       isEnabled: () => true,
+      completeLogin: async () => undefined,
       status: async () => ({
         account: { type: 'chatgpt', planType: 'plus' },
         requiresOpenaiAuth: true,
@@ -301,6 +303,7 @@ describe('NekoPath API', () => {
   it('relays native ChatGPT tool calls to the authenticated browser and resumes the turn', async () => {
     const manager: CodexManagerPort = {
       isEnabled: () => true,
+      completeLogin: async () => undefined,
       status: async () => ({
         account: { type: 'chatgpt', planType: 'plus' },
         requiresOpenaiAuth: true,

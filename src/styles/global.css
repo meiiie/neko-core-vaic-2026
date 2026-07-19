@@ -5343,6 +5343,30 @@ html:has(.question-selection-actions) {
   font-weight: 650;
 }
 
+.neko-login-hint {
+  margin: 0;
+  color: var(--muted, #667085);
+  line-height: 1.125rem;
+}
+
+.neko-login-complete {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.neko-login-complete input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--rule-strong, #d0d5dd);
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+}
+
+.neko-login-complete button {
+  flex-shrink: 0;
+}
+
 .neko-input-row textarea {
   width: 100%;
   min-height: 2.75rem;

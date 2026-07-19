@@ -57,6 +57,10 @@ export class CodexAccountManager implements CodexManagerPort {
     return this.client(accountId).startBrowserLogin();
   }
 
+  async completeLogin(accountId: string, search: string): Promise<void> {
+    return this.client(accountId).completeBrowserLogin(search);
+  }
+
   async models(accountId: string): Promise<readonly CodexModelInfo[]> {
     return this.client(accountId).models();
   }

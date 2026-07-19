@@ -275,6 +275,25 @@ export class CodexAppServerClient {
     };
   }
 
+  /**
+   * Remote-deployment bridge for the browser OAuth flow: the App Server's
+   * callback listener binds 127.0.0.1:1455 INSIDE this container, so a
+   * teacher's browser can never reach it. The teacher pastes the localhost
+   * callback URL they landed on; NekoPath forwards code+state to the local
+   * listener on their behalf, which completes the pending login.
+   */
+  async completeBrowserLogin(search: string, fetchImpl: typeof fetch = fetch): Promise<void> {
+    const response = await fetchImpl(`http://127.0.0.1:1455/auth/callback${search}`, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+    });
+    // The listener answers 3xx (redirect to a success page) or 200 on
+    // success; anything >= 400 means the code/state pair was rejected.
+    if (response.status >= 400) {
+      throw new Error(`Codex login callback bị từ chối (${response.status}).`);
+    }
+  }
+
   async models(): Promise<readonly CodexModelInfo[]> {
     await this.initialize();
     if (this.modelCatalog) return this.modelCatalog;

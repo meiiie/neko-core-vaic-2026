@@ -49,6 +49,23 @@ export function startChatGptLogin(fetchImpl: typeof fetch = fetch): Promise<Chat
   return jsonRequest(fetchImpl, '/api/ai/chatgpt/login', { method: 'POST' });
 }
 
+/**
+ * Remote-deployment completion: OAuth dead-ends on a localhost:1455 error page
+ * because the callback listener lives inside the server container. The teacher
+ * pastes that page's URL; the server forwards code+state to its own loopback
+ * listener and the pending login completes.
+ */
+export function completeChatGptLogin(
+  callbackUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ authenticated: boolean }> {
+  return jsonRequest(fetchImpl, '/api/ai/chatgpt/login/complete', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ callbackUrl }),
+  });
+}
+
 export async function logoutChatGpt(fetchImpl: typeof fetch = fetch): Promise<void> {
   await jsonRequest(fetchImpl, '/api/ai/chatgpt/logout', { method: 'POST' });
 }
