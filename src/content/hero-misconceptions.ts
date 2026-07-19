@@ -83,3 +83,8 @@ export const HERO_MISCONCEPTIONS: readonly HeroMisconceptionDefinition[] = [
 export function heroMisconceptionName(id: string): string {
   return HERO_MISCONCEPTIONS.find((definition) => definition.id === id)?.nameVi ?? id;
 }
+
+/** The authored vocabulary a generated distractor may reference. Anything else is rejected. */
+export const HERO_MISCONCEPTION_IDS: readonly string[] = HERO_MISCONCEPTIONS.map(
+  (definition) => definition.id,
+);

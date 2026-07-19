@@ -39,6 +39,7 @@ describe('NekoPath WebMCP bridge', () => {
       'giai_thich_kien_thuc',
       'bai_duoc_giao',
       'de_xuat_bai_tap',
+      'sinh_bien_the_bai_tap',
       'giao_bai',
     ]);
     const assignment = registered.find(({ tool }) => tool.name === 'giao_bai');

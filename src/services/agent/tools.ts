@@ -8,7 +8,7 @@ import {
   kcName,
   STATUS_LABELS,
 } from '../../app/adapters/hero-tutor';
-import { HERO_GRAPH } from '../../content';
+import { HERO_GRAPH, HERO_MISCONCEPTION_IDS } from '../../content';
 import { fetchTeacherDashboard } from '../../features/teacher/teacher-api';
 import { ASSIGNMENTS_CHANGED_EVENT } from '../assignment-events';
 import { listEventsByLearner } from '../../storage/event-repository';
@@ -430,6 +430,178 @@ const deXuatBaiTap: AgentTool = {
   },
 };
 
+/**
+ * Output schema for a generated question variant. This is the "đóng khung nghiêm
+ * ngặt" required by the product contract: any LLM-proposed variant MUST parse
+ * against this schema, and its misconception tags MUST be in the authored
+ * vocabulary. Variants are ALWAYS returned as UNREVIEWED drafts — the tool
+ * never persists them; the teacher reviews and publishes via the existing
+ * question-bank UI.
+ */
+const VARIANT_MISCONCEPTION_IDS = new Set(HERO_MISCONCEPTION_IDS);
+
+const variantChoiceSchema = z.object({
+  id: z.string().min(1).max(20),
+  label: z.string().min(1).max(200),
+  misconceptionTag: z.string().max(40).optional(),
+});
+
+const variantSchema = z.object({
+  prompt: z.string().min(8).max(500),
+  choices: z.array(variantChoiceSchema).min(2).max(5),
+  correctChoiceId: z.string().min(1).max(20),
+  explanation: z.string().max(500).default(''),
+  reviewState: z.literal('UNREVIEWED'),
+});
+
+const variantSetSchema = z.object({
+  variants: z.array(variantSchema).min(1).max(3),
+});
+
+export interface QuestionVariant {
+  readonly prompt: string;
+  readonly choices: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly misconceptionTag?: string;
+  }[];
+  readonly correctChoiceId: string;
+  readonly explanation: string;
+  readonly reviewState: 'UNREVIEWED';
+}
+
+export type VariantParseResult =
+  | { readonly ok: true; readonly variants: readonly QuestionVariant[] }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * Pure validation. Rejects variants whose correct choice is not in choices,
+ * whose distractor misconception tags are not in the authored vocabulary, or
+ * whose choice ids collide. Exported so tests cover the guard directly without
+ * an LLM in the loop.
+ */
+export function parseQuestionVariants(raw: unknown): VariantParseResult {
+  const parsed = variantSetSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: `Sai cấu trúc: ${parsed.error.issues[0]?.message ?? 'unknown'}.` };
+  }
+  const cleaned: QuestionVariant[] = [];
+  for (const variant of parsed.data.variants) {
+    const choiceIds = new Set<string>();
+    let hasCollision = false;
+    for (const choice of variant.choices) {
+      if (choiceIds.has(choice.id)) {
+        hasCollision = true;
+        break;
+      }
+      choiceIds.add(choice.id);
+    }
+    if (hasCollision) return { ok: false, error: 'Có lựa chọn trùng id trong một biến thể.' };
+    if (!choiceIds.has(variant.correctChoiceId)) {
+      return { ok: false, error: 'correctChoiceId không nằm trong các lựa chọn.' };
+    }
+    for (const choice of variant.choices) {
+      if (
+        choice.id !== variant.correctChoiceId &&
+        choice.misconceptionTag &&
+        !VARIANT_MISCONCEPTION_IDS.has(choice.misconceptionTag)
+      ) {
+        return {
+          ok: false,
+          error: `Distractor gán nhãn mẫu sai ngoài danh mục đã biên soạn: ${choice.misconceptionTag}.`,
+        };
+      }
+    }
+    const { prompt, choices, correctChoiceId, explanation, reviewState } = variant;
+    cleaned.push({ prompt, choices, correctChoiceId, explanation, reviewState });
+  }
+  return { ok: true, variants: cleaned };
+}
+
+const sinhBienTheBaiTap: AgentTool = {
+  name: 'sinh_bien_the_bai_tap',
+  description:
+    'Sinh bản xem trước biến thể bài tập cho một kiến thức, đóng khung bởi schema và danh mục mẫu sai đã biên soạn. Chỉ trả bản nháp UNREVIEWED; không tự lưu. Giáo viên duyệt bằng giao diện ngân hàng câu hỏi.',
+  inputSchema: z
+    .object({
+      kc: z
+        .string()
+        .regex(/^K(?:0[1-9]|10)$/i)
+        .optional(),
+      so_luong: z.number().int().min(1).max(3).default(1),
+    })
+    .strict(),
+  inputJsonSchema: {
+    type: 'object',
+    properties: {
+      kc: {
+        type: 'string',
+        pattern: '^K(?:0[1-9]|10)$',
+        description: 'Mã kiến thức cần sinh biến thể; bỏ trống để dùng lỗ hổng ưu tiên của lớp.',
+      },
+      so_luong: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 3,
+        description: 'Số biến thể cần sinh (tối đa 3).',
+      },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+  ...READ_ONLY_TOOL,
+  async run(args, context) {
+    const requestedKc = typeof args.kc === 'string' ? args.kc.toUpperCase() : null;
+    const requestedCount = typeof args.so_luong === 'number' ? args.so_luong : 1;
+    if (requestedKc && !HERO_GRAPH.nodes.some((node) => node.id === requestedKc)) {
+      return {
+        ok: false,
+        error: `Kiến thức ${requestedKc ?? ''} không thuộc đồ thị đã biên soạn.`,
+      };
+    }
+    try {
+      const dashboard = requestedKc
+        ? null
+        : await fetchTeacherDashboard().catch(() => buildHeroClassDashboard());
+      const targetKc = requestedKc ?? dashboard?.classWideGaps[0]?.rootKcId ?? HERO_TARGET_KC_ID;
+      const response = await fetch('/api/ai/variants', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kcId: targetKc, count: requestedCount }),
+        signal: context?.signal,
+      });
+      if (response.status === 404) {
+        return {
+          ok: false,
+          error:
+            'Chưa có nguồn sinh biến thể trên máy chủ (cần cấu hình model). Trả về danh sách rỗng thay vì bịa câu hỏi.',
+        };
+      }
+      if (!response.ok) {
+        return { ok: false, error: `Máy chủ trả về ${response.status} khi sinh biến thể.` };
+      }
+      const body = (await response.json()) as unknown;
+      const parsed = parseQuestionVariants(body);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
+      return {
+        ok: true,
+        data: {
+          kienThuc: { ma: targetKc, ten: kcName(targetKc) },
+          trangThai: 'UNREVIEWED',
+          soBienThe: parsed.variants.length,
+          bienThe: parsed.variants,
+          ghiChu:
+            'Các biến thể luôn là bản nháp UNREVIEWED. Giáo viên duyệt và xuất bản qua ngân hàng câu hỏi trước khi giao.',
+        },
+      };
+    } catch (error) {
+      if (context?.signal?.aborted) throw error;
+      return { ok: false, error: 'Không sinh được biến thể bài tập.' };
+    }
+  },
+};
+
 const giaoBai: AgentTool = {
   name: 'giao_bai',
   description:
@@ -522,6 +694,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = [
   giaiThichKienThuc,
   baiDuocGiao,
   deXuatBaiTap,
+  sinhBienTheBaiTap,
   giaoBai,
 ];
 
