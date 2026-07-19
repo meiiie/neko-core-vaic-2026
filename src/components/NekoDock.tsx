@@ -554,8 +554,8 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
     setActivity(
       id === 'web'
         ? 'Gemma sẽ được tải tại đây khi bạn gửi câu hỏi đầu tiên.'
-        : id === 'nvidia' && !nvidiaKeySaved
-          ? 'Dán API key NVIDIA (build.nvidia.com) vào Tùy chọn AI để GLM trả lời; chưa có key thì Neko dùng bộ điều phối cục bộ.'
+        : id === 'nvidia'
+          ? 'GLM 5.2 qua NVIDIA. Dùng key chung của hệ thống; muốn dùng tài khoản riêng thì dán key trong Tùy chọn AI.'
           : null,
     );
     setProviderId(id);

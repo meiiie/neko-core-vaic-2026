@@ -42,10 +42,21 @@ export interface NvidiaRouteOptions {
   ) => { id: string } | null | undefined;
 }
 
+/**
+ * Key resolution: a key the teacher saved in their own browser wins; otherwise
+ * the deployment-wide key from the VM environment (never committed — lives in
+ * the gitignored ops/.env on the server) serves every teacher out of the box.
+ */
+export function resolveNvidiaKey(headerValue: unknown): string {
+  const fromHeader = String(headerValue ?? '').trim();
+  if (fromHeader && fromHeader.length <= 300) return fromHeader;
+  return (process.env.NVIDIA_API_KEY ?? '').trim();
+}
+
 export function registerNvidiaRoutes(app: FastifyInstance, options: NvidiaRouteOptions): void {
   app.post('/api/ai/nvidia/chat/completions', async (request, reply) => {
     if (!options.requireTeacher(request, reply)) return;
-    const key = String(request.headers[NVIDIA_KEY_HEADER] ?? '').trim();
+    const key = resolveNvidiaKey(request.headers[NVIDIA_KEY_HEADER]);
     if (!key || key.length > 300) {
       return reply.code(401).send({ error: 'NVIDIA_KEY_REQUIRED' });
     }

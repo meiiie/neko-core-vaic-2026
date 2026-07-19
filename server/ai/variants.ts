@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { HERO_GRAPH } from '../../src/content/hero-demo.ts';
 import { HERO_MISCONCEPTIONS } from '../../src/content/hero-misconceptions.ts';
-import { NVIDIA_KEY_HEADER, nvidiaComplete } from './nvidia.ts';
+import { NVIDIA_KEY_HEADER, nvidiaComplete, resolveNvidiaKey } from './nvidia.ts';
 
 /**
  * POST /api/ai/variants — schema-framed exercise-variant generation
@@ -206,7 +206,7 @@ export function registerVariantsRoutes(app: FastifyInstance, options: VariantsRo
     // Backend order: server-configured OpenAI key, then the teacher's own
     // NVIDIA key riding this request (NekoCore profile: GLM via NIM — the key
     // is forwarded once, never stored), then the teacher's ChatGPT session.
-    const nvidiaKey = String(request.headers[NVIDIA_KEY_HEADER] ?? '').trim();
+    const nvidiaKey = resolveNvidiaKey(request.headers[NVIDIA_KEY_HEADER]);
     const rawNvidiaModel = (request.body as { nvidiaModel?: unknown }).nvidiaModel;
     const nvidiaModel =
       typeof rawNvidiaModel === 'string' && /^[\w./-]{1,100}$/.test(rawNvidiaModel)

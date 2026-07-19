@@ -22,6 +22,11 @@ services:
       # set on the VM only, never committed.
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - NEKOPATH_OPENAI_MODEL=${NEKOPATH_OPENAI_MODEL:-gpt-5.5}
+      # Deployment-wide NVIDIA NIM key (NekoCore provider profile, GLM 5.2).
+      # Value comes from the gitignored ops/.env on the VM; a key the teacher
+      # saved in their own browser always takes precedence per request.
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - NEKOPATH_NVIDIA_MODEL=${NEKOPATH_NVIDIA_MODEL:-z-ai/glm-5.2}
     volumes:
       - nekopath-data:/app/server/data
     expose:
