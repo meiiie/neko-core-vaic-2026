@@ -2,6 +2,7 @@ import type { CurriculumNodeView } from '../../content';
 import type { DiagnosisResult } from '../../domain';
 import type { LearnerEventRecord } from '../../storage/db';
 import type { ResourceRecord } from '../../storage/db';
+import { guidedStreakState } from './practice-selection';
 import { selectResourcesForStep } from './resource-selection';
 
 export type StudentPlanStatus =
@@ -77,11 +78,14 @@ export function selectStudentPhase(
   );
   if (checkPassed) return 'DONE';
 
-  const practicePassed = relevant.some(
-    (record) => record.kind === 'PRACTICE_ANSWER' && parseActivity(record).correct === true,
-  );
-  if (practicePassed) return 'POST_CHECK';
+  // Guided practice unlocks the independent post-check only after the
+  // accuracy + final-streak gate is met — a single lucky guess is not enough.
+  const streak = guidedStreakState(kcId, relevant);
+  if (streak.readyForPostCheck) return 'POST_CHECK';
 
+  // The phase never reverts to EXPLAIN as a penalty for wrong answers. Wrong
+  // streaks surface as a non-blocking UI nudge (see PracticePage), while the
+  // guided practice hint ladder already plays the corrective-loop role.
   const explanationOpened = relevant.some((record) => record.kind === 'RESOURCE_VIEWED');
   return explanationOpened ? 'GUIDED_PRACTICE' : 'EXPLAIN';
 }
@@ -219,7 +223,11 @@ export function buildResourceViewedRecord(
       .filter((record) => record.learnerId === learnerId)
       .reduce((maximum, record) => Math.max(maximum, record.sequence), 0) + 1;
   return {
-    id: `${learnerId}:resource-viewed:text:${kcId}`,
+    // The id includes the sequence so each re-view creates a NEW record instead
+    // of overwriting the first one. This lets a learner who is nudged back to
+    // the summary actually reset their wrong-answer streak — otherwise a later
+    // RESOURCE_VIEWED would be deduped away and the learner would be stuck.
+    id: `${learnerId}:resource-viewed:text:${kcId}:${nextSequence}`,
     learnerId,
     itemId: `text:${kcId}`,
     sequence: nextSequence,

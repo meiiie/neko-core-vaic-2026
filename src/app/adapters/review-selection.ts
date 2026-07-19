@@ -35,8 +35,16 @@ function leastAttemptedQuestion(
     const itemId = canonicalHeroItemId(event.itemId);
     if (itemId) attempts.set(itemId, (attempts.get(itemId) ?? 0) + 1);
   }
+  // Review is an independent re-check, so prefer items whose domain role is
+  // CHECK (the primary guided and the post-check). Guided variants added only
+  // to widen the anti-guessing streak pool (role PRACTICE) are excluded here.
+  const eligible = new Set(
+    HERO_ITEMS.filter((item) => item.kcIds[0] === kcId && item.role === 'CHECK').map(
+      (item) => item.id,
+    ),
+  );
   const selected = [...PRACTICE_QUESTIONS]
-    .filter((question) => question.kcId === kcId)
+    .filter((question) => question.kcId === kcId && eligible.has(question.itemId))
     .sort(
       (left, right) =>
         (attempts.get(left.itemId) ?? 0) - (attempts.get(right.itemId) ?? 0) ||
