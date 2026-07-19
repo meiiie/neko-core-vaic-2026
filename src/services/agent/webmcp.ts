@@ -32,10 +32,15 @@ const TOOL_TITLES: Readonly<Record<string, string>> = {
   giai_thich_kien_thuc: 'Xem bản đồ kiến thức',
   bai_duoc_giao: 'Xem bài đã giao',
   de_xuat_bai_tap: 'Đề xuất bài tập',
+  sinh_bien_the_bai_tap: 'Sinh biến thể câu hỏi (bản nháp)',
   giao_bai: 'Giao bài cho lớp 7A',
 };
 
-const UNTRUSTED_OUTPUT_TOOLS = new Set(['bai_duoc_giao', 'de_xuat_bai_tap']);
+const UNTRUSTED_OUTPUT_TOOLS = new Set([
+  'bai_duoc_giao',
+  'de_xuat_bai_tap',
+  'sinh_bien_the_bai_tap',
+]);
 
 function mutationConfirmation(tool: AgentTool, args: Readonly<Record<string, unknown>>): boolean {
   const title = typeof args.title === 'string' ? args.title : (TOOL_TITLES[tool.name] ?? tool.name);
