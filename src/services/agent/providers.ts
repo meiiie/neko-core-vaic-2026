@@ -155,7 +155,20 @@ export class DeterministicFirstProvider implements AgentProvider {
     runtime?: AgentProviderRuntime,
   ): Promise<AgentCompletion> {
     if (!hasEvidenceAfterLatestUser(messages)) {
-      return this.rules.complete(messages, tools);
+      const routed = await this.rules.complete(messages, tools);
+      // The router stays authoritative for questions it recognizes (tool
+      // calls) and for evidence follow-ups. When it does NOT recognize the
+      // question, the model the teacher selected takes the turn — before this
+      // handoff, "xin chào" to Gemma answered with the router's help text in
+      // 59 ms and the model never ran at all.
+      if (routed.toolCalls.length > 0 || !routed.unrouted) return routed;
+      try {
+        const completion = await this.primary.complete(messages, tools, signal, onDelta, runtime);
+        return { ...completion, modelId: completion.modelId ?? this.primary.id };
+      } catch (error) {
+        if (isAbortError(error, signal)) throw error;
+        return { ...routed, modelId: this.primary.id, fallback: true };
+      }
     }
     const continuation = await this.rules.complete(messages, tools);
     if (continuation.toolCalls.length > 0) return continuation;

@@ -27,6 +27,8 @@ export interface AgentCompletion {
   readonly usage?: AgentUsage;
   readonly modelId?: string;
   readonly fallback?: boolean;
+  /** The deterministic router did not recognize the question; the content is its generic help text. */
+  readonly unrouted?: boolean;
 }
 
 export type AgentDeltaHook = (text: string) => void;

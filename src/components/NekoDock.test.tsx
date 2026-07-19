@@ -43,11 +43,16 @@ describe('NekoDock agent session', () => {
 
     await screen.findByText(/Chào Cô Hà/);
     const select = screen.getByRole('combobox', { name: 'Chọn nguồn AI cho Neko' });
-    expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
-      'Tự động · ưu tiên cục bộ',
-      'Gemma · trên thiết bị',
-      'ChatGPT',
-    ]);
+    // Without a server that enables ChatGPT, the option reads honestly as
+    // self-host-only and stays unselectable instead of erroring on click.
+    await waitFor(() =>
+      expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
+        'Tự động · ưu tiên cục bộ',
+        'Gemma · trên thiết bị',
+        'ChatGPT · chỉ bản tự vận hành',
+      ]),
+    );
+    expect(select.querySelector<HTMLOptionElement>('option[value="chatgpt"]')?.disabled).toBe(true);
     expect(screen.queryByText(/Cục bộ tức thời|OpenAI Responses/)).toBeNull();
 
     await user.selectOptions(select, 'web');

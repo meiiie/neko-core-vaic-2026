@@ -44,6 +44,9 @@ export function routeRuleQuestion(messages: readonly AgentChatMessage[]): AgentC
   }
 
   if (calls.length > 0) return { content: null, toolCalls: calls };
+  // Marked unrouted so a model provider (Gemma, Ollama, ChatGPT) can take the
+  // turn when the teacher picked one — the router stays authoritative only for
+  // the questions it actually recognizes.
   return {
     content:
       'Tôi trả lời được các câu về: tổng quan lớp / chẩn đoán của An, Bình, Chi, Minh / ' +
@@ -51,5 +54,6 @@ export function routeRuleQuestion(messages: readonly AgentChatMessage[]): AgentC
       'sinh biến thể câu hỏi cho một kiến thức. ' +
       'Ví dụ: "Sinh biến thể câu hỏi cho K02".',
     toolCalls: [],
+    unrouted: true,
   };
 }

@@ -252,6 +252,42 @@ describe('deterministic-first model routing', () => {
     expect(result.fallback).toBe(false);
   });
 
+  it('hands an unrouted question to the selected model instead of the help text', async () => {
+    // Regression: "xin chào" to Gemma answered with the router's generic help
+    // in 59 ms and the model never ran at all.
+    const complete = vi.fn<AgentProvider['complete']>(async () => ({
+      content: 'Chào cô! Em là Neko, sẵn sàng hỗ trợ lớp 7A.',
+      toolCalls: [],
+    }));
+    const provider = new DeterministicFirstProvider({ id: 'model', label: 'Model', complete });
+
+    const result = await runAgentTurn('xin chào', provider, AGENT_TOOLS, [
+      { role: 'system', content: AGENT_SYSTEM_PROMPT },
+    ]);
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(result.text).toContain('Neko');
+    expect(result.fallback).toBe(false);
+  });
+
+  it('keeps the honest help text when the model cannot serve an unrouted question', async () => {
+    const failing: AgentProvider = {
+      id: 'model',
+      label: 'Model',
+      complete: async () => {
+        throw new Error('offline');
+      },
+    };
+    const result = await runAgentTurn(
+      'xin chào',
+      new DeterministicFirstProvider(failing),
+      AGENT_TOOLS,
+      [{ role: 'system', content: AGENT_SYSTEM_PROMPT }],
+    );
+    expect(result.fallback).toBe(true);
+    expect(result.text).toContain('Tôi trả lời được các câu về');
+  });
+
   it('falls back only after evidence and never converts abort into fallback', async () => {
     const failing: AgentProvider = {
       id: 'model',

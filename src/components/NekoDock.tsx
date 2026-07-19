@@ -504,6 +504,15 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
 
   async function switchProvider(id: string): Promise<void> {
     if (busyRef.current) abandonTurn('provider switched');
+    if (id === 'chatgpt' && !chatGpt.available) {
+      // Honest state instead of a raw CHATGPT_NOT_ENABLED code: the public
+      // deployment keeps this provider off by policy (ops/RUNBOOK.md).
+      setActivity(
+        'ChatGPT chỉ bật trên bản tự vận hành của nhà trường. Trên bản công khai, cô dùng ' +
+          '"Gemma · trên thiết bị" — chạy ngay trong trình duyệt, không gửi dữ liệu ra ngoài.',
+      );
+      return;
+    }
     if (id === 'chatgpt' && !chatGpt.authenticated) {
       const popup = window.open('', '_blank');
       if (popup) popup.opener = null;
@@ -515,7 +524,11 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
         setActivity('Hoàn tất đăng nhập trong cửa sổ ChatGPT, rồi kiểm tra lại.');
       } catch (error) {
         popup?.close();
-        setActivity(error instanceof Error ? error.message : 'Không thể mở đăng nhập ChatGPT.');
+        setActivity(
+          error instanceof Error && error.message !== 'CHATGPT_NOT_ENABLED'
+            ? error.message
+            : 'Không thể mở đăng nhập ChatGPT trên bản này.',
+        );
       }
       return;
     }
@@ -998,8 +1011,13 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
               >
                 <option value="local">Tự động · ưu tiên cục bộ</option>
                 <option value="web">Gemma · trên thiết bị</option>
-                <option value="chatgpt">
-                  ChatGPT{chatGpt.authenticated ? ' · đã kết nối' : ''}
+                <option value="chatgpt" disabled={!chatGpt.available}>
+                  ChatGPT
+                  {chatGpt.authenticated
+                    ? ' · đã kết nối'
+                    : chatGpt.available
+                      ? ''
+                      : ' · chỉ bản tự vận hành'}
                 </option>
               </select>
             </label>
