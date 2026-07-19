@@ -290,7 +290,13 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     readonly label: string,
     private readonly baseUrl: string,
     private readonly model: string,
-    private readonly fetchImpl: typeof fetch = fetch,
+    // Wrapped so the browser's fetch keeps its own `this` — an unbound
+    // reference invoked as this.fetchImpl(...) throws "Illegal invocation".
+    private readonly fetchImpl: typeof fetch = (...args) => fetch(...args),
+    /** Per-request headers (e.g. the teacher's own NVIDIA key) — resolved at call time, never stored here. */
+    private readonly extraHeaders: () => Record<string, string> = () => ({}),
+    /** Model override resolved at call time (dock lets the teacher pin an exact catalog id). */
+    private readonly modelOverride: () => string | null = () => null,
   ) {}
 
   async complete(
@@ -311,7 +317,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
       messages.filter((message) => message.role === 'tool').map((message) => message.toolName),
     );
     const payload: Record<string, unknown> = {
-      model: this.model,
+      model: this.modelOverride() ?? this.model,
       temperature: 0,
       stream,
       messages: [
@@ -346,7 +352,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
     const request = (body: Record<string, unknown>) =>
       this.fetchImpl(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...this.extraHeaders() },
         signal,
         body: JSON.stringify(body),
       });
@@ -492,6 +498,7 @@ export class OpenAiCompatAgentProvider implements AgentProvider {
 /** Provider profiles — data, not code. */
 import { WebLlmAgentProvider } from './webllm-provider';
 import { ChatGptAgentProvider } from './chatgpt-provider';
+import { nvidiaHeaders, nvidiaModel, NVIDIA_DEFAULT_MODEL } from './nvidia-key';
 
 export const INTERNAL_RULE_PROVIDER = new RuleBasedProvider();
 export const CHATGPT_PROVIDER = new ChatGptAgentProvider();
@@ -507,5 +514,20 @@ export const AGENT_PROVIDERS: readonly AgentProvider[] = [
     INTERNAL_RULE_PROVIDER,
   ),
   new DeterministicFirstProvider(new WebLlmAgentProvider(), INTERNAL_RULE_PROVIDER),
+  // NVIDIA NIM through the NekoPath relay (NekoCore provider profile:
+  // integrate.api.nvidia.com/v1, GLM 5.2). The teacher's own key travels as a
+  // per-request header from this browser; the server forwards, never stores.
+  new DeterministicFirstProvider(
+    new OpenAiCompatAgentProvider(
+      'nvidia',
+      'NVIDIA · GLM 5.2',
+      '/api/ai/nvidia',
+      NVIDIA_DEFAULT_MODEL,
+      (...args) => fetch(...args),
+      nvidiaHeaders,
+      () => nvidiaModel(),
+    ),
+    INTERNAL_RULE_PROVIDER,
+  ),
   CHATGPT_PROVIDER,
 ];

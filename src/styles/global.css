@@ -5367,6 +5367,21 @@ html:has(.question-selection-actions) {
   flex-shrink: 0;
 }
 
+.neko-key-entry {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.neko-key-entry input {
+  flex: 1;
+  min-width: 0;
+}
+
+.neko-key-state {
+  color: var(--muted, #667085);
+  font-size: 0.8125rem;
+}
+
 .neko-input-row textarea {
   width: 100%;
   min-height: 2.75rem;

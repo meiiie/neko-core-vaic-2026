@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { HERO_GRAPH } from '../../src/content/hero-demo.ts';
 import { HERO_MISCONCEPTIONS } from '../../src/content/hero-misconceptions.ts';
+import { NVIDIA_KEY_HEADER, nvidiaComplete } from './nvidia.ts';
 
 /**
  * POST /api/ai/variants — schema-framed exercise-variant generation
@@ -202,10 +203,21 @@ export function registerVariantsRoutes(app: FastifyInstance, options: VariantsRo
     if (rateLimited(teacher.id)) return reply.code(429).send({ error: 'RATE_LIMITED' });
 
     const prompt = buildPrompt(kcId, kc.name, count);
+    // Backend order: server-configured OpenAI key, then the teacher's own
+    // NVIDIA key riding this request (NekoCore profile: GLM via NIM — the key
+    // is forwarded once, never stored), then the teacher's ChatGPT session.
+    const nvidiaKey = String(request.headers[NVIDIA_KEY_HEADER] ?? '').trim();
+    const rawNvidiaModel = (request.body as { nvidiaModel?: unknown }).nvidiaModel;
+    const nvidiaModel =
+      typeof rawNvidiaModel === 'string' && /^[\w./-]{1,100}$/.test(rawNvidiaModel)
+        ? rawNvidiaModel
+        : (process.env.NEKOPATH_NVIDIA_MODEL ?? 'z-ai/glm-5.2');
     let text: string | null = null;
     try {
       if (options.apiKey) {
         text = await callOpenAi(prompt);
+      } else if (nvidiaKey) {
+        text = await nvidiaComplete(options.fetchImpl, nvidiaKey, nvidiaModel, prompt);
       } else if (options.chatGptComplete) {
         text = await options.chatGptComplete(teacher.id, prompt, AbortSignal.timeout(60_000));
       }

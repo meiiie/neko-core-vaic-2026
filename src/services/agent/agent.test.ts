@@ -227,8 +227,8 @@ describe('agent loop with the rule-based brain', () => {
 });
 
 describe('deterministic-first model routing', () => {
-  it('exposes exactly the three supported model routes', () => {
-    expect(AGENT_PROVIDERS.map(({ id }) => id)).toEqual(['local', 'web', 'chatgpt']);
+  it('exposes exactly the four supported model routes', () => {
+    expect(AGENT_PROVIDERS.map(({ id }) => id)).toEqual(['local', 'web', 'nvidia', 'chatgpt']);
   });
 
   it('routes evidence deterministically before asking the selected model to synthesize', async () => {

@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { HERO_GRAPH, HERO_ITEMS } from '../src/content/hero-demo.ts';
 import { CodexAccountManager } from './ai/codex-account-manager.ts';
 import { registerCodexRoutes, type CodexManagerPort } from './ai/codex-routes.ts';
+import { registerNvidiaRoutes } from './ai/nvidia.ts';
 import { registerResponsesRoutes } from './ai/responses.ts';
 import { registerVariantsRoutes } from './ai/variants.ts';
 import {
@@ -280,6 +281,10 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
       const result = await codexManager.complete(teacherId, prompt, undefined, signal);
       return result.content;
     },
+  });
+  registerNvidiaRoutes(app, {
+    fetchImpl: options.fetchImpl ?? fetch,
+    requireTeacher,
   });
   registerCodexRoutes(app, codexManager, requireTeacher);
   app.addHook('onClose', async () => codexManager.disposeAll());

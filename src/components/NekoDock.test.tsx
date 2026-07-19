@@ -49,6 +49,7 @@ describe('NekoDock agent session', () => {
       expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
         'Tự động · ưu tiên cục bộ',
         'Gemma · trên thiết bị',
+        'NVIDIA · GLM 5.2',
         'ChatGPT · chỉ bản tự vận hành',
       ]),
     );

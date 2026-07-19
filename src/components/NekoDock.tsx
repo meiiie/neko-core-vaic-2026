@@ -20,6 +20,14 @@ import {
 } from '../services/agent/session-controller';
 import { AgentSessionStore } from '../services/agent/session-store';
 import { AGENT_TOOLS, type AgentTool } from '../services/agent/tools';
+import {
+  clearNvidiaApiKey,
+  nvidiaApiKey,
+  nvidiaModel,
+  saveNvidiaApiKey,
+  saveNvidiaModel,
+  NVIDIA_DEFAULT_MODEL,
+} from '../services/agent/nvidia-key';
 import { setWebLlmProgressListener } from '../services/agent/webllm-provider';
 import { db } from '../storage/db';
 
@@ -195,6 +203,9 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
   const [browserLogin, setBrowserLogin] = useState<ChatGptBrowserLogin | null>(null);
   const [callbackUrl, setCallbackUrl] = useState('');
   const [completingLogin, setCompletingLogin] = useState(false);
+  const [nvidiaKeyDraft, setNvidiaKeyDraft] = useState('');
+  const [nvidiaModelDraft, setNvidiaModelDraft] = useState(() => nvidiaModel());
+  const [nvidiaKeySaved, setNvidiaKeySaved] = useState(() => nvidiaApiKey() !== '');
   const [mobileModal, setMobileModal] = useState(false);
   const controllerRef = useRef<AgentSessionController | null>(null);
   const turnGenerationRef = useRef(0);
@@ -218,7 +229,10 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       ? 'Tự động · ưu tiên cục bộ'
       : providerId === 'web'
         ? 'Gemma · trên thiết bị'
-        : (chatGpt.models?.find((model) => model.model === chatGptModel)?.displayName ?? 'ChatGPT');
+        : providerId === 'nvidia'
+          ? `NVIDIA · ${nvidiaModelDraft || NVIDIA_DEFAULT_MODEL}`
+          : (chatGpt.models?.find((model) => model.model === chatGptModel)?.displayName ??
+            'ChatGPT');
 
   const replaceQueuedPrompts = useCallback((next: string[]): void => {
     queuedPromptsRef.current = next;
@@ -537,7 +551,13 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
       return;
     }
     setBrowserLogin(null);
-    setActivity(id === 'web' ? 'Gemma sẽ được tải tại đây khi bạn gửi câu hỏi đầu tiên.' : null);
+    setActivity(
+      id === 'web'
+        ? 'Gemma sẽ được tải tại đây khi bạn gửi câu hỏi đầu tiên.'
+        : id === 'nvidia' && !nvidiaKeySaved
+          ? 'Dán API key NVIDIA (build.nvidia.com) vào Tùy chọn AI để GLM trả lời; chưa có key thì Neko dùng bộ điều phối cục bộ.'
+          : null,
+    );
     setProviderId(id);
   }
 
@@ -1054,6 +1074,9 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
               >
                 <option value="local">Tự động · ưu tiên cục bộ</option>
                 <option value="web">Gemma · trên thiết bị</option>
+                <option value="nvidia">
+                  NVIDIA · GLM 5.2{nvidiaKeySaved ? ' · đã có key' : ''}
+                </option>
                 <option value="chatgpt" disabled={!chatGpt.available}>
                   ChatGPT
                   {chatGpt.authenticated
@@ -1064,6 +1087,68 @@ export function NekoDock({ open, onClose }: { open: boolean; onClose: () => void
                 </option>
               </select>
             </label>
+            {providerId === 'nvidia' ? (
+              <>
+                <label>
+                  <span>API key NVIDIA (lưu trong trình duyệt này)</span>
+                  {nvidiaKeySaved ? (
+                    <span className="neko-key-state">
+                      Đã lưu key ·{' '}
+                      <button
+                        type="button"
+                        className="text-link"
+                        onClick={() => {
+                          clearNvidiaApiKey();
+                          setNvidiaKeySaved(false);
+                          setNvidiaKeyDraft('');
+                          setActivity('Đã xoá API key NVIDIA khỏi trình duyệt.');
+                        }}
+                      >
+                        Xoá
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="neko-key-entry">
+                      <input
+                        type="password"
+                        value={nvidiaKeyDraft}
+                        placeholder="nvapi-…"
+                        autoComplete="off"
+                        aria-label="API key NVIDIA"
+                        onChange={(event) => setNvidiaKeyDraft(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="button-secondary"
+                        disabled={nvidiaKeyDraft.trim().length < 10}
+                        onClick={() => {
+                          saveNvidiaApiKey(nvidiaKeyDraft);
+                          setNvidiaKeyDraft('');
+                          setNvidiaKeySaved(true);
+                          setActivity(
+                            'Đã lưu key trong trình duyệt. Key chỉ đi thẳng tới NVIDIA qua máy chủ NekoPath, không được lưu lại ở máy chủ.',
+                          );
+                        }}
+                      >
+                        Lưu key
+                      </button>
+                    </span>
+                  )}
+                </label>
+                <label>
+                  <span>Model NVIDIA</span>
+                  <input
+                    value={nvidiaModelDraft}
+                    placeholder={NVIDIA_DEFAULT_MODEL}
+                    aria-label="Model NVIDIA"
+                    onChange={(event) => {
+                      setNvidiaModelDraft(event.target.value);
+                      saveNvidiaModel(event.target.value);
+                    }}
+                  />
+                </label>
+              </>
+            ) : null}
             {providerId === 'chatgpt' &&
             chatGpt.authenticated &&
             (chatGpt.models?.length ?? 0) > 0 ? (

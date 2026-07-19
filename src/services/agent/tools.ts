@@ -10,6 +10,7 @@ import {
 } from '../../app/adapters/hero-tutor';
 import { HERO_GRAPH, HERO_MISCONCEPTION_IDS } from '../../content';
 import { fetchTeacherDashboard } from '../../features/teacher/teacher-api';
+import { nvidiaHeaders, nvidiaModel } from './nvidia-key';
 import { ASSIGNMENTS_CHANGED_EVENT } from '../assignment-events';
 import { listEventsByLearner } from '../../storage/event-repository';
 import { z, type ZodType } from 'zod';
@@ -567,8 +568,14 @@ const sinhBienTheBaiTap: AgentTool = {
       const response = await fetch('/api/ai/variants', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ kcId: targetKc, count: requestedCount }),
+        // The teacher's own NVIDIA key (if saved in this browser) lets the
+        // server generate through GLM when no other backend is configured.
+        headers: { 'content-type': 'application/json', ...nvidiaHeaders() },
+        body: JSON.stringify({
+          kcId: targetKc,
+          count: requestedCount,
+          nvidiaModel: nvidiaModel(),
+        }),
         signal: context?.signal,
       });
       if (response.status === 404) {
