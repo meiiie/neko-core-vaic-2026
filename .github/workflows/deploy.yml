@@ -32,13 +32,17 @@ jobs:
         with:
           project_id: the-wiii-lab-500306
 
+      # Caddy is force-recreated, not reloaded: compose bind-mounts the single
+      # Caddyfile, so git pull replaces the inode and the running container
+      # keeps serving the OLD config — a reload inside the container re-reads
+      # that stale inode and reports success (bit us on 19/07 with the wasm CSP).
       - name: Pull main and rebuild app container on the VM
         run: |
           gcloud compute ssh nekopath-production \
             --project=the-wiii-lab-500306 \
             --zone=asia-southeast1-c \
             --tunnel-through-iap \
-            --command="set -eu; sudo -u Admin git -C /opt/nekopath fetch origin main; sudo -u Admin git -C /opt/nekopath checkout main; sudo -u Admin git -C /opt/nekopath pull --ff-only origin main; export GITHUB_SHA=\$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD); cd /opt/nekopath; bash ops/backup.sh \"\$GITHUB_SHA\"; sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app; sudo docker compose -f ops/compose.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile || sudo docker compose -f ops/compose.yml restart caddy"
+            --command="set -eu; sudo -u Admin git -C /opt/nekopath fetch origin main; sudo -u Admin git -C /opt/nekopath checkout main; sudo -u Admin git -C /opt/nekopath pull --ff-only origin main; export GITHUB_SHA=\$(sudo -u Admin git -C /opt/nekopath rev-parse HEAD); cd /opt/nekopath; bash ops/backup.sh \"\$GITHUB_SHA\"; sudo --preserve-env=GITHUB_SHA docker compose -f ops/compose.yml up -d --build app; sudo docker compose -f ops/compose.yml up -d --force-recreate caddy"
 
       - name: Smoke canonical URL
         run: |
