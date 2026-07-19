@@ -50,10 +50,12 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
   const [transcriptVi, setTranscriptVi] = useState('');
   const [gradeMin, setGradeMin] = useState('5');
   const [gradeMax, setGradeMax] = useState('7');
-  const [status, setStatus] = useState<'DRAFT' | 'PUBLISHED'>('DRAFT');
-  const [reviewState, setReviewState] = useState<'UNREVIEWED' | 'ACCEPTED' | 'REVISE' | 'REJECTED'>(
-    'UNREVIEWED',
-  );
+  // One honest choice instead of two coupled dropdowns: the uploading teacher
+  // IS the named reviewer of their own material, so "phát cho lớp" maps to
+  // PUBLISHED+ACCEPTED and "bản nháp" to DRAFT+UNREVIEWED. The old default
+  // (draft) silently hid every upload from students — the panel promises the
+  // opposite, so publishing is the default.
+  const [publishNow, setPublishNow] = useState(true);
   const [state, setState] = useState<PanelState>('idle');
   const [message, setMessage] = useState('');
   const [selected, setSelected] = useState<SelectedFile | null>(null);
@@ -109,8 +111,8 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
         durationSeconds: durationSeconds === '' ? null : Number(durationSeconds),
         transcriptVi: transcriptVi.trim(),
         sortOrder: 0,
-        status,
-        reviewState,
+        status: publishNow ? 'PUBLISHED' : 'DRAFT',
+        reviewState: publishNow ? 'ACCEPTED' : 'UNREVIEWED',
         gradeMin: Number(gradeMin),
         gradeMax: Number(gradeMax),
       },
@@ -159,8 +161,9 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
                     {[
                       formatBytes(resource.byteSize),
                       formatDuration(resource.durationSeconds),
-                      resource.status === 'PUBLISHED' ? 'Đã xuất bản' : 'Bản nháp',
-                      resource.reviewState === 'ACCEPTED' ? 'đã duyệt' : 'chưa duyệt xong',
+                      resource.status === 'PUBLISHED' && resource.reviewState === 'ACCEPTED'
+                        ? 'Đã phát cho lớp'
+                        : 'Bản nháp — học sinh chưa thấy',
                       resource.uploadedByName ?? '',
                     ]
                       .filter(Boolean)
@@ -310,30 +313,16 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
             </label>
           </>
         ) : null}
-        <div className="form-row">
-          <label>
-            Trạng thái
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as typeof status)}
-            >
-              <option value="DRAFT">Bản nháp</option>
-              <option value="PUBLISHED">Xuất bản</option>
-            </select>
-          </label>
-          <label>
-            Duyệt chuyên môn
-            <select
-              value={reviewState}
-              onChange={(event) => setReviewState(event.target.value as typeof reviewState)}
-            >
-              <option value="UNREVIEWED">Chưa duyệt</option>
-              <option value="ACCEPTED">Chấp nhận</option>
-              <option value="REVISE">Cần sửa</option>
-              <option value="REJECTED">Từ chối</option>
-            </select>
-          </label>
-        </div>
+        <label>
+          Sau khi tải lên
+          <select
+            value={publishNow ? 'publish' : 'draft'}
+            onChange={(event) => setPublishNow(event.target.value === 'publish')}
+          >
+            <option value="publish">Phát cho học sinh ngay (cô là người duyệt)</option>
+            <option value="draft">Lưu bản nháp — học sinh chưa thấy</option>
+          </select>
+        </label>
 
         {state === 'uploading' ? (
           <div
@@ -359,12 +348,16 @@ export function TeacherResourcePanel({ kcId }: { readonly kcId: string }) {
           >
             {state === 'uploading'
               ? 'Đang tải lên…'
-              : status === 'PUBLISHED'
-                ? 'Tải lên và xuất bản'
+              : publishNow
+                ? 'Tải lên và phát cho lớp'
                 : 'Lưu bản nháp'}
           </button>
           {state === 'done' ? (
-            <span role="status">Đã tải lên — học sinh nhận ở lần đồng bộ tới.</span>
+            <span role="status">
+              {publishNow
+                ? 'Đã phát cho lớp — học sinh nhận ở lần đồng bộ tới.'
+                : 'Đã lưu bản nháp — chỉ cô nhìn thấy cho tới khi phát.'}
+            </span>
           ) : null}
           {state === 'error' ? <span role="alert">{message}</span> : null}
         </div>
