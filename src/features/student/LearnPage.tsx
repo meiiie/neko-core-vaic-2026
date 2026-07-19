@@ -57,12 +57,20 @@ export function LearnPage() {
   const review = reassessment
     ? reviewRecommendation(activeLearnerContext, result, localRecords, new Date().toISOString())
     : undefined;
-  const candidateQuestion = recommendedQuestion ?? review?.question;
+  // When the learner explicitly opened a review round (?mode=review or
+  // "Kiểm tra lại"), serve ONLY a scheduled review item. The transfer
+  // recommendation is a diagnostic "what's next" suggestion, not a review —
+  // mixing them would silently serve the transfer item under a "review" entry.
+  // The regular check-in keeps its original priority (recommended first).
+  const candidateQuestion = reassessment
+    ? review?.question
+    : (recommendedQuestion ?? review?.question);
   const roundComplete = answeredThisRound >= plan.checkInQuestionLimit;
   const probeQuestion = roundComplete ? undefined : candidateQuestion;
   const questionNumber = answeredThisRound + 1;
   const canContinueAssessment =
     result.status === 'NEEDS_MORE_EVIDENCE' && candidateQuestion !== undefined;
+  const reassessmentEmpty = reassessment && !review;
 
   async function saveAnswer() {
     if (!probeQuestion || !selectedChoiceId || localRecords === undefined || savingRef.current)
@@ -223,7 +231,16 @@ export function LearnPage() {
             weight="fill"
           />
           <p className="eyebrow">Kiểm tra nền tảng đã xong</p>
-          {result.status === 'NEEDS_MORE_EVIDENCE' ? (
+          {reassessmentEmpty ? (
+            <>
+              <h2>Chưa có lượt ôn mới cho em lúc này</h2>
+              <p role="status">
+                Em đã trả lời đủ câu cho mục tiêu hiện tại. NekoPath chưa mở lượt ôn tiếp theo vì
+                chưa đến lịch ôn giãn cách và chưa có câu vận dụng mới. Kết quả học của em vẫn được
+                lưu đầy đủ.
+              </p>
+            </>
+          ) : result.status === 'NEEDS_MORE_EVIDENCE' ? (
             <>
               <h2>Đã lưu câu trả lời của em</h2>
               <p>
@@ -256,7 +273,10 @@ export function LearnPage() {
                 : (currentStep?.nextActionVi ?? 'Xem kế hoạch của em')}
             </Link>
           )}
-          {reassessment || (result.status === 'FAST_PATH' && review?.isDue) ? (
+          {/* An empty review round must not offer its own retry — that loop
+              serves nothing until the spaced-review schedule opens again. */}
+          {!reassessmentEmpty &&
+          (reassessment || (result.status === 'FAST_PATH' && review?.isDue)) ? (
             <button
               className="button-secondary"
               type="button"
