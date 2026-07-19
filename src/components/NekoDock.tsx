@@ -50,7 +50,7 @@ interface SessionNotice {
 const SUGGESTIONS = [
   'Hôm nay nên dạy lại gì cho lớp?',
   'Chẩn đoán của bạn An thế nào?',
-  'Tiến độ các bài đã giao?',
+  'Sinh biến thể câu hỏi cho K02',
 ];
 
 const TOOL_LABELS: Readonly<Record<string, string>> = {
@@ -59,6 +59,7 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   giai_thich_kien_thuc: 'Bản đồ kiến thức',
   bai_duoc_giao: 'Bài đã giao',
   de_xuat_bai_tap: 'Đề xuất bài tập',
+  sinh_bien_the_bai_tap: 'Sinh biến thể bài tập',
   giao_bai: 'Giao bài cho lớp',
 };
 

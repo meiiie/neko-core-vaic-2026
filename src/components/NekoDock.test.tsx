@@ -437,6 +437,10 @@ describe('NekoDock agent session', () => {
         screen.getByRole('textbox', { name: 'Câu hỏi cho Neko' }).hasAttribute('disabled'),
       ).toBe(false),
     );
+    // The custom focus trap only guards Tab once the dock has switched to its
+    // mobile dialog mode — without this wait the test races that effect and
+    // Tab escapes into the collapsed settings under a slow CI environment.
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
 
     const summary = screen.getByText('Tùy chọn AI').closest('summary');
     expect(summary).not.toBeNull();

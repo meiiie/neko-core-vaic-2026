@@ -111,7 +111,7 @@ nội dung và nhãn đánh giá hiện vẫn là bản nháp hoặc tổng hợ
 ### 3.2 LLM đóng khung
 
 Yêu cầu nêu 2 vai trò LLM: (a) diễn giải tiếng Việt, (b) sinh biến thể bài tập theo schema.
-Hiện (a) làm rất kỹ; (b) **chưa làm**.
+Cả hai đã triển khai; (b) hoàn thành 19/07/2026.
 
 | Điều cần chứng minh | Hiện thực | Bằng chứng |
 |---|---|---|
@@ -119,12 +119,7 @@ Hiện (a) làm rất kỹ; (b) **chưa làm**.
 | Guarding 3 lớp | (1) tool fail → fallback deterministic; (2) câu cần evidence mà không gọi tool → từ chối; (3) `isGrounded()` kiểm số liệu + KC anchor, lệch → thay bằng `composeCollectedEvidence` | `src/services/agent/loop.ts:265-296` |
 | Tool chỉ đọc, không tự sinh | `de_xuat_bai_tap` lọc câu hỏi **đã có** trong DB; `giao_bai` cần xác nhận | `src/services/agent/tools.ts:351,433` |
 | Rule router deterministic khi offline | `routeRuleQuestion()` không cần LLM | `src/services/agent/rule-router.ts` |
-| **Sinh biến thể bài tập theo schema** | **Chưa có** — không có tool `sinh_bien_the`, không có schema validation cho output LLM-sinh-câu-hoi, `TeacherQuestionsPage` chỉ CRUD tay + import DOCX/XLSX | Gap, xem "Còn lại" |
-
-**Còn lại (~30%) — gap lớn nhất:**
-- Yêu cầu 3 nói rõ LLM "sinh biến thể bài tập theo cấu trúc (schema) định sẵn dưới sự kiểm
-  soát nghiêm ngặt". Hiện không có tool nào làm việc này. Đây là khoảng cách rõ ràng nhất so
-  với yêu cầu và là việc ưu tiên lấp tiếp theo.
+| **Sinh biến thể bài tập theo schema** | Tool `sinh_bien_the_bai_tap` (client) + `POST /api/ai/variants` (server, 19/07): grounding HAI PHÍA cùng một schema Zod và danh mục 11 misconception đã biên soạn; `reviewState` bị server ghi đè `UNREVIEWED` bất kể model trả gì; không tự lưu — chỉ thành câu hỏi khi giáo viên duyệt qua ngân hàng câu hỏi. Backend: OpenAI key hoặc phiên ChatGPT của chính giáo viên (Codex App Server); output sai schema/tag bịa → 502, không bao giờ đến học sinh | `src/services/agent/tools.ts:443-603`, `server/ai/variants.ts`, test hai phía |
 
 ---
 
@@ -139,6 +134,6 @@ Hiện (a) làm rất kỹ; (b) **chưa làm**.
 4. Trải nghiệm offline không thể nhận bài giao hoặc học liệu mới cho tới khi kết nối trở lại.
 5. Audit này xác minh source/CI cục bộ; không khẳng định production đang chạy đúng commit mới nhất.
 
-Cách phát biểu chính xác: **NekoPath đã triển khai và kiểm thử được ~85% khối lượng yêu cầu
-hệ thống, với 2 gap chính còn lại là (1) nhóm tự học vẫn sai cho giáo viên và (2) vai trò
-sinh biến thể bài tập của LLM.**
+Cách phát biểu chính xác: **NekoPath đã triển khai và kiểm thử được ~90% khối lượng yêu cầu
+hệ thống; gap chính còn lại là nhóm tự học vẫn sai cho giáo viên, cùng các giới hạn chung
+ở trên (chưa pilot thật, nội dung chưa được giáo viên Toán có tên duyệt).**

@@ -11,6 +11,7 @@ import { HERO_GRAPH, HERO_ITEMS } from '../src/content/hero-demo.ts';
 import { CodexAccountManager } from './ai/codex-account-manager.ts';
 import { registerCodexRoutes, type CodexManagerPort } from './ai/codex-routes.ts';
 import { registerResponsesRoutes } from './ai/responses.ts';
+import { registerVariantsRoutes } from './ai/variants.ts';
 import {
   buildReviewSchedulePayload,
   reviewScheduleEventId,
@@ -264,6 +265,21 @@ export function buildApp(db: DatabaseSync, options: AppOptions = {}): FastifyIns
     fetchImpl: options.fetchImpl ?? fetch,
     requireTeacher,
     chatGptAvailable: () => codexManager.isEnabled(),
+  });
+  registerVariantsRoutes(app, {
+    apiKey: options.openAiApiKey ?? process.env.OPENAI_API_KEY ?? '',
+    model: options.openAiModel ?? process.env.NEKOPATH_OPENAI_MODEL ?? 'gpt-5.6-sol',
+    fetchImpl: options.fetchImpl ?? fetch,
+    requireTeacher,
+    // Without an API key the teacher's own ChatGPT session (Codex App Server)
+    // generates the draft variants; the same server-side grounding applies.
+    chatGptComplete: async (teacherId, prompt, signal) => {
+      if (!codexManager.isEnabled()) return null;
+      const state = await codexManager.status(teacherId).catch(() => null);
+      if (state?.account?.type !== 'chatgpt') return null;
+      const result = await codexManager.complete(teacherId, prompt, undefined, signal);
+      return result.content;
+    },
   });
   registerCodexRoutes(app, codexManager, requireTeacher);
   app.addHook('onClose', async () => codexManager.disposeAll());

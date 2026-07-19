@@ -1438,6 +1438,94 @@ describe('NekoPath API', () => {
     await app.close();
   });
 
+  it('serves schema-framed LLM variant drafts with server-side grounding', async () => {
+    const variant = {
+      prompt: 'Tỉ số của 6 và 8 theo thứ tự đó là bao nhiêu?',
+      choices: [
+        { id: 'a', label: '6/8' },
+        { id: 'b', label: '8/6', misconceptionTag: 'RATIO_ORDER_REVERSED' },
+      ],
+      correctChoiceId: 'a',
+      explanation: 'Tỉ số giữ thứ tự đại lượng.',
+      reviewState: 'ACCEPTED', // the model's opinion — the server must overrule it
+    };
+    let llmContent = JSON.stringify({ variants: [variant] });
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      if (String(input).includes('api.openai.com')) {
+        return Response.json({ choices: [{ message: { content: llmContent } }] });
+      }
+      throw new Error(`unexpected fetch ${String(input)}`);
+    }) as typeof fetch;
+    const app = await makeApp({ openAiApiKey: 'test-key', fetchImpl });
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const student = await loginCookie(app, STUDENT_EMAIL);
+
+    const forbidden = await app.inject({
+      method: 'POST',
+      url: '/api/ai/variants',
+      cookies: student,
+      payload: { kcId: 'K02', count: 1 },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const badKc = await app.inject({
+      method: 'POST',
+      url: '/api/ai/variants',
+      cookies: teacher,
+      payload: { kcId: 'K99', count: 1 },
+    });
+    expect(badKc.statusCode).toBe(400);
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/ai/variants',
+      cookies: teacher,
+      payload: { kcId: 'K02', count: 1 },
+    });
+    expect(created.statusCode).toBe(200);
+    const body = created.json() as {
+      variants: { reviewState: string; correctChoiceId: string }[];
+    };
+    expect(body.variants).toHaveLength(1);
+    expect(body.variants[0]).toMatchObject({ reviewState: 'UNREVIEWED', correctChoiceId: 'a' });
+
+    // A hallucinated misconception tag must die at the server, not the client.
+    llmContent = JSON.stringify({
+      variants: [
+        {
+          ...variant,
+          choices: [
+            { id: 'a', label: '6/8' },
+            { id: 'b', label: '8/6', misconceptionTag: 'INVENTED_TAG' },
+          ],
+        },
+      ],
+    });
+    const rejected = await app.inject({
+      method: 'POST',
+      url: '/api/ai/variants',
+      cookies: teacher,
+      payload: { kcId: 'K02', count: 1 },
+    });
+    expect(rejected.statusCode).toBe(502);
+    expect((rejected.json() as { error: string }).error).toBe('LLM_OUTPUT_INVALID');
+    await app.close();
+  });
+
+  it('reports honestly when no variant provider is configured', async () => {
+    const app = await makeApp();
+    const teacher = await loginCookie(app, TEACHER_EMAIL);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/ai/variants',
+      cookies: teacher,
+      payload: { kcId: 'K02', count: 1 },
+    });
+    expect(response.statusCode).toBe(503);
+    expect((response.json() as { error: string }).error).toBe('NO_VARIANT_PROVIDER');
+    await app.close();
+  });
+
   it('quarantines a resent event ID whose content differs instead of overwriting', async () => {
     const app = await makeApp();
     const student = await loginCookie(app, STUDENT_EMAIL);
